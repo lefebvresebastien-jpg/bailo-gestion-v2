@@ -501,8 +501,11 @@
             <h1 id="detail-title">Détail du bail</h1>
             <p class="page-sub" id="detail-sub"></p>
           </div>
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;gap:8px;align-items:center">
             <span id="detail-status-badge"></span>
+            <button class="btn-primary" id="btn-voir-contrat" onclick="ouvrirContratV1(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
+              📄 Voir le contrat
+            </button>
           </div>
         </div>
 
@@ -1090,8 +1093,19 @@ function openLeaseDetail(id) {
   document.querySelector('[data-page="leases"]')?.classList.add('active');
 }
 
+var currentDetailLeaseId = null;
+
+function ouvrirContratV1(leaseId) {
+  if (!leaseId) { showToast('Bail introuvable.', 'error'); return; }
+  // Stocker l'ID dans localStorage pour que la v1 l'ouvre au démarrage
+  localStorage.setItem('bailo-open-lease-id', leaseId);
+  // Ouvrir la v1
+  window.open('https://gestion.bailo.pro', '_blank');
+}
+
 function renderLeaseDetail(lease) {
   const f = fd(lease);
+  currentDetailLeaseId = lease.id;
 
   // Header
   document.getElementById('detail-title').textContent = f.tenantName || 'Bail sans nom';
