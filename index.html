@@ -1513,26 +1513,27 @@ const WIZARD_STEPS_CONTENT = {
 
   6: () => {
     const loyer = (parseFloat(_wizardData.rent)||0) + (parseFloat(_wizardData.charges)||0);
-    return \`
-    <div class="wizard-section-title">Confirmation</div>
-    <div class="confirm-summary">
-      <div class="confirm-row"><span>Bailleur</span><span>\${_wizardData.landlordName||'—'}</span></div>
-      <div class="confirm-row"><span>Bien</span><span>\${_wizardData.propertyAddress||'—'}</span></div>
-      <div class="confirm-row"><span>Type</span><span>\${_wizardData.leaseType||'Location vide'}</span></div>
-      <div class="confirm-row"><span>Surface</span><span>\${_wizardData.surface||'—'}</span></div>
-      <div class="confirm-row"><span>Locataire</span><span>\${_wizardData.tenantName||'—'}</span></div>
-      <div class="confirm-row"><span>Email locataire</span><span>\${_wizardData.tenantEmail||'—'}</span></div>
-      <div class="confirm-row"><span>Loyer HC</span><span>\${formatCurrency(_wizardData.rent)}</span></div>
-      <div class="confirm-row"><span>Charges</span><span>\${formatCurrency(_wizardData.charges)}</span></div>
-      <div class="confirm-row"><span>Loyer CC</span><span><strong>\${formatCurrency(loyer)}</strong></span></div>
-      <div class="confirm-row"><span>Dépôt</span><span>\${formatCurrency(_wizardData.deposit)}</span></div>
-      <div class="confirm-row"><span>Durée</span><span>\${_wizardData.duration||'3 ans'}</span></div>
-      <div class="confirm-row"><span>Prise d'effet</span><span>\${formatDate(_wizardData.effectiveDate)}</span></div>
-    </div>
-    <p style="margin-top:16px;font-size:13px;color:var(--color-text-secondary)">
-      Vérifiez les informations puis cliquez sur <strong>Créer le bail</strong>.
-    </p>
-  \`;
+    const rows = [
+      ['Bailleur', _wizardData.landlordName || '—'],
+      ['Bien', _wizardData.propertyAddress || '—'],
+      ['Type', _wizardData.leaseType || 'Location vide'],
+      ['Surface', _wizardData.surface || '—'],
+      ['Locataire', _wizardData.tenantName || '—'],
+      ['Email locataire', _wizardData.tenantEmail || '—'],
+      ['Loyer HC', formatCurrency(_wizardData.rent)],
+      ['Charges', formatCurrency(_wizardData.charges)],
+      ['Loyer CC', '<strong>' + formatCurrency(loyer) + '</strong>'],
+      ['Depot de garantie', formatCurrency(_wizardData.deposit)],
+      ['Duree', _wizardData.duration || '3 ans'],
+      ['Prise d effet', formatDate(_wizardData.effectiveDate)],
+    ];
+    return '<div class="wizard-section-title">Confirmation</div>' +
+      '<div class="confirm-summary">' +
+      rows.map(function(r) {
+        return '<div class="confirm-row"><span>' + r[0] + '</span><span>' + r[1] + '</span></div>';
+      }).join('') +
+      '</div>' +
+      '<p style="margin-top:16px;font-size:13px;color:var(--color-text-secondary)">Verifiez les informations puis cliquez sur <strong>Creer le bail</strong>.</p>';
   }
 };
 
