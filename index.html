@@ -53,6 +53,24 @@
 @media (max-width: 768px) {
   .detail-grid { grid-template-columns: 1fr; }
 }
+
+/* Quittances */
+.receipts-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+.receipt-stat-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  padding: var(--space-md) var(--space-lg);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.receipt-stat-val { font-size: 22px; font-weight: 700; }
+.receipt-stat-label { font-size: 11px; color: var(--color-text-secondary); }
+
 </style>
 </head>
 <body>
@@ -308,7 +326,18 @@
         <div class="page-header">
           <div><h1>Quittances</h1><p class="page-sub">Historique des quittances émises</p></div>
         </div>
-        <p class="coming-soon">Module quittances — bientôt disponible.</p>
+        <div class="filter-bar">
+          <select id="receipts-lease-filter" onchange="filterReceipts()">
+            <option value="">Tous les baux</option>
+          </select>
+          <select id="receipts-month-filter" onchange="filterReceipts()">
+            <option value="">Tous les mois</option>
+          </select>
+        </div>
+        <div class="receipts-stats" id="receipts-stats"></div>
+        <div class="section-card" style="margin-top:0">
+          <div id="receipts-list" class="item-list"><div class="list-loading">Chargement…</div></div>
+        </div>
       </section>
 
       <!-- PAIEMENTS -->
@@ -504,6 +533,7 @@ function navigate(page, linkEl) {
   if (page === 'leases')     loadLeases();
   if (page === 'properties') loadProperties();
   if (page === 'tenants')    loadTenants();
+  if (page === 'receipts')   loadReceipts();
 }
 
 function toggleSidebar() {
@@ -1191,6 +1221,141 @@ async function createLease() {
 
 
 /* v3 */
+
+// ============================================================
+// QUITTANCES
+// ============================================================
+let _allReceipts = [];
+let _receiptsLeases = [];
+
+async function loadReceipts() {
+  const el = document.getElementById('receipts-list');
+  if (!el) return;
+  el.innerHTML = '<div class="list-loading">Chargement…</div>';
+
+  // Charger les quittances
+  const { data: msgs, error } = await db
+    .from('messages')
+    .select('id, kind, created_at, lease_id, data')
+    .eq('kind', 'Quittance')
+    .order('created_at', { ascending: false });
+
+  if (error) { el.innerHTML = '<div class="list-loading">Erreur : ' + error.message + '</div>'; return; }
+
+  _allReceipts = msgs || [];
+
+  // Charger les baux pour les noms
+  if (!_allLeases.length) {
+    const { data: leases } = await db.from('leases').select('id, data');
+    _receiptsLeases = leases || [];
+  } else {
+    _receiptsLeases = _allLeases;
+  }
+
+  // Remplir les filtres
+  populateReceiptsFilters();
+
+  // Stats
+  renderReceiptsStats();
+
+  // Afficher
+  renderReceipts(_allReceipts);
+}
+
+function populateReceiptsFilters() {
+  const leaseSelect = document.getElementById('receipts-lease-filter');
+  if (!leaseSelect) return;
+  const usedLeaseIds = [...new Set(_allReceipts.map(r => r.lease_id).filter(Boolean))];
+  const options = usedLeaseIds.map(id => {
+    const lease = _receiptsLeases.find(l => l.id === id);
+    const name = lease ? leaseTenantName(lease) : id.substring(0,8);
+    return `<option value="${id}">${name}</option>`;
+  });
+  leaseSelect.innerHTML = '<option value="">Tous les baux</option>' + options.join('');
+
+  // Mois
+  const monthSelect = document.getElementById('receipts-month-filter');
+  if (!monthSelect) return;
+  const months = [...new Set(_allReceipts.map(r => {
+    const d = new Date(r.created_at);
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+  }))].sort().reverse();
+  monthSelect.innerHTML = '<option value="">Tous les mois</option>' +
+    months.map(m => {
+      const [y, mo] = m.split('-');
+      const label = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' })
+        .format(new Date(parseInt(y), parseInt(mo)-1, 1));
+      return `<option value="${m}">${label}</option>`;
+    }).join('');
+}
+
+function renderReceiptsStats() {
+  const el = document.getElementById('receipts-stats');
+  if (!el) return;
+  const now = new Date();
+  const thisMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  const thisMo = _allReceipts.filter(r => r.created_at.startsWith(thisMonth));
+  const total = _allReceipts.reduce((s, r) => {
+    const rent = parseFloat(r.data?.quittanceData?.rent || r.data?.formData?.rent || 0);
+    const charges = parseFloat(r.data?.quittanceData?.charges || r.data?.formData?.charges || 0);
+    return s + rent + charges;
+  }, 0);
+
+  el.innerHTML = `
+    <div class="receipt-stat-card">
+      <span class="receipt-stat-val">${_allReceipts.length}</span>
+      <span class="receipt-stat-label">Quittances au total</span>
+    </div>
+    <div class="receipt-stat-card">
+      <span class="receipt-stat-val">${thisMo.length}</span>
+      <span class="receipt-stat-label">Ce mois-ci</span>
+    </div>
+    <div class="receipt-stat-card">
+      <span class="receipt-stat-val">${[...new Set(_allReceipts.map(r=>r.lease_id))].length}</span>
+      <span class="receipt-stat-label">Baux concernés</span>
+    </div>`;
+}
+
+function filterReceipts() {
+  const leaseId = document.getElementById('receipts-lease-filter')?.value || '';
+  const month = document.getElementById('receipts-month-filter')?.value || '';
+  const filtered = _allReceipts.filter(r => {
+    const matchLease = !leaseId || r.lease_id === leaseId;
+    const matchMonth = !month || r.created_at.startsWith(month);
+    return matchLease && matchMonth;
+  });
+  renderReceipts(filtered);
+}
+
+function renderReceipts(receipts) {
+  const el = document.getElementById('receipts-list');
+  if (!el) return;
+  if (!receipts.length) { el.innerHTML = emptyState('Aucune quittance trouvée.'); return; }
+
+  el.innerHTML = receipts.map(r => {
+    const lease = _receiptsLeases.find(l => l.id === r.lease_id);
+    const tenant = lease ? leaseTenantName(lease) : 'Locataire inconnu';
+    const address = lease ? leaseAddress(lease) : '';
+    const mois = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' })
+      .format(new Date(r.created_at));
+    const rent = parseFloat(r.data?.quittanceData?.rent || r.data?.formData?.rent || 0);
+    const charges = parseFloat(r.data?.quittanceData?.charges || r.data?.formData?.charges || 0);
+    const total = rent + charges;
+
+    return `<div class="list-item">
+      <div class="list-item-icon">🧾</div>
+      <div class="list-item-body">
+        <div class="list-item-title">${tenant} — ${mois}</div>
+        <div class="list-item-sub">${address}</div>
+      </div>
+      <div class="list-item-right">
+        ${total > 0 ? `<div class="list-item-amount">${formatCurrency(total)}</div>` : ''}
+        <div class="list-item-date">${formatRelative(r.created_at)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 // ============================================================
 // BAILO GESTION v2 — App Entry
 // ============================================================
