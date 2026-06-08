@@ -232,7 +232,7 @@ async function createLease() {
   nextBtn.disabled = true;
   nextBtn.textContent = 'Enregistrement…';
 
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await db.auth.getSession();
   if (!session) {
     showToast('Session expirée. Reconnectez-vous.', 'error');
     return;
@@ -258,7 +258,7 @@ async function createLease() {
     statut: 'active',
   };
 
-  const { error } = await supabase.from('leases').insert(payload);
+  const { error } = await db.from('leases').insert(payload);
 
   if (error) {
     console.error(error);
