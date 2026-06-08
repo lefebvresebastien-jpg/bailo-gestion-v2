@@ -1465,6 +1465,19 @@ const WIZARD_STEPS_CONTENT = {
 
 };
 
+
+function openLeaseWizard() {
+  _wizardStep = 1;
+  _wizardData = {};
+  renderWizardStep();
+  document.getElementById('lease-wizard-overlay').classList.remove('hidden');
+}
+
+function closeLeaseWizard(event) {
+  if (event && event.target !== document.getElementById('lease-wizard-overlay')) return;
+  document.getElementById('lease-wizard-overlay').classList.add('hidden');
+}
+
 function renderWizardStep() {
   // Body
   const bodyEl = document.getElementById('wizard-body');
