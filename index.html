@@ -466,11 +466,17 @@ async function loadDashboard() {
 async function loadKPIs() {
   const { data: leases } = await db
     .from('leases')
-    .select('id, loyer, charges, statut');
+    .select('id, data');
 
   const all = leases || [];
-  const active = all.filter(l => l.statut === 'active' || !l.statut);
-  const totalLoyer = active.reduce((sum, l) => sum + (parseFloat(l.loyer)||0) + (parseFloat(l.charges)||0), 0);
+  const active = all.filter(l => {
+    const s = l.data?.formData?.leaseStatus || '';
+    return s === 'Actif' || s === 'active' || s === '';
+  });
+  const totalLoyer = active.reduce((sum, l) => {
+    const fd = l.data?.formData || {};
+    return sum + (parseFloat(fd.rent)||0) + (parseFloat(fd.charges)||0);
+  }, 0);
 
   const biensEl = document.getElementById('kpi-biens-val');
   if (biensEl) biensEl.textContent = all.length;
