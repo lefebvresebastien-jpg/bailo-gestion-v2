@@ -7,6 +7,53 @@
   <link rel="stylesheet" href="assets/css/main.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+/* ============================================================
+   DETAIL BAIL
+   ============================================================ */
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-lg);
+}
+
+.detail-fields {
+  padding: var(--space-md) var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+.detail-field:last-child { border-bottom: none; padding-bottom: 0; }
+.detail-field-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-tertiary);
+}
+.detail-field-value {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+.detail-field-value.amount {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+@media (max-width: 768px) {
+  .detail-grid { grid-template-columns: 1fr; }
+}
+</style>
 </head>
 <body>
 
@@ -190,6 +237,62 @@
           </select>
         </div>
         <div id="leases-list" class="leases-grid"><div class="list-loading">Chargement…</div></div>
+      </section>
+
+      <!-- DÉTAIL BAIL -->
+      <section id="page-lease-detail" class="page hidden">
+        <div class="page-header">
+          <div>
+            <button class="btn-ghost" onclick="navigate('leases')" style="margin-bottom:8px">← Retour aux baux</button>
+            <h1 id="detail-title">Détail du bail</h1>
+            <p class="page-sub" id="detail-sub"></p>
+          </div>
+          <div style="display:flex;gap:8px">
+            <span id="detail-status-badge"></span>
+          </div>
+        </div>
+
+        <div class="detail-grid">
+          <!-- Colonne gauche -->
+          <div style="display:flex;flex-direction:column;gap:var(--space-lg)">
+
+            <div class="section-card">
+              <div class="section-title">🏠 Le bien</div>
+              <div class="detail-fields" id="detail-bien"></div>
+            </div>
+
+            <div class="section-card">
+              <div class="section-title">👤 Le locataire</div>
+              <div class="detail-fields" id="detail-locataire"></div>
+            </div>
+
+            <div class="section-card">
+              <div class="section-title">🛡️ Le garant</div>
+              <div class="detail-fields" id="detail-garant"></div>
+            </div>
+
+          </div>
+
+          <!-- Colonne droite -->
+          <div style="display:flex;flex-direction:column;gap:var(--space-lg)">
+
+            <div class="section-card">
+              <div class="section-title">💶 Conditions financières</div>
+              <div class="detail-fields" id="detail-finances"></div>
+            </div>
+
+            <div class="section-card">
+              <div class="section-title">📅 Dates & durée</div>
+              <div class="detail-fields" id="detail-dates"></div>
+            </div>
+
+            <div class="section-card">
+              <div class="section-title">🧾 Quittances récentes</div>
+              <div id="detail-quittances" class="item-list"><div class="list-loading">Chargement…</div></div>
+            </div>
+
+          </div>
+        </div>
       </section>
 
       <!-- LOCATAIRES -->
@@ -623,7 +726,112 @@ function renderLeaseCard(l) {
 }
 
 function openLeaseDetail(id) {
-  showToast('Détail du bail — bientôt disponible.', '', 2000);
+  const lease = _allLeases.find(l => l.id === id);
+  if (!lease) { showToast('Bail introuvable.', 'error'); return; }
+  renderLeaseDetail(lease);
+  navigate('lease-detail');
+  // Nav item hack : aucun nav-item pour lease-detail, on garde baux actif
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.querySelector('[data-page="leases"]')?.classList.add('active');
+}
+
+function renderLeaseDetail(lease) {
+  const f = fd(lease);
+
+  // Header
+  document.getElementById('detail-title').textContent = f.tenantName || 'Bail sans nom';
+  document.getElementById('detail-sub').textContent = f.propertyAddress || '';
+  document.getElementById('detail-status-badge').innerHTML = leaseStatusBadge(leaseStatus(lease));
+
+  // Helper pour créer un champ
+  const field = (label, value) => value ? `
+    <div class="detail-field">
+      <span class="detail-field-label">${label}</span>
+      <span class="detail-field-value">${value}</span>
+    </div>` : '';
+  const fieldAmt = (label, value) => value ? `
+    <div class="detail-field">
+      <span class="detail-field-label">${label}</span>
+      <span class="detail-field-value amount">${value}</span>
+    </div>` : '';
+
+  // Bien
+  document.getElementById('detail-bien').innerHTML =
+    field('Adresse', f.propertyAddress) +
+    field('Type de bail', f.leaseType) +
+    field('Surface', f.surface) +
+    field('Étage', f.propertyFloor) +
+    field('DPE', f.dpeClass) +
+    field('Chauffage', f.heatingType) +
+    field('Eau chaude', f.hotWaterType) +
+    field('Nombre de pièces', f.rooms) +
+    field('Nombre de clés', f.keysCount) || '<div class="list-empty">Aucune info</div>';
+
+  // Locataire
+  document.getElementById('detail-locataire').innerHTML =
+    field('Nom complet', f.tenantName) +
+    field('Email', f.tenantEmail) +
+    field('Téléphone', f.tenantPhone) +
+    field('Date de naissance', f.tenantDOB ? formatDate(f.tenantDOB) : '') +
+    field('Adresse actuelle', f.tenantAddress) +
+    field('Pièce d\'identité', f.tenantIdDoc) || '<div class="list-empty">Aucune info</div>';
+
+  // Garant
+  document.getElementById('detail-garant').innerHTML =
+    field('Nom', f.guarantorName) +
+    field('Type', f.guarantorType) +
+    field('Adresse', f.guarantorAddress) +
+    field('Revenus', f.guarantorIncome ? formatCurrency(f.guarantorIncome) : '') || '<div class="list-empty">Aucun garant</div>';
+
+  // Finances
+  const loyerCC = (parseFloat(f.rent)||0) + (parseFloat(f.charges)||0);
+  document.getElementById('detail-finances').innerHTML =
+    fieldAmt('Loyer charges comprises', formatCurrency(loyerCC)) +
+    field('Loyer hors charges', formatCurrency(f.rent)) +
+    field('Charges', formatCurrency(f.charges)) +
+    field('Dépôt de garantie', f.deposit ? formatCurrency(f.deposit) : '') +
+    field('Échéance', f.rentDueDay) +
+    field('Mode de paiement', f.paymentTerms) +
+    field('Régime des charges', f.chargesRegime);
+
+  // Dates
+  document.getElementById('detail-dates').innerHTML =
+    field('Date de prise d\'effet', f.effectiveDate ? formatDate(f.effectiveDate) : '') +
+    field('Date de signature', f.signatureDate ? formatDate(f.signatureDate) : '') +
+    field('Durée', f.duration) +
+    field('Préavis locataire', f.noticePeriodTenant) +
+    field('Préavis bailleur', f.noticePeriodLandlord) +
+    field('Référence IRL', f.irlReference);
+
+  // Quittances
+  loadDetailQuittances(lease.id);
+}
+
+async function loadDetailQuittances(leaseId) {
+  const el = document.getElementById('detail-quittances');
+  if (!el) return;
+  const { data, error } = await db.from('messages')
+    .select('id, kind, created_at, data')
+    .eq('lease_id', leaseId)
+    .eq('kind', 'Quittance')
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  if (error || !data?.length) { el.innerHTML = emptyState('Aucune quittance.'); return; }
+
+  el.innerHTML = data.map(m => {
+    const mois = m.data?.quittanceData?.mois || m.data?.formData?.mois || formatMonth(m.created_at);
+    return `<div class="list-item">
+      <div class="list-item-icon">🧾</div>
+      <div class="list-item-body">
+        <div class="list-item-title">${mois}</div>
+        <div class="list-item-sub">Quittance</div>
+      </div>
+      <div class="list-item-right">
+        <div class="list-item-date">${formatRelative(m.created_at)}</div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ============================================================
