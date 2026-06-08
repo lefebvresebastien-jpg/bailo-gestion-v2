@@ -1151,7 +1151,7 @@ async function ouvrirContratV1(leaseId) {
   }
 
   // Ouvrir la v1 — le bail sera déjà dans localStorage
-  window.open('https://gestion.bailo.pro', '_blank');
+  window.open('https://gestion.bailo.pro?lease=' + leaseId + '&view=preview', '_blank');
 }
 
 function renderLeaseDetail(lease) {
