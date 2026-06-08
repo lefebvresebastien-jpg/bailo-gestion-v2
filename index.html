@@ -273,6 +273,40 @@
   .messages-sidebar { height: 50vh; }
 }
 
+
+/* Upload fichier */
+.file-upload-zone {
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-bg);
+}
+.file-upload-zone:hover { border-color: var(--color-primary); background: var(--color-primary-light); }
+.file-upload-zone.has-file { border-color: var(--color-success); background: var(--color-success-light); }
+
+.msg-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  text-decoration: none;
+  color: var(--color-text);
+  transition: background 0.15s;
+  margin-top: 8px;
+}
+.msg-attachment:hover { background: var(--color-primary-light); color: var(--color-primary); }
+
 </style>
 </head>
 <body>
@@ -666,9 +700,21 @@
           </select>
         </div>
       </div>
+        <div class="form-group" id="nm-file-group" style="display:none">
+          <label>Fichier joint</label>
+          <div class="file-upload-zone" id="nm-file-zone" onclick="document.getElementById('nm-file-input').click()">
+            <input type="file" id="nm-file-input" style="display:none" onchange="handleFileSelect(this)" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx" />
+            <div id="nm-file-preview">
+              <span style="font-size:28px">📎</span>
+              <span style="font-size:13px;color:var(--color-text-secondary)">Cliquer pour choisir un fichier</span>
+              <span style="font-size:11px;color:var(--color-text-tertiary)">PDF, Word, Excel, Image</span>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="wizard-footer">
         <button class="btn-secondary" onclick="closeNewMessage()">Annuler</button>
-        <button class="btn-primary" onclick="submitNewMessage()">Envoyer</button>
+        <button class="btn-primary" id="nm-submit-btn" onclick="submitNewMessage()">Envoyer</button>
       </div>
     </div>
   </div>
@@ -1515,6 +1561,9 @@ function openNewMessage() {
 function closeNewMessage(event) {
   if (event && event.target !== document.getElementById('new-message-overlay')) return;
   document.getElementById('new-message-overlay').classList.add('hidden');
+  _selectedFile = null;
+  const zone = document.getElementById('nm-file-zone');
+  if (zone) zone.classList.remove('has-file');
 }
 
 async function submitNewMessage() {
@@ -1531,6 +1580,19 @@ async function submitNewMessage() {
   const btn = document.querySelector('#new-message-overlay .btn-primary');
   if (btn) { btn.disabled = true; btn.textContent = 'Envoi…'; }
 
+  // Upload fichier si présent
+  let fileData = null;
+  if (_selectedFile && kind === 'Document') {
+    try {
+      showToast('Upload du fichier…', '', 10000);
+      fileData = await uploadFileToSupabase(_selectedFile, leaseId);
+    } catch(e) {
+      showToast('Erreur upload : ' + e.message, 'error');
+      if (btn) { btn.disabled = false; btn.textContent = 'Envoyer'; }
+      return;
+    }
+  }
+
   const { data, error } = await db.from('messages').insert({
     lease_id: leaseId,
     sender: 'Bailleur',
@@ -1540,6 +1602,9 @@ async function submitNewMessage() {
     urgency: urgency,
     status: 'en-attente',
     incident_status: 'en-attente',
+    file_name: fileData ? fileData.name : null,
+    file_type: fileData ? fileData.type : null,
+    file_data: fileData ? fileData.url : null,
     replies: []
   }).select().single();
 
@@ -1556,6 +1621,58 @@ async function submitNewMessage() {
   // Recharger et ouvrir le message
   await loadMessages();
   if (data) openMessage(data.id);
+}
+
+
+// ============================================================
+// UPLOAD FICHIER
+// ============================================================
+let _selectedFile = null;
+
+// Afficher/masquer le champ fichier selon le type
+document.addEventListener('change', function(e) {
+  if (e.target.id === 'nm-kind') {
+    const group = document.getElementById('nm-file-group');
+    if (group) group.style.display = e.target.value === 'Document' ? 'block' : 'none';
+  }
+});
+
+function handleFileSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  _selectedFile = file;
+
+  const zone = document.getElementById('nm-file-zone');
+  const preview = document.getElementById('nm-file-preview');
+  if (!zone || !preview) return;
+
+  zone.classList.add('has-file');
+  const icon = file.type.includes('pdf') ? '📕' :
+    file.type.includes('word') || file.name.endsWith('.docx') ? '📝' :
+    file.type.includes('image') ? '🖼️' :
+    file.type.includes('excel') || file.name.endsWith('.xlsx') ? '📊' : '📎';
+
+  preview.innerHTML = `
+    <span style="font-size:28px">${icon}</span>
+    <span style="font-size:13px;font-weight:600;color:var(--color-text)">${file.name}</span>
+    <span style="font-size:11px;color:var(--color-text-secondary)">${(file.size/1024).toFixed(0)} Ko</span>
+  `;
+}
+
+async function uploadFileToSupabase(file, leaseId) {
+  // Upload vers Supabase Storage bucket 'documents'
+  const fileName = Date.now() + '_' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = leaseId + '/' + fileName;
+
+  const { data, error } = await db.storage
+    .from('documents')
+    .upload(path, file, { cacheControl: '3600', upsert: false });
+
+  if (error) throw new Error(error.message);
+
+  // Récupérer l'URL publique
+  const { data: urlData } = db.storage.from('documents').getPublicUrl(path);
+  return { path, url: urlData.publicUrl, name: file.name, size: file.size, type: file.type };
 }
 
 // ============================================================
@@ -1666,7 +1783,8 @@ function openMessage(id) {
   // Construire les messages de la conversation (message + replies)
   const replies = _currentMessage.replies || [];
   const allBubbles = [
-    { sender: _currentMessage.sender, body: _currentMessage.body, date: _currentMessage.created_at },
+    { sender: _currentMessage.sender, body: _currentMessage.body, date: _currentMessage.created_at,
+      fileUrl: _currentMessage.file_data, fileName: _currentMessage.file_name },
     ...replies.map(r => ({ sender: r.sender, body: r.body, date: r.created_at || _currentMessage.created_at }))
   ].filter(b => b.body);
 
@@ -1689,6 +1807,7 @@ function openMessage(id) {
         <div>
           <div class="msg-bubble ${b.sender === 'Bailleur' ? 'bailleur' : 'locataire'}">
             ${b.body}
+            ${b.fileUrl ? `<a href="${b.fileUrl}" target="_blank" class="msg-attachment">📎 ${b.fileName || 'Fichier joint'}</a>` : ''}
             <div class="msg-bubble-meta">${b.sender} · ${formatRelative(b.date)}</div>
           </div>
         </div>`).join('') : '<div class="list-empty">Aucun contenu.</div>'}
