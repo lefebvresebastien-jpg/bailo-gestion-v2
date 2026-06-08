@@ -554,6 +554,7 @@
       <section id="page-messages" class="page hidden">
         <div class="page-header">
           <div><h1>Messages</h1><p class="page-sub">Échanges avec vos locataires</p></div>
+          <button class="btn-primary" onclick="openNewMessage()">+ Nouveau message</button>
         </div>
         <div class="messages-layout">
           <!-- Liste des conversations -->
@@ -620,6 +621,54 @@
       <div class="wizard-footer">
         <button class="btn-secondary" id="wizard-back" onclick="wizardBack()" style="display:none">← Retour</button>
         <button class="btn-primary" id="wizard-next" onclick="wizardNext()">Suivant →</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- MODAL NOUVEAU MESSAGE -->
+  <div id="new-message-overlay" class="modal-overlay hidden" onclick="closeNewMessage(event)">
+    <div class="modal-card" style="max-width:480px" onclick="event.stopPropagation()">
+      <div class="wizard-header">
+        <h2>Nouveau message</h2>
+        <button class="modal-close" onclick="closeNewMessage()">✕</button>
+      </div>
+      <div style="padding:var(--space-xl);display:flex;flex-direction:column;gap:var(--space-md)">
+        <div class="form-group">
+          <label>Destinataire (bail)</label>
+          <select id="nm-lease">
+            <option value="">Choisir un locataire…</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Type</label>
+          <select id="nm-kind">
+            <option value="Renseignement">Renseignement</option>
+            <option value="Incident">Incident</option>
+            <option value="Document">Document</option>
+            <option value="Information">Information</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Sujet</label>
+          <input type="text" id="nm-subject" placeholder="Objet du message…" />
+        </div>
+        <div class="form-group">
+          <label>Message</label>
+          <textarea id="nm-body" rows="4" style="width:100%;padding:10px 12px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;font-size:13px;outline:none" placeholder="Votre message…"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Urgence</label>
+          <select id="nm-urgency">
+            <option value="Normale">Normale</option>
+            <option value="Urgente">Urgente</option>
+            <option value="Très urgente">Très urgente</option>
+          </select>
+        </div>
+      </div>
+      <div class="wizard-footer">
+        <button class="btn-secondary" onclick="closeNewMessage()">Annuler</button>
+        <button class="btn-primary" onclick="submitNewMessage()">Envoyer</button>
       </div>
     </div>
   </div>
@@ -1448,6 +1497,66 @@ async function createLease() {
 
 /* v3 */
 
+
+
+function openNewMessage() {
+  // Remplir le select des baux
+  const sel = document.getElementById('nm-lease');
+  if (sel) {
+    const leases = _allLeases.length ? _allLeases : [];
+    sel.innerHTML = '<option value="">Choisir un locataire…</option>' +
+      leases.map(l => `<option value="${l.id}">${leaseTenantName(l)} — ${leaseAddress(l)}</option>`).join('');
+  }
+  document.getElementById('nm-subject').value = '';
+  document.getElementById('nm-body').value = '';
+  document.getElementById('new-message-overlay').classList.remove('hidden');
+}
+
+function closeNewMessage(event) {
+  if (event && event.target !== document.getElementById('new-message-overlay')) return;
+  document.getElementById('new-message-overlay').classList.add('hidden');
+}
+
+async function submitNewMessage() {
+  const leaseId = document.getElementById('nm-lease')?.value;
+  const kind = document.getElementById('nm-kind')?.value;
+  const subject = document.getElementById('nm-subject')?.value.trim();
+  const body = document.getElementById('nm-body')?.value.trim();
+  const urgency = document.getElementById('nm-urgency')?.value;
+
+  if (!leaseId) { showToast('Choisissez un locataire.', 'error'); return; }
+  if (!subject) { showToast('Le sujet est obligatoire.', 'error'); return; }
+  if (!body) { showToast('Le message est obligatoire.', 'error'); return; }
+
+  const btn = document.querySelector('#new-message-overlay .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'Envoi…'; }
+
+  const { data, error } = await db.from('messages').insert({
+    lease_id: leaseId,
+    sender: 'Bailleur',
+    kind: kind,
+    subject: subject,
+    body: body,
+    urgency: urgency,
+    status: 'en-attente',
+    incident_status: 'en-attente',
+    replies: []
+  }).select().single();
+
+  if (error) {
+    showToast('Erreur : ' + error.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = 'Envoyer'; }
+    return;
+  }
+
+  showToast('Message envoyé !', 'success');
+  document.getElementById('new-message-overlay').classList.add('hidden');
+  if (btn) { btn.disabled = false; btn.textContent = 'Envoyer'; }
+
+  // Recharger et ouvrir le message
+  await loadMessages();
+  if (data) openMessage(data.id);
+}
 
 // ============================================================
 // MESSAGERIE
