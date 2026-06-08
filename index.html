@@ -1270,132 +1270,200 @@ const WIZARD_TOTAL_STEPS = 6;
 let _wizardData = {};
 
 const WIZARD_STEPS_CONTENT = {
-  1: () => `
-    <div class="wizard-section-title">Le bien immobilier</div>
-    <div class="form-group">
-      <label>Adresse complète *</label>
-      <input type="text" id="w-adresse" value="${_wizardData.adresse || ''}" placeholder="12 rue de la Paix, 75001 Paris" />
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Type de bail</label>
-        <select id="w-type-bail">
-          <option value="Bail nu" ${_wizardData.type_bail === 'Bail nu' ? 'selected' : ''}>Bail nu</option>
-          <option value="Bail meublé" ${_wizardData.type_bail === 'Bail meublé' ? 'selected' : ''}>Bail meublé</option>
-          <option value="Bail mobilité" ${_wizardData.type_bail === 'Bail mobilité' ? 'selected' : ''}>Bail mobilité</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Surface (m²)</label>
-        <input type="number" id="w-surface" value="${_wizardData.surface || ''}" placeholder="45" min="1" />
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Étage</label>
-        <input type="text" id="w-etage" value="${_wizardData.etage || ''}" placeholder="2ème" />
-      </div>
-      <div class="form-group">
-        <label>Nombre de pièces</label>
-        <input type="number" id="w-pieces" value="${_wizardData.pieces || ''}" placeholder="3" min="1" />
-      </div>
-    </div>
-  `,
 
-  2: () => `
-    <div class="wizard-section-title">Le(s) locataire(s)</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Prénom *</label>
-        <input type="text" id="w-prenom" value="${_wizardData.prenom_locataire || ''}" placeholder="Marie" />
-      </div>
-      <div class="form-group">
-        <label>Nom *</label>
-        <input type="text" id="w-nom" value="${_wizardData.nom_locataire || ''}" placeholder="Dupont" />
-      </div>
-    </div>
-    <div class="form-group">
-      <label>Email du locataire</label>
-      <input type="email" id="w-email" value="${_wizardData.email_locataire || ''}" placeholder="marie.dupont@mail.com" />
-    </div>
-    <div class="form-group">
-      <label>Téléphone</label>
-      <input type="tel" id="w-tel" value="${_wizardData.tel_locataire || ''}" placeholder="06 12 34 56 78" />
-    </div>
-  `,
+  1: function() {
+    var d = _wizardData;
+    return '<div class="wizard-section-title">Le bailleur</div>' +
+      '<div class="form-group"><label>Nom du bailleur *</label>' +
+      '<input type="text" id="w-landlordName" value="' + (d.landlordName||'') + '" placeholder="SCI Martin ou Jean Dupont" /></div>' +
+      '<div class="form-group"><label>Representant legal</label>' +
+      '<input type="text" id="w-landlordRepresentative" value="' + (d.landlordRepresentative||'') + '" placeholder="Son representant" /></div>' +
+      '<div class="form-group"><label>Adresse du bailleur *</label>' +
+      '<input type="text" id="w-landlordAddress" value="' + (d.landlordAddress||'') + '" placeholder="12 rue de la Paix, 75001 Paris" /></div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Email</label>' +
+        '<input type="email" id="w-landlordEmail" value="' + (d.landlordEmail||'') + '" placeholder="contact@bailleur.fr" /></div>' +
+        '<div class="form-group"><label>Ville de signature</label>' +
+        '<input type="text" id="w-signatureCity" value="' + (d.signatureCity||'') + '" placeholder="Paris" /></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Date de signature</label>' +
+        '<input type="date" id="w-signatureDate" value="' + (d.signatureDate||'') + '" /></div>' +
+        '<div class="form-group"><label>Date de prise d\'effet *</label>' +
+        '<input type="date" id="w-effectiveDate" value="' + (d.effectiveDate||'') + '" /></div>' +
+      '</div>';
+  },
 
-  3: () => `
-    <div class="wizard-section-title">Conditions financières</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Loyer hors charges (€) *</label>
-        <input type="number" id="w-loyer" value="${_wizardData.loyer || ''}" placeholder="750" min="0" step="0.01" />
-      </div>
-      <div class="form-group">
-        <label>Charges (€)</label>
-        <input type="number" id="w-charges" value="${_wizardData.charges || ''}" placeholder="50" min="0" step="0.01" />
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Dépôt de garantie (€)</label>
-        <input type="number" id="w-depot" value="${_wizardData.depot_garantie || ''}" placeholder="750" min="0" step="0.01" />
-      </div>
-      <div class="form-group">
-        <label>Jour d'échéance</label>
-        <select id="w-echeance">
-          ${[1,5,8,10,15,20].map(d =>
-            `<option value="${d}" ${_wizardData.jour_echeance == d ? 'selected' : ''}>${d}</option>`
-          ).join('')}
-        </select>
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Date de début *</label>
-        <input type="date" id="w-date-debut" value="${_wizardData.date_debut || ''}" />
-      </div>
-      <div class="form-group">
-        <label>Date de fin (optionnel)</label>
-        <input type="date" id="w-date-fin" value="${_wizardData.date_fin || ''}" />
-      </div>
-    </div>
-  `,
+  2: function() {
+    var d = _wizardData;
+    var dpeOptions = ['A','B','C','D','E','F','G'].map(function(c) {
+      return '<option value="' + c + '"' + (d.dpeClass===c?' selected':'') + '>' + c + '</option>';
+    }).join('');
+    return '<div class="wizard-section-title">Le bien</div>' +
+      '<div class="form-group"><label>Adresse du bien *</label>' +
+      '<input type="text" id="w-propertyAddress" value="' + (d.propertyAddress||'') + '" placeholder="12 rue de la Paix, 75001 Paris" /></div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Type de bail</label>' +
+        '<select id="w-leaseType">' +
+        '<option value="Location vide"' + (d.leaseType==='Location vide'?' selected':'') + '>Location vide</option>' +
+        '<option value="Location meublee"' + (d.leaseType==='Location meublee'?' selected':'') + '>Location meublee</option>' +
+        '<option value="Bail mobilite"' + (d.leaseType==='Bail mobilite'?' selected':'') + '>Bail mobilite</option>' +
+        '</select></div>' +
+        '<div class="form-group"><label>Surface</label>' +
+        '<input type="text" id="w-surface" value="' + (d.surface||'') + '" placeholder="45 m2" /></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Etage</label>' +
+        '<input type="text" id="w-propertyFloor" value="' + (d.propertyFloor||'') + '" placeholder="2eme etage" /></div>' +
+        '<div class="form-group"><label>Nombre de pieces</label>' +
+        '<input type="text" id="w-rooms" value="' + (d.rooms||'') + '" placeholder="3" /></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Classe DPE</label>' +
+        '<select id="w-dpeClass">' + dpeOptions + '</select></div>' +
+        '<div class="form-group"><label>Nombre de cles</label>' +
+        '<input type="number" id="w-keysCount" value="' + (d.keysCount||'2') + '" min="1" /></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Chauffage</label>' +
+        '<input type="text" id="w-heatingType" value="' + (d.heatingType||'') + '" placeholder="Individuel gaz" /></div>' +
+        '<div class="form-group"><label>Eau chaude</label>' +
+        '<input type="text" id="w-hotWaterType" value="' + (d.hotWaterType||'') + '" placeholder="Individuelle" /></div>' +
+      '</div>';
+  },
 
-  4: () => {
-    const tenant = [_wizardData.prenom_locataire, _wizardData.nom_locataire].filter(Boolean).join(' ') || '—';
-    const loyer = parseFloat(_wizardData.loyer || 0);
-    const charges = parseFloat(_wizardData.charges || 0);
-    return `
-    <div class="wizard-section-title">Confirmation</div>
-    <div class="confirm-summary">
-      <div class="confirm-row"><span>Adresse</span><span>${_wizardData.adresse || '—'}</span></div>
-      <div class="confirm-row"><span>Type</span><span>${_wizardData.type_bail || 'Bail nu'}</span></div>
-      <div class="confirm-row"><span>Locataire</span><span>${tenant}</span></div>
-      <div class="confirm-row"><span>Email</span><span>${_wizardData.email_locataire || '—'}</span></div>
-      <div class="confirm-row"><span>Loyer HC</span><span>${formatCurrency(loyer)}</span></div>
-      <div class="confirm-row"><span>Charges</span><span>${formatCurrency(charges)}</span></div>
-      <div class="confirm-row"><span>Loyer CC</span><span><strong>${formatCurrency(loyer + charges)}</strong></span></div>
-      <div class="confirm-row"><span>Début</span><span>${formatDate(_wizardData.date_debut)}</span></div>
-    </div>
-    <p style="margin-top:16px;font-size:13px;color:var(--color-text-secondary);">
-      Vérifiez les informations puis cliquez sur <strong>Créer le bail</strong>.
-    </p>
-  `;
+  3: function() {
+    var d = _wizardData;
+    return '<div class="wizard-section-title">Le locataire</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Nom complet *</label>' +
+        '<input type="text" id="w-tenantName" value="' + (d.tenantName||'') + '" placeholder="M. Jean Dupont" /></div>' +
+        '<div class="form-group"><label>Date de naissance</label>' +
+        '<input type="date" id="w-tenantDOB" value="' + (d.tenantDOB||'') + '" /></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Email</label>' +
+        '<input type="email" id="w-tenantEmail" value="' + (d.tenantEmail||'') + '" placeholder="locataire@mail.fr" /></div>' +
+        '<div class="form-group"><label>Telephone</label>' +
+        '<input type="tel" id="w-tenantPhone" value="' + (d.tenantPhone||'') + '" placeholder="06 12 34 56 78" /></div>' +
+      '</div>' +
+      '<div class="form-group"><label>Adresse actuelle</label>' +
+      '<input type="text" id="w-tenantAddress" value="' + (d.tenantAddress||'') + '" placeholder="Adresse avant entree dans les lieux" /></div>' +
+      '<div class="form-group"><label>Piece d\'identite</label>' +
+      '<input type="text" id="w-tenantIdDoc" value="' + (d.tenantIdDoc||'') + '" placeholder="CNI n 123456789" /></div>' +
+      '<div class="wizard-section-title" style="margin-top:var(--space-lg)">Le garant (optionnel)</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Nom du garant</label>' +
+        '<input type="text" id="w-guarantorName" value="' + (d.guarantorName||'') + '" placeholder="Nom du garant" /></div>' +
+        '<div class="form-group"><label>Type de caution</label>' +
+        '<select id="w-guarantorType">' +
+        '<option value="">Aucun</option>' +
+        '<option value="Caution solidaire"' + (d.guarantorType==='Caution solidaire'?' selected':'') + '>Caution solidaire</option>' +
+        '<option value="Caution simple"' + (d.guarantorType==='Caution simple'?' selected':'') + '>Caution simple</option>' +
+        '<option value="Garantie Visale"' + (d.guarantorType==='Garantie Visale'?' selected':'') + '>Garantie Visale</option>' +
+        '</select></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Adresse garant</label>' +
+        '<input type="text" id="w-guarantorAddress" value="' + (d.guarantorAddress||'') + '" /></div>' +
+        '<div class="form-group"><label>Revenus garant (€)</label>' +
+        '<input type="number" id="w-guarantorIncome" value="' + (d.guarantorIncome||'') + '" placeholder="3000" /></div>' +
+      '</div>';
+  },
+
+  4: function() {
+    var d = _wizardData;
+    var dayOpts = [1,5,8,10,15,20].map(function(n) {
+      var val = 'Le ' + n + ' de chaque mois';
+      return '<option value="' + val + '"' + (d.rentDueDay===val?' selected':'') + '>Le ' + n + ' du mois</option>';
+    }).join('');
+    return '<div class="wizard-section-title">Conditions financieres</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Loyer hors charges (€) *</label>' +
+        '<input type="number" id="w-rent" value="' + (d.rent||'') + '" placeholder="700" step="0.01" /></div>' +
+        '<div class="form-group"><label>Charges (€)</label>' +
+        '<input type="number" id="w-charges" value="' + (d.charges||'') + '" placeholder="50" step="0.01" /></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Depot de garantie (€)</label>' +
+        '<input type="number" id="w-deposit" value="' + (d.deposit||'') + '" placeholder="700" step="0.01" /></div>' +
+        '<div class="form-group"><label>Jour d\'echeance</label>' +
+        '<select id="w-rentDueDay">' + dayOpts + '</select></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Duree du bail</label>' +
+        '<select id="w-duration">' +
+        '<option value="3 ans renouvelables par tacite reconduction"' + (!d.duration||d.duration.startsWith("3")?' selected':'') + '>3 ans (location vide)</option>' +
+        '<option value="1 an renouvelable par tacite reconduction"' + (d.duration&&d.duration.startsWith("1")?' selected':'') + '>1 an (meuble)</option>' +
+        '<option value="9 mois non renouvelable"' + (d.duration&&d.duration.startsWith("9")?' selected':'') + '>9 mois (mobilite)</option>' +
+        '</select></div>' +
+        '<div class="form-group"><label>Reference IRL</label>' +
+        '<input type="text" id="w-irlReference" value="' + (d.irlReference||'T4 2025 - indice 145,73') + '" /></div>' +
+      '</div>' +
+      '<div class="form-group"><label>Mode de paiement</label>' +
+      '<input type="text" id="w-paymentTerms" value="' + (d.paymentTerms||'Par virement bancaire') + '" /></div>' +
+      '<div class="form-group"><label>Regime des charges</label>' +
+      '<select id="w-chargesRegime">' +
+      '<option value="Provision sur charges avec regularisation annuelle"' + (!d.chargesRegime||d.chargesRegime.includes('Provision')?' selected':'') + '>Provision avec regularisation</option>' +
+      '<option value="Forfait charges sans regularisation"' + (d.chargesRegime&&d.chargesRegime.includes('Forfait')?' selected':'') + '>Forfait sans regularisation</option>' +
+      '</select></div>';
+  },
+
+  5: function() {
+    var d = _wizardData;
+    var clauses = [
+      ['clauseRentReview','Revision annuelle du loyer'],
+      ['clauseResolutory','Clause resolutoire'],
+      ['clauseInsurance','Obligation d\'assurance'],
+      ['clauseMaintenance','Entretien courant'],
+      ['clauseVisits','Droit de visite'],
+      ['clauseNoSubletting','Interdiction de sous-location'],
+      ['clausePrimaryResidence','Residence principale'],
+      ['clauseNoTransformation','Interdiction de transformation'],
+      ['clauseSolidarity','Solidarite entre colocataires'],
+      ['clauseLatePenalty','Penalites de retard']
+    ];
+    var checkboxes = clauses.map(function(c) {
+      return '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--color-border);background:var(--color-bg)">' +
+        '<input type="checkbox" id="w-' + c[0] + '"' + (d[c[0]]?' checked':'') + ' style="accent-color:var(--color-primary)" />' +
+        c[1] + '</label>';
+    }).join('');
+    return '<div class="wizard-section-title">Clauses et conditions</div>' +
+      '<div style="font-size:12px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">Clauses standard</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:var(--space-lg)">' + checkboxes + '</div>' +
+      '<div class="form-group"><label>Clauses speciales</label>' +
+      '<textarea id="w-specialClauses" rows="3" style="width:100%;padding:9px 12px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;font-size:13px;outline:none">' + (d.specialClauses||'') + '</textarea></div>' +
+      '<div class="form-group"><label>Conditions suspensives</label>' +
+      '<textarea id="w-suspensiveConditions" rows="2" style="width:100%;padding:9px 12px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;font-size:13px;outline:none">' + (d.suspensiveConditions||'') + '</textarea></div>' +
+      '<div class="form-group"><label>Annexes fournies</label>' +
+      '<input type="text" id="w-annexesProvided" value="' + (d.annexesProvided||'DPE, etat des risques, etat des lieux') + '" /></div>';
+  },
+
+  6: function() {
+    var d = _wizardData;
+    var loyer = (parseFloat(d.rent)||0) + (parseFloat(d.charges)||0);
+    var rows = [
+      ['Bailleur', d.landlordName||'—'],
+      ['Bien', d.propertyAddress||'—'],
+      ['Type', d.leaseType||'Location vide'],
+      ['Surface', d.surface||'—'],
+      ['Locataire', d.tenantName||'—'],
+      ['Email', d.tenantEmail||'—'],
+      ['Loyer HC', formatCurrency(d.rent)],
+      ['Charges', formatCurrency(d.charges)],
+      ['Loyer CC', '<strong>' + formatCurrency(loyer) + '</strong>'],
+      ['Depot', formatCurrency(d.deposit)],
+      ['Duree', d.duration||'3 ans'],
+      ['Prise d\'effet', formatDate(d.effectiveDate)]
+    ];
+    return '<div class="wizard-section-title">Confirmation</div>' +
+      '<div class="confirm-summary">' +
+      rows.map(function(r){ return '<div class="confirm-row"><span>' + r[0] + '</span><span>' + r[1] + '</span></div>'; }).join('') +
+      '</div>' +
+      '<p style="margin-top:16px;font-size:13px;color:var(--color-text-secondary)">Verifiez les informations puis cliquez sur <strong>Creer le bail</strong>.</p>';
   }
+
 };
-
-function openLeaseWizard() {
-  _wizardStep = 1;
-  _wizardData = {};
-  renderWizardStep();
-  document.getElementById('lease-wizard-overlay').classList.remove('hidden');
-}
-
-function closeLeaseWizard(event) {
-  if (event && event.target !== document.getElementById('lease-wizard-overlay')) return;
-  document.getElementById('lease-wizard-overlay').classList.add('hidden');
-}
 
 function renderWizardStep() {
   // Body
