@@ -643,13 +643,17 @@
         <button class="modal-close" onclick="closeLeaseWizard()">✕</button>
       </div>
       <div class="wizard-steps" id="wizard-steps">
-        <span class="step active" data-step="1">1 Bien</span>
+        <span class="step active" data-step="1">1 Bailleur</span>
         <span class="step-sep">›</span>
-        <span class="step" data-step="2">2 Locataire</span>
+        <span class="step" data-step="2">2 Bien</span>
         <span class="step-sep">›</span>
-        <span class="step" data-step="3">3 Conditions</span>
+        <span class="step" data-step="3">3 Locataire</span>
         <span class="step-sep">›</span>
-        <span class="step" data-step="4">4 Confirmation</span>
+        <span class="step" data-step="4">4 Conditions</span>
+        <span class="step-sep">›</span>
+        <span class="step" data-step="5">5 Clauses</span>
+        <span class="step-sep">›</span>
+        <span class="step" data-step="6">6 Confirmation</span>
       </div>
       <div class="wizard-body" id="wizard-body"></div>
       <div class="wizard-footer">
@@ -1258,12 +1262,279 @@ async function loadTenants() {
 }
 
 // ============================================================
-// BAILO GESTION v2 — Lease Wizard
+// BAILO GESTION v2 — Lease Wizard (v2 complet)
 // ============================================================
 
 let _wizardStep = 1;
-const WIZARD_TOTAL_STEPS = 4;
+const WIZARD_TOTAL_STEPS = 6;
 let _wizardData = {};
+
+const WIZARD_STEPS_CONTENT = {
+
+  1: () => `
+    <div class="wizard-section-title">Le bailleur</div>
+    <div class="form-group">
+      <label>Nom du bailleur *</label>
+      <input type="text" id="w-landlordName" value="${_wizardData.landlordName||''}" placeholder="SCI Martin ou Jean Dupont" />
+    </div>
+    <div class="form-group">
+      <label>Représentant</label>
+      <input type="text" id="w-landlordRepresentative" value="${_wizardData.landlordRepresentative||''}" placeholder="Son représentant légal" />
+    </div>
+    <div class="form-group">
+      <label>Adresse du bailleur *</label>
+      <input type="text" id="w-landlordAddress" value="${_wizardData.landlordAddress||''}" placeholder="12 rue de la Paix, 75001 Paris" />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="w-landlordEmail" value="${_wizardData.landlordEmail||''}" placeholder="contact@bailleur.fr" />
+      </div>
+      <div class="form-group">
+        <label>Ville de signature</label>
+        <input type="text" id="w-signatureCity" value="${_wizardData.signatureCity||''}" placeholder="Paris" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Date de signature</label>
+        <input type="date" id="w-signatureDate" value="${_wizardData.signatureDate||''}" />
+      </div>
+      <div class="form-group">
+        <label>Date de prise d'effet *</label>
+        <input type="date" id="w-effectiveDate" value="${_wizardData.effectiveDate||''}" />
+      </div>
+    </div>
+  `,
+
+  2: () => `
+    <div class="wizard-section-title">Le bien</div>
+    <div class="form-group">
+      <label>Adresse du bien *</label>
+      <input type="text" id="w-propertyAddress" value="${_wizardData.propertyAddress||''}" placeholder="12 rue de la Paix, 75001 Paris" />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Type de bail</label>
+        <select id="w-leaseType">
+          <option value="Location vide" ${_wizardData.leaseType==='Location vide'?'selected':''}>Location vide</option>
+          <option value="Location meublée" ${_wizardData.leaseType==='Location meublée'?'selected':''}>Location meublée</option>
+          <option value="Bail mobilité" ${_wizardData.leaseType==='Bail mobilité'?'selected':''}>Bail mobilité</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Surface</label>
+        <input type="text" id="w-surface" value="${_wizardData.surface||''}" placeholder="45 m²" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Étage</label>
+        <input type="text" id="w-propertyFloor" value="${_wizardData.propertyFloor||''}" placeholder="2ème étage" />
+      </div>
+      <div class="form-group">
+        <label>Nombre de pièces</label>
+        <input type="text" id="w-rooms" value="${_wizardData.rooms||''}" placeholder="3" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Classe DPE</label>
+        <select id="w-dpeClass">
+          ${['A','B','C','D','E','F','G'].map(c=>`<option value="${c}" ${_wizardData.dpeClass===c?'selected':''}>${c}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Nombre de clés</label>
+        <input type="number" id="w-keysCount" value="${_wizardData.keysCount||'2'}" min="1" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Chauffage</label>
+        <input type="text" id="w-heatingType" value="${_wizardData.heatingType||''}" placeholder="Individuel gaz" />
+      </div>
+      <div class="form-group">
+        <label>Eau chaude</label>
+        <input type="text" id="w-hotWaterType" value="${_wizardData.hotWaterType||''}" placeholder="Individuelle" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Référence cadastrale</label>
+      <input type="text" id="w-propertyCadastral" value="${_wizardData.propertyCadastral||''}" placeholder="Section AB, n° 142" />
+    </div>
+  `,
+
+  3: () => `
+    <div class="wizard-section-title">Le locataire</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Nom complet *</label>
+        <input type="text" id="w-tenantName" value="${_wizardData.tenantName||''}" placeholder="M. Jean Dupont" />
+      </div>
+      <div class="form-group">
+        <label>Date de naissance</label>
+        <input type="date" id="w-tenantDOB" value="${_wizardData.tenantDOB||''}" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="w-tenantEmail" value="${_wizardData.tenantEmail||''}" placeholder="locataire@mail.fr" />
+      </div>
+      <div class="form-group">
+        <label>Téléphone</label>
+        <input type="tel" id="w-tenantPhone" value="${_wizardData.tenantPhone||''}" placeholder="06 12 34 56 78" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Adresse actuelle</label>
+      <input type="text" id="w-tenantAddress" value="${_wizardData.tenantAddress||''}" placeholder="Adresse avant entrée dans les lieux" />
+    </div>
+    <div class="form-group">
+      <label>Pièce d'identité</label>
+      <input type="text" id="w-tenantIdDoc" value="${_wizardData.tenantIdDoc||''}" placeholder="CNI n° 123456789" />
+    </div>
+    <div class="wizard-section-title" style="margin-top:var(--space-lg)">Le garant (optionnel)</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Nom du garant</label>
+        <input type="text" id="w-guarantorName" value="${_wizardData.guarantorName||''}" placeholder="Nom du garant" />
+      </div>
+      <div class="form-group">
+        <label>Type de caution</label>
+        <select id="w-guarantorType">
+          <option value="">Aucun</option>
+          <option value="Caution solidaire personne physique" ${_wizardData.guarantorType==='Caution solidaire personne physique'?'selected':''}>Caution solidaire</option>
+          <option value="Caution simple personne physique" ${_wizardData.guarantorType==='Caution simple personne physique'?'selected':''}>Caution simple</option>
+          <option value="Garantie Visale" ${_wizardData.guarantorType==='Garantie Visale'?'selected':''}>Garantie Visale</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Adresse garant</label>
+        <input type="text" id="w-guarantorAddress" value="${_wizardData.guarantorAddress||''}" placeholder="Adresse du garant" />
+      </div>
+      <div class="form-group">
+        <label>Revenus garant (€)</label>
+        <input type="number" id="w-guarantorIncome" value="${_wizardData.guarantorIncome||''}" placeholder="3000" />
+      </div>
+    </div>
+  `,
+
+  4: () => `
+    <div class="wizard-section-title">Conditions financières</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Loyer hors charges (€) *</label>
+        <input type="number" id="w-rent" value="${_wizardData.rent||''}" placeholder="700" step="0.01" />
+      </div>
+      <div class="form-group">
+        <label>Charges (€)</label>
+        <input type="number" id="w-charges" value="${_wizardData.charges||''}" placeholder="50" step="0.01" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Dépôt de garantie (€)</label>
+        <input type="number" id="w-deposit" value="${_wizardData.deposit||''}" placeholder="700" step="0.01" />
+      </div>
+      <div class="form-group">
+        <label>Jour d'échéance</label>
+        <select id="w-rentDueDay">
+          ${[1,5,8,10,15,20].map(d=>`<option value="Le ${d} de chaque mois" ${_wizardData.rentDueDay===('Le '+d+' de chaque mois')?'selected':''}>Le ${d} du mois</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Durée du bail</label>
+        <select id="w-duration">
+          <option value="3 ans renouvelables par tacite reconduction" ${_wizardData.duration&&_wizardData.duration.startsWith('3')?'selected':''}>3 ans (vide)</option>
+          <option value="1 an renouvelable par tacite reconduction" ${_wizardData.duration&&_wizardData.duration.startsWith('1')?'selected':''}>1 an (meublé)</option>
+          <option value="9 mois non renouvelable" ${_wizardData.duration&&_wizardData.duration.startsWith('9')?'selected':''}>9 mois (mobilité)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Référence IRL</label>
+        <input type="text" id="w-irlReference" value="${_wizardData.irlReference||'T4 2025 — indice 145,73'}" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Régime des charges</label>
+      <select id="w-chargesRegime">
+        <option value="Provision sur charges avec régularisation annuelle" ${_wizardData.chargesRegime==='Provision sur charges avec régularisation annuelle'?'selected':''}>Provision avec régularisation</option>
+        <option value="Forfait charges sans régularisation" ${_wizardData.chargesRegime==='Forfait charges sans régularisation'?'selected':''}>Forfait sans régularisation</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Mode de paiement</label>
+      <input type="text" id="w-paymentTerms" value="${_wizardData.paymentTerms||'Par virement bancaire'}" />
+    </div>
+  `,
+
+  5: () => `
+    <div class="wizard-section-title">Clauses et conditions</div>
+    <div style="margin-bottom:var(--space-md)">
+      <div style="font-size:12px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">Clauses standard</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${[
+          ['clauseRentReview','Révision annuelle du loyer'],
+          ['clauseResolutory','Clause résolutoire'],
+          ['clauseInsurance','Obligation d\'assurance'],
+          ['clauseMaintenance','Entretien courant'],
+          ['clauseVisits','Droit de visite'],
+          ['clauseNoSubletting','Interdiction de sous-location'],
+          ['clausePrimaryResidence','Résidence principale'],
+          ['clauseNoTransformation','Interdiction de transformation'],
+          ['clauseSolidarity','Solidarité entre colocataires'],
+          ['clauseLatePenalty','Pénalités de retard'],
+        ].map(([id,label])=>`
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--color-border);background:var(--color-bg)">
+            <input type="checkbox" id="w-${id}" ${_wizardData[id]?'checked':''} style="accent-color:var(--color-primary)" />
+            ${label}
+          </label>`).join('')}
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Clauses spéciales</label>
+      <textarea id="w-specialClauses" rows="3" style="width:100%;padding:9px 12px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;font-size:13px;outline:none">${_wizardData.specialClauses||''}</textarea>
+    </div>
+    <div class="form-group">
+      <label>Conditions suspensives</label>
+      <textarea id="w-suspensiveConditions" rows="2" style="width:100%;padding:9px 12px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;font-size:13px;outline:none">${_wizardData.suspensiveConditions||''}</textarea>
+    </div>
+    <div class="form-group">
+      <label>Annexes fournies</label>
+      <input type="text" id="w-annexesProvided" value="${_wizardData.annexesProvided||'DPE, état des risques, état des lieux'}" />
+    </div>
+  `,
+
+  6: () => {
+    const loyer = (parseFloat(_wizardData.rent)||0) + (parseFloat(_wizardData.charges)||0);
+    return \`
+    <div class="wizard-section-title">Confirmation</div>
+    <div class="confirm-summary">
+      <div class="confirm-row"><span>Bailleur</span><span>\${_wizardData.landlordName||'—'}</span></div>
+      <div class="confirm-row"><span>Bien</span><span>\${_wizardData.propertyAddress||'—'}</span></div>
+      <div class="confirm-row"><span>Type</span><span>\${_wizardData.leaseType||'Location vide'}</span></div>
+      <div class="confirm-row"><span>Surface</span><span>\${_wizardData.surface||'—'}</span></div>
+      <div class="confirm-row"><span>Locataire</span><span>\${_wizardData.tenantName||'—'}</span></div>
+      <div class="confirm-row"><span>Email locataire</span><span>\${_wizardData.tenantEmail||'—'}</span></div>
+      <div class="confirm-row"><span>Loyer HC</span><span>\${formatCurrency(_wizardData.rent)}</span></div>
+      <div class="confirm-row"><span>Charges</span><span>\${formatCurrency(_wizardData.charges)}</span></div>
+      <div class="confirm-row"><span>Loyer CC</span><span><strong>\${formatCurrency(loyer)}</strong></span></div>
+      <div class="confirm-row"><span>Dépôt</span><span>\${formatCurrency(_wizardData.deposit)}</span></div>
+      <div class="confirm-row"><span>Durée</span><span>\${_wizardData.duration||'3 ans'}</span></div>
+      <div class="confirm-row"><span>Prise d'effet</span><span>\${formatDate(_wizardData.effectiveDate)}</span></div>
+    </div>
+    <p style="margin-top:16px;font-size:13px;color:var(--color-text-secondary)">
+      Vérifiez les informations puis cliquez sur <strong>Créer le bail</strong>.
+    </p>
+  \`;
+  }
+};
 
 const WIZARD_STEPS_CONTENT = {
   1: () => `
@@ -1414,27 +1685,66 @@ function renderWizardStep() {
 }
 
 function collectStepData() {
+  const g = (id) => document.getElementById(id)?.value || '';
+  const gc = (id) => document.getElementById(id)?.checked || false;
   switch (_wizardStep) {
     case 1:
-      _wizardData.adresse = document.getElementById('w-adresse')?.value.trim();
-      _wizardData.type_bail = document.getElementById('w-type-bail')?.value;
-      _wizardData.surface = document.getElementById('w-surface')?.value;
-      _wizardData.etage = document.getElementById('w-etage')?.value.trim();
-      _wizardData.pieces = document.getElementById('w-pieces')?.value;
+      _wizardData.landlordName = g('w-landlordName');
+      _wizardData.landlordRepresentative = g('w-landlordRepresentative');
+      _wizardData.landlordAddress = g('w-landlordAddress');
+      _wizardData.landlordEmail = g('w-landlordEmail');
+      _wizardData.signatureCity = g('w-signatureCity');
+      _wizardData.signatureDate = g('w-signatureDate');
+      _wizardData.effectiveDate = g('w-effectiveDate');
       break;
     case 2:
-      _wizardData.prenom_locataire = document.getElementById('w-prenom')?.value.trim();
-      _wizardData.nom_locataire = document.getElementById('w-nom')?.value.trim();
-      _wizardData.email_locataire = document.getElementById('w-email')?.value.trim();
-      _wizardData.tel_locataire = document.getElementById('w-tel')?.value.trim();
+      _wizardData.propertyAddress = g('w-propertyAddress');
+      _wizardData.leaseType = g('w-leaseType');
+      _wizardData.surface = g('w-surface');
+      _wizardData.propertyFloor = g('w-propertyFloor');
+      _wizardData.rooms = g('w-rooms');
+      _wizardData.dpeClass = g('w-dpeClass');
+      _wizardData.keysCount = g('w-keysCount');
+      _wizardData.heatingType = g('w-heatingType');
+      _wizardData.hotWaterType = g('w-hotWaterType');
+      _wizardData.propertyCadastral = g('w-propertyCadastral');
       break;
     case 3:
-      _wizardData.loyer = document.getElementById('w-loyer')?.value;
-      _wizardData.charges = document.getElementById('w-charges')?.value;
-      _wizardData.depot_garantie = document.getElementById('w-depot')?.value;
-      _wizardData.jour_echeance = document.getElementById('w-echeance')?.value;
-      _wizardData.date_debut = document.getElementById('w-date-debut')?.value;
-      _wizardData.date_fin = document.getElementById('w-date-fin')?.value || null;
+      _wizardData.tenantName = g('w-tenantName');
+      _wizardData.tenantDOB = g('w-tenantDOB');
+      _wizardData.tenantEmail = g('w-tenantEmail');
+      _wizardData.tenantPhone = g('w-tenantPhone');
+      _wizardData.tenantAddress = g('w-tenantAddress');
+      _wizardData.tenantIdDoc = g('w-tenantIdDoc');
+      _wizardData.guarantorName = g('w-guarantorName');
+      _wizardData.guarantorType = g('w-guarantorType');
+      _wizardData.guarantorAddress = g('w-guarantorAddress');
+      _wizardData.guarantorIncome = g('w-guarantorIncome');
+      break;
+    case 4:
+      _wizardData.rent = g('w-rent');
+      _wizardData.charges = g('w-charges');
+      _wizardData.deposit = g('w-deposit');
+      _wizardData.rentDueDay = g('w-rentDueDay');
+      _wizardData.duration = g('w-duration');
+      _wizardData.irlReference = g('w-irlReference');
+      _wizardData.chargesRegime = g('w-chargesRegime');
+      _wizardData.paymentTerms = g('w-paymentTerms');
+      break;
+    case 5:
+      _wizardData.clauseRentReview = gc('w-clauseRentReview');
+      _wizardData.clauseResolutory = gc('w-clauseResolutory');
+      _wizardData.clauseInsurance = gc('w-clauseInsurance');
+      _wizardData.clauseMaintenance = gc('w-clauseMaintenance');
+      _wizardData.clauseVisits = gc('w-clauseVisits');
+      _wizardData.clauseNoSubletting = gc('w-clauseNoSubletting');
+      _wizardData.clausePrimaryResidence = gc('w-clausePrimaryResidence');
+      _wizardData.clauseNoTransformation = gc('w-clauseNoTransformation');
+      _wizardData.clauseSolidarity = gc('w-clauseSolidarity');
+      _wizardData.clauseLatePenalty = gc('w-clauseLatePenalty');
+      _wizardData.specialClauses = g('w-specialClauses');
+      _wizardData.suspensiveConditions = g('w-suspensiveConditions');
+      _wizardData.annexesProvided = g('w-annexesProvided');
       break;
   }
 }
@@ -1442,25 +1752,26 @@ function collectStepData() {
 function validateStep() {
   switch (_wizardStep) {
     case 1:
-      if (!document.getElementById('w-adresse')?.value.trim()) {
-        showToast("L'adresse est obligatoire.", 'error');
-        return false;
+      if (!document.getElementById('w-landlordName')?.value.trim()) {
+        showToast("Le nom du bailleur est obligatoire.", 'error'); return false;
+      }
+      if (!document.getElementById('w-effectiveDate')?.value) {
+        showToast("La date de prise d'effet est obligatoire.", 'error'); return false;
       }
       break;
     case 2:
-      if (!document.getElementById('w-nom')?.value.trim()) {
-        showToast('Le nom du locataire est obligatoire.', 'error');
-        return false;
+      if (!document.getElementById('w-propertyAddress')?.value.trim()) {
+        showToast("L'adresse du bien est obligatoire.", 'error'); return false;
       }
       break;
     case 3:
-      if (!document.getElementById('w-loyer')?.value) {
-        showToast('Le loyer est obligatoire.', 'error');
-        return false;
+      if (!document.getElementById('w-tenantName')?.value.trim()) {
+        showToast("Le nom du locataire est obligatoire.", 'error'); return false;
       }
-      if (!document.getElementById('w-date-debut')?.value) {
-        showToast('La date de début est obligatoire.', 'error');
-        return false;
+      break;
+    case 4:
+      if (!document.getElementById('w-rent')?.value) {
+        showToast("Le loyer est obligatoire.", 'error'); return false;
       }
       break;
   }
@@ -1498,24 +1809,61 @@ async function createLease() {
   }
 
   const payload = {
-    bailleur_id: session.user.id,
+    bailleur_id: 'default',
     data: {
       formData: {
-        propertyAddress: _wizardData.adresse || '',
-        leaseType: _wizardData.type_bail || 'Bail nu',
-        surface: _wizardData.surface || '',
-        etage: _wizardData.etage || '',
-        rooms: _wizardData.pieces || '',
-        tenantName: [_wizardData.prenom_locataire, _wizardData.nom_locataire].filter(Boolean).join(' '),
-        tenantEmail: _wizardData.email_locataire || '',
-        tenantPhone: _wizardData.tel_locataire || '',
-        rent: _wizardData.loyer || '0',
-        charges: _wizardData.charges || '0',
-        deposit: _wizardData.depot_garantie || '',
-        rentDueDay: _wizardData.jour_echeance ? 'Le ' + _wizardData.jour_echeance + ' de chaque mois' : '',
-        effectiveDate: _wizardData.date_debut || '',
-        exitDate: _wizardData.date_fin || '',
+        leaseLabel: (_wizardData.tenantName || 'Nouveau bail') + ' — ' + (_wizardData.propertyAddress || ''),
         leaseStatus: 'Actif',
+        leaseType: _wizardData.leaseType || 'Location vide',
+        landlordName: _wizardData.landlordName || '',
+        landlordRepresentative: _wizardData.landlordRepresentative || '',
+        landlordAddress: _wizardData.landlordAddress || '',
+        landlordEmail: _wizardData.landlordEmail || '',
+        signatureCity: _wizardData.signatureCity || '',
+        signatureDate: _wizardData.signatureDate || '',
+        effectiveDate: _wizardData.effectiveDate || '',
+        propertyAddress: _wizardData.propertyAddress || '',
+        propertyFloor: _wizardData.propertyFloor || '',
+        propertyCadastral: _wizardData.propertyCadastral || '',
+        surface: _wizardData.surface || '',
+        rooms: _wizardData.rooms || '',
+        dpeClass: _wizardData.dpeClass || 'D',
+        keysCount: _wizardData.keysCount || '2',
+        heatingType: _wizardData.heatingType || '',
+        hotWaterType: _wizardData.hotWaterType || '',
+        tenantName: _wizardData.tenantName || '',
+        tenantDOB: _wizardData.tenantDOB || '',
+        tenantEmail: _wizardData.tenantEmail || '',
+        tenantPhone: _wizardData.tenantPhone || '',
+        tenantAddress: _wizardData.tenantAddress || '',
+        tenantIdDoc: _wizardData.tenantIdDoc || '',
+        guarantorName: _wizardData.guarantorName || '',
+        guarantorType: _wizardData.guarantorType || '',
+        guarantorAddress: _wizardData.guarantorAddress || '',
+        guarantorIncome: _wizardData.guarantorIncome || '',
+        rent: _wizardData.rent || '0',
+        charges: _wizardData.charges || '0',
+        deposit: _wizardData.deposit || '',
+        rentDueDay: _wizardData.rentDueDay || 'Le 1 de chaque mois',
+        duration: _wizardData.duration || '3 ans renouvelables par tacite reconduction',
+        irlReference: _wizardData.irlReference || '',
+        chargesRegime: _wizardData.chargesRegime || '',
+        paymentTerms: _wizardData.paymentTerms || '',
+        clauseRentReview: _wizardData.clauseRentReview ? 'on' : '',
+        clauseResolutory: _wizardData.clauseResolutory ? 'on' : '',
+        clauseInsurance: _wizardData.clauseInsurance ? 'on' : '',
+        clauseMaintenance: _wizardData.clauseMaintenance ? 'on' : '',
+        clauseVisits: _wizardData.clauseVisits ? 'on' : '',
+        clauseNoSubletting: _wizardData.clauseNoSubletting ? 'on' : '',
+        clausePrimaryResidence: _wizardData.clausePrimaryResidence ? 'on' : '',
+        clauseNoTransformation: _wizardData.clauseNoTransformation ? 'on' : '',
+        clauseSolidarity: _wizardData.clauseSolidarity ? 'on' : '',
+        clauseLatePenalty: _wizardData.clauseLatePenalty ? 'on' : '',
+        specialClauses: _wizardData.specialClauses || '',
+        suspensiveConditions: _wizardData.suspensiveConditions || '',
+        annexesProvided: _wizardData.annexesProvided || '',
+        noticePeriodTenant: '3 mois',
+        noticePeriodLandlord: '6 mois',
       }
     },
     updated_at: new Date().toISOString(),
