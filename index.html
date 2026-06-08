@@ -1244,13 +1244,11 @@ async function loadReceipts() {
 
   _allReceipts = msgs || [];
 
-  // Charger les baux pour les noms
-  if (!_allLeases.length) {
-    const { data: leases } = await db.from('leases').select('id, data');
-    _receiptsLeases = leases || [];
-  } else {
-    _receiptsLeases = _allLeases;
-  }
+  // Charger les baux pour les noms (toujours)
+  const { data: leases } = await db.from('leases').select('id, data');
+  _receiptsLeases = leases || [];
+  // Mettre à jour aussi _allLeases pour les autres modules
+  if (!_allLeases.length) _allLeases = _receiptsLeases;
 
   // Remplir les filtres
   populateReceiptsFilters();
