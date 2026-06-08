@@ -841,7 +841,7 @@ async function loadDetailQuittances(leaseId) {
   const el = document.getElementById('detail-quittances');
   if (!el) return;
   const { data, error } = await db.from('messages')
-    .select('id, kind, created_at, data')
+    .select('id, kind, created_at, lease_id, quittance_data, subject, body')
     .eq('lease_id', leaseId)
     .eq('kind', 'Quittance')
     .order('created_at', { ascending: false })
@@ -850,7 +850,7 @@ async function loadDetailQuittances(leaseId) {
   if (error || !data?.length) { el.innerHTML = emptyState('Aucune quittance.'); return; }
 
   el.innerHTML = data.map(m => {
-    const mois = m.data?.quittanceData?.mois || m.data?.formData?.mois || formatMonth(m.created_at);
+    const mois = m.quittance_data?.mois || m.subject || formatMonth(m.created_at);
     return `<div class="list-item">
       <div class="list-item-icon">🧾</div>
       <div class="list-item-body">
@@ -1236,7 +1236,7 @@ async function loadReceipts() {
   // Charger les quittances
   const { data: msgs, error } = await db
     .from('messages')
-    .select('id, kind, created_at, lease_id, data')
+    .select('id, kind, created_at, lease_id, quittance_data, subject, body')
     .eq('kind', 'Quittance')
     .order('created_at', { ascending: false });
 
@@ -1296,8 +1296,8 @@ function renderReceiptsStats() {
   const thisMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
   const thisMo = _allReceipts.filter(r => r.created_at.startsWith(thisMonth));
   const total = _allReceipts.reduce((s, r) => {
-    const rent = parseFloat(r.data?.quittanceData?.rent || r.data?.formData?.rent || 0);
-    const charges = parseFloat(r.data?.quittanceData?.charges || r.data?.formData?.charges || 0);
+    const rent = parseFloat(r.quittance_data?.rent || 0);
+    const charges = parseFloat(r.quittance_data?.charges || 0);
     return s + rent + charges;
   }, 0);
 
@@ -1338,8 +1338,8 @@ function renderReceipts(receipts) {
     const address = lease ? leaseAddress(lease) : '';
     const mois = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' })
       .format(new Date(r.created_at));
-    const rent = parseFloat(r.data?.quittanceData?.rent || r.data?.formData?.rent || 0);
-    const charges = parseFloat(r.data?.quittanceData?.charges || r.data?.formData?.charges || 0);
+    const rent = parseFloat(r.quittance_data?.rent || 0);
+    const charges = parseFloat(r.quittance_data?.charges || 0);
     const total = rent + charges;
 
     return `<div class="list-item">
