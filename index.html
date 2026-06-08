@@ -464,7 +464,7 @@ async function loadDashboard() {
 }
 
 async function loadKPIs() {
-  const { data: leases } = await supabase
+  const { data: leases } = await db
     .from('leases')
     .select('id, loyer, charges, statut');
 
@@ -483,7 +483,7 @@ async function loadKPIs() {
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const { count } = await supabase
+  const { count } = await db
     .from('messages')
     .select('id', { count: 'exact', head: true })
     .eq('kind', 'Quittance')
@@ -497,7 +497,7 @@ async function loadRecentLeases() {
   const el = document.getElementById('recent-leases-list');
   if (!el) return;
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('leases')
     .select('id, nom_locataire, prenom_locataire, adresse, loyer, charges, statut')
     .order('created_at', { ascending: false })
@@ -527,7 +527,7 @@ async function loadRecentActivity() {
   const el = document.getElementById('activity-list');
   if (!el) return;
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('messages')
     .select('id, kind, created_at, lease_id')
     .order('created_at', { ascending: false })
@@ -564,7 +564,7 @@ async function loadLeases() {
   if (!el) return;
   el.innerHTML = '<div class="list-loading">Chargement des baux…</div>';
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('leases')
     .select('*')
     .order('created_at', { ascending: false });
@@ -677,7 +677,7 @@ async function loadProperties() {
   el.innerHTML = '<div class="list-loading">Chargement…</div>';
 
   // Pour l'instant on déduplique les adresses depuis les baux
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('leases')
     .select('id, adresse, type_bail, surface, pieces, loyer, charges, statut, nom_locataire, prenom_locataire')
     .order('adresse');
@@ -735,7 +735,7 @@ async function loadTenants() {
   if (!el) return;
   el.innerHTML = '<div class="list-loading">Chargement…</div>';
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('leases')
     .select('id, nom_locataire, prenom_locataire, email_locataire, tel_locataire, adresse, statut, date_debut')
     .order('nom_locataire');
