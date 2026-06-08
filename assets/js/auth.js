@@ -17,7 +17,7 @@ async function handleAuth() {
   btn.textContent = 'Connexion…';
   errEl.classList.add('hidden');
 
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await db.auth.signInWithPassword({ email, password });
 
   if (error) {
     showAuthError('Email ou mot de passe incorrect.');
@@ -36,7 +36,7 @@ function showAuthError(msg) {
 }
 
 async function handleLogout() {
-  await supabase.auth.signOut();
+  await db.auth.signOut();
   document.getElementById('app').classList.add('hidden');
   document.getElementById('auth-screen').classList.remove('hidden');
   document.getElementById('auth-email').value = '';
@@ -62,7 +62,7 @@ function onAuthSuccess(user) {
 
 // Check existing session on load
 async function checkSession() {
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await db.auth.getSession();
   if (session) {
     onAuthSuccess(session.user);
   }
