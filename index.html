@@ -453,6 +453,35 @@ function emptyState(msg) {
 // BAILO GESTION v2 — Dashboard
 // ============================================================
 
+
+// ============================================================
+// HELPERS — lecture data.formData
+// ============================================================
+function fd(lease) { return (lease.data && lease.data.formData) ? lease.data.formData : {}; }
+
+function leaseTenantName(l) {
+  const f = fd(l);
+  return f.tenantName || '—';
+}
+function leaseAddress(l) {
+  const f = fd(l);
+  return f.propertyAddress || '—';
+}
+function leaseRent(l) {
+  const f = fd(l);
+  return (parseFloat(f.rent)||0) + (parseFloat(f.charges)||0);
+}
+function leaseStatus(l) {
+  const f = fd(l);
+  const s = (f.leaseStatus || '').toLowerCase();
+  if (s === 'actif' || s === 'active' || s === '') return 'active';
+  if (s === 'terminé' || s === 'ended') return 'ended';
+  return 'draft';
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
 async function loadDashboard() {
   const dateEl = document.getElementById('dashboard-date');
   if (dateEl) {
@@ -464,86 +493,51 @@ async function loadDashboard() {
 }
 
 async function loadKPIs() {
-  const { data: leases } = await db
-    .from('leases')
-    .select('id, data');
-
+  const { data: leases } = await db.from('leases').select('id, data');
   const all = leases || [];
-  const active = all.filter(l => {
-    const s = l.data?.formData?.leaseStatus || '';
-    return s === 'Actif' || s === 'active' || s === '';
-  });
-  const totalLoyer = active.reduce((sum, l) => {
-    const fd = l.data?.formData || {};
-    return sum + (parseFloat(fd.rent)||0) + (parseFloat(fd.charges)||0);
-  }, 0);
+  const active = all.filter(l => leaseStatus(l) === 'active');
+  const totalLoyer = active.reduce((sum, l) => sum + leaseRent(l), 0);
 
-  const biensEl = document.getElementById('kpi-biens-val');
-  if (biensEl) biensEl.textContent = all.length;
-
-  const bauxEl = document.getElementById('kpi-baux-val');
-  if (bauxEl) bauxEl.textContent = active.length;
-
-  const loyersEl = document.getElementById('kpi-loyers-val');
-  if (loyersEl) loyersEl.textContent = formatCurrency(totalLoyer);
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set('kpi-biens-val', all.length);
+  set('kpi-baux-val', active.length);
+  set('kpi-loyers-val', formatCurrency(totalLoyer));
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const { count } = await db
-    .from('messages')
+  const { count } = await db.from('messages')
     .select('id', { count: 'exact', head: true })
     .eq('kind', 'Quittance')
     .gte('created_at', monthStart);
-
-  const qEl = document.getElementById('kpi-quittances-val');
-  if (qEl) qEl.textContent = count || 0;
+  set('kpi-quittances-val', count || 0);
 }
 
 async function loadRecentLeases() {
   const el = document.getElementById('recent-leases-list');
   if (!el) return;
-
-  const { data, error } = await db
-    .from('leases')
-    .select('id, nom_locataire, prenom_locataire, adresse, loyer, charges, statut')
-    .order('created_at', { ascending: false })
-    .limit(5);
-
+  const { data, error } = await db.from('leases').select('id, data').order('created_at', { ascending: false }).limit(5);
   if (error || !data?.length) { el.innerHTML = emptyState('Aucun bail pour le moment.'); return; }
-
-  el.innerHTML = data.map(l => {
-    const name = [l.prenom_locataire, l.nom_locataire].filter(Boolean).join(' ') || 'Locataire';
-    const loyer = (parseFloat(l.loyer)||0) + (parseFloat(l.charges)||0);
-    return `
-      <div class="list-item" onclick="navigate('leases')">
-        <div class="list-item-icon">📄</div>
-        <div class="list-item-body">
-          <div class="list-item-title">${name}</div>
-          <div class="list-item-sub">${l.adresse || '—'}</div>
-        </div>
-        <div class="list-item-right">
-          <div class="list-item-amount">${formatCurrency(loyer)}</div>
-          <div class="list-item-date">${leaseStatusBadge(l.statut)}</div>
-        </div>
-      </div>`;
-  }).join('');
+  el.innerHTML = data.map(l => `
+    <div class="list-item" onclick="navigate('leases')">
+      <div class="list-item-icon">📄</div>
+      <div class="list-item-body">
+        <div class="list-item-title">${leaseTenantName(l)}</div>
+        <div class="list-item-sub">${leaseAddress(l)}</div>
+      </div>
+      <div class="list-item-right">
+        <div class="list-item-amount">${formatCurrency(leaseRent(l))}</div>
+        <div class="list-item-date">${leaseStatusBadge(leaseStatus(l))}</div>
+      </div>
+    </div>`).join('');
 }
 
 async function loadRecentActivity() {
   const el = document.getElementById('activity-list');
   if (!el) return;
-
-  const { data, error } = await db
-    .from('messages')
-    .select('id, kind, created_at, lease_id')
-    .order('created_at', { ascending: false })
-    .limit(6);
-
+  const { data, error } = await db.from('messages').select('id, kind, created_at, lease_id').order('created_at', { ascending: false }).limit(6);
   if (error || !data?.length) { el.innerHTML = emptyState('Aucune activité récente.'); return; }
-
-  const icons = { 'Quittance':'🧾', 'Message':'💬', 'EDL':'📋', 'Document':'📄' };
-  const labels = { 'Quittance':'Quittance envoyée', 'Message':'Message', 'EDL':'État des lieux', 'Document':'Document' };
-
+  const icons = { 'Quittance':'🧾','Message':'💬','EDL':'📋','Document':'📄','Incident':'⚠️' };
+  const labels = { 'Quittance':'Quittance envoyée','Message':'Message','EDL':'État des lieux','Document':'Document','Incident':'Incident' };
   el.innerHTML = data.map(m => `
     <div class="list-item">
       <div class="list-item-icon">${icons[m.kind] || '📌'}</div>
@@ -557,228 +551,153 @@ async function loadRecentActivity() {
     </div>`).join('');
 }
 
-
-/* v3 */
 // ============================================================
-// BAILO GESTION v2 — Leases
+// BAUX
 // ============================================================
-
 let _allLeases = [];
 
 async function loadLeases() {
   const el = document.getElementById('leases-list');
   if (!el) return;
-  el.innerHTML = '<div class="list-loading">Chargement des baux…</div>';
-
-  const { data, error } = await db
-    .from('leases')
-    .select('*')
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    el.innerHTML = '<div class="list-loading">Erreur lors du chargement.</div>';
-    console.error(error);
-    return;
-  }
-
+  el.innerHTML = '<div class="list-loading">Chargement…</div>';
+  const { data, error } = await db.from('leases').select('id, data, created_at').order('created_at', { ascending: false });
+  if (error) { el.innerHTML = '<div class="list-loading">Erreur de chargement.</div>'; return; }
   _allLeases = data || [];
-  updateBadgeLease(_allLeases.filter(l => l.statut === 'active' || !l.statut).length);
   renderLeases(_allLeases);
 }
 
 function filterLeases() {
   const search = (document.getElementById('leases-search')?.value || '').toLowerCase();
   const status = document.getElementById('leases-status-filter')?.value || '';
-
   const filtered = _allLeases.filter(l => {
-    const matchSearch = !search ||
-      (l.nom_locataire || '').toLowerCase().includes(search) ||
-      (l.adresse || '').toLowerCase().includes(search) ||
-      (l.prenom_locataire || '').toLowerCase().includes(search);
-    const matchStatus = !status || l.statut === status || (!l.statut && status === 'active');
+    const name = leaseTenantName(l).toLowerCase();
+    const addr = leaseAddress(l).toLowerCase();
+    const matchSearch = !search || name.includes(search) || addr.includes(search);
+    const matchStatus = !status || leaseStatus(l) === status;
     return matchSearch && matchStatus;
   });
-
   renderLeases(filtered);
 }
 
 function renderLeases(leases) {
   const el = document.getElementById('leases-list');
   if (!el) return;
-
   if (!leases.length) {
-    el.innerHTML = `
-      <div style="grid-column:1/-1;padding:48px;text-align:center;color:var(--color-text-secondary);">
-        Aucun bail trouvé. <button class="btn-ghost" onclick="openLeaseWizard()">Créer un bail</button>
-      </div>`;
+    el.innerHTML = '<div style="grid-column:1/-1;padding:48px;text-align:center;color:var(--color-text-secondary);">Aucun bail trouvé. <button class="btn-ghost" onclick="openLeaseWizard()">Créer un bail</button></div>';
     return;
   }
-
   el.innerHTML = leases.map(l => renderLeaseCard(l)).join('');
 }
 
 function renderLeaseCard(l) {
-  const tenant = [l.prenom_locataire, l.nom_locataire].filter(Boolean).join(' ') || 'Locataire';
-  const status = l.statut || 'active';
-  const charges = l.charges ? ` + ${formatCurrency(l.charges)} charges` : '';
-
+  const f = fd(l);
+  const status = leaseStatus(l);
   return `
     <div class="lease-card" onclick="openLeaseDetail('${l.id}')">
       <div class="lease-card-header">
         <div>
-          <div class="lease-tenant">${tenant}</div>
-          <div class="lease-address">${l.adresse || '—'}</div>
+          <div class="lease-tenant">${leaseTenantName(l)}</div>
+          <div class="lease-address">${leaseAddress(l)}</div>
         </div>
         ${leaseStatusBadge(status)}
       </div>
       <div class="lease-card-body">
         <div class="lease-detail">
           <span class="lease-detail-label">Loyer CC</span>
-          <span class="lease-detail-value">${formatCurrency(l.loyer)}${charges}</span>
+          <span class="lease-detail-value">${formatCurrency(leaseRent(l))}</span>
         </div>
-        <div class="lease-detail">
+        ${f.effectiveDate ? `<div class="lease-detail">
           <span class="lease-detail-label">Début</span>
-          <span class="lease-detail-value">${formatDate(l.date_debut)}</span>
-        </div>
-        ${l.date_fin ? `<div class="lease-detail">
-          <span class="lease-detail-label">Fin</span>
-          <span class="lease-detail-value">${formatDate(l.date_fin)}</span>
+          <span class="lease-detail-value">${formatDate(f.effectiveDate)}</span>
+        </div>` : ''}
+        ${f.surface ? `<div class="lease-detail">
+          <span class="lease-detail-label">Surface</span>
+          <span class="lease-detail-value">${f.surface}</span>
         </div>` : ''}
       </div>
       <div class="lease-card-footer">
-        <span>${l.type_bail || 'Bail nu'}</span>
-        <span>ID: ${l.id.substring(0, 8)}</span>
+        <span>${f.leaseType || 'Bail nu'}</span>
+        <span>ID: ${l.id.substring(0,8)}</span>
       </div>
-    </div>
-  `;
-}
-
-function updateBadgeLease(count) {
-  const el = document.getElementById('badge-leases');
-  if (!el) return;
-  if (count > 0) {
-    el.textContent = count;
-    el.classList.remove('hidden');
-  } else {
-    el.classList.add('hidden');
-  }
+    </div>`;
 }
 
 function openLeaseDetail(id) {
-  // Future: open detail panel or page
   showToast('Détail du bail — bientôt disponible.', '', 2000);
 }
 
-
-/* v3 */
 // ============================================================
-// BAILO GESTION v2 — Properties (Biens)
-// Lecture depuis la table leases (champ adresse + type_bail)
-// En v2 on extraira les biens dans leur propre table plus tard
+// BIENS
 // ============================================================
-
 async function loadProperties() {
   const el = document.getElementById('properties-list');
   if (!el) return;
   el.innerHTML = '<div class="list-loading">Chargement…</div>';
-
-  // Pour l'instant on déduplique les adresses depuis les baux
-  const { data, error } = await db
-    .from('leases')
-    .select('id, adresse, type_bail, surface, pieces, loyer, charges, statut, nom_locataire, prenom_locataire')
-    .order('adresse');
-
+  const { data, error } = await db.from('leases').select('id, data').order('created_at', { ascending: false });
   if (error) { el.innerHTML = '<div class="list-loading">Erreur de chargement.</div>'; return; }
   if (!data?.length) {
-    el.innerHTML = `<div style="grid-column:1/-1;padding:48px;text-align:center;color:var(--color-text-secondary);">
-      Aucun bien enregistré. <button class="btn-ghost" onclick="openLeaseWizard()">Créer un premier bail</button>
-    </div>`;
+    el.innerHTML = '<div style="grid-column:1/-1;padding:48px;text-align:center;color:var(--color-text-secondary);">Aucun bien. <button class="btn-ghost" onclick="openLeaseWizard()">Créer un bail</button></div>';
     return;
   }
-
-  el.innerHTML = data.map(b => renderPropertyCard(b)).join('');
+  el.innerHTML = data.map(l => renderPropertyCard(l)).join('');
 }
 
-function renderPropertyCard(b) {
-  const tenant = [b.prenom_locataire, b.nom_locataire].filter(Boolean).join(' ') || null;
-  const loyer = (parseFloat(b.loyer)||0) + (parseFloat(b.charges)||0);
+function renderPropertyCard(l) {
+  const f = fd(l);
   return `
     <div class="property-card" onclick="navigate('leases')">
       <div class="property-card-header">
         <div>
-          <div class="property-address">${b.adresse || '—'}</div>
-          <div class="property-type">${b.type_bail || 'Bail nu'}${b.surface ? ' · ' + b.surface + ' m²' : ''}${b.pieces ? ' · ' + b.pieces + ' pièces' : ''}</div>
+          <div class="property-address">${f.propertyAddress || '—'}</div>
+          <div class="property-type">${f.leaseType || 'Bail nu'}${f.surface ? ' · ' + f.surface : ''}</div>
         </div>
-        ${leaseStatusBadge(b.statut || 'active')}
+        ${leaseStatusBadge(leaseStatus(l))}
       </div>
       <div class="property-card-body">
         <div class="property-stat">
           <span class="property-stat-label">Loyer CC</span>
-          <span class="property-stat-value">${formatCurrency(loyer)}</span>
+          <span class="property-stat-value">${formatCurrency(leaseRent(l))}</span>
         </div>
-        ${tenant ? `<div class="property-stat">
+        ${f.tenantName ? `<div class="property-stat">
           <span class="property-stat-label">Locataire</span>
-          <span class="property-stat-value">${tenant}</span>
+          <span class="property-stat-value">${f.tenantName}</span>
         </div>` : ''}
       </div>
-    </div>
-  `;
+    </div>`;
 }
 
-function openPropertyForm() {
-  // Pour l'instant on redirige vers la création de bail
-  openLeaseWizard();
-}
+function openPropertyForm() { openLeaseWizard(); }
 
-
-/* v3 */
 // ============================================================
-// BAILO GESTION v2 — Tenants (Locataires)
+// LOCATAIRES
 // ============================================================
-
 async function loadTenants() {
   const el = document.getElementById('tenants-list');
   if (!el) return;
   el.innerHTML = '<div class="list-loading">Chargement…</div>';
-
-  const { data, error } = await db
-    .from('leases')
-    .select('id, nom_locataire, prenom_locataire, email_locataire, tel_locataire, adresse, statut, date_debut')
-    .order('nom_locataire');
-
-  if (error) { el.innerHTML = '<div class="list-loading">Erreur de chargement.</div>'; return; }
-  if (!data?.length) { el.innerHTML = emptyState('Aucun locataire pour le moment.'); return; }
-
+  const { data, error } = await db.from('leases').select('id, data').order('created_at', { ascending: false });
+  if (error) { el.innerHTML = '<div class="list-loading">Erreur.</div>'; return; }
+  if (!data?.length) { el.innerHTML = emptyState('Aucun locataire.'); return; }
   el.innerHTML = `
     <div class="tenants-table">
       <div class="tenant-row-header">
-        <span>Locataire</span>
-        <span>Contact</span>
-        <span>Bien</span>
-        <span>Statut</span>
+        <span>Locataire</span><span>Contact</span><span>Bien</span><span>Statut</span>
       </div>
-      ${data.map(t => renderTenantRow(t)).join('')}
-    </div>
-  `;
+      ${data.map(l => {
+        const f = fd(l);
+        return `<div class="tenant-row" onclick="navigate('leases')">
+          <div>
+            <div class="tenant-name">${f.tenantName || '—'}</div>
+            ${f.tenantPhone ? `<div style="font-size:11px;color:var(--color-text-tertiary)">${f.tenantPhone}</div>` : ''}
+          </div>
+          <div class="tenant-email">${f.tenantEmail || '—'}</div>
+          <div class="tenant-lease">${f.propertyAddress || '—'}</div>
+          <div>${leaseStatusBadge(leaseStatus(l))}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
 }
 
-function renderTenantRow(t) {
-  const name = [t.prenom_locataire, t.nom_locataire].filter(Boolean).join(' ') || '—';
-  return `
-    <div class="tenant-row" onclick="navigate('leases')">
-      <div>
-        <div class="tenant-name">${name}</div>
-        ${t.tel_locataire ? `<div style="font-size:11px;color:var(--color-text-tertiary)">${t.tel_locataire}</div>` : ''}
-      </div>
-      <div class="tenant-email">${t.email_locataire || '—'}</div>
-      <div class="tenant-lease">${t.adresse || '—'}</div>
-      <div>${leaseStatusBadge(t.statut || 'active')}</div>
-    </div>
-  `;
-}
-
-
-/* v3 */
 // ============================================================
 // BAILO GESTION v2 — Lease Wizard
 // ============================================================
