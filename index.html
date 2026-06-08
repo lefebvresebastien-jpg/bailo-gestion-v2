@@ -71,6 +71,208 @@
 .receipt-stat-val { font-size: 22px; font-weight: 700; }
 .receipt-stat-label { font-size: 11px; color: var(--color-text-secondary); }
 
+
+/* ============================================================
+   MESSAGERIE
+   ============================================================ */
+.messages-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 0;
+  height: calc(100vh - 120px);
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.messages-sidebar {
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.messages-search-bar {
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--color-border-light);
+}
+.messages-search-bar input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  outline: none;
+  font-size: 13px;
+}
+.messages-search-bar input:focus { border-color: var(--color-primary); }
+
+.messages-kind-filters {
+  display: flex;
+  gap: 4px;
+  padding: 8px var(--space-md);
+  border-bottom: 1px solid var(--color-border-light);
+  flex-wrap: wrap;
+}
+.kind-filter {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 99px;
+  color: var(--color-text-secondary);
+  border: 1.5px solid var(--color-border);
+  background: transparent;
+  transition: all 0.15s;
+  cursor: pointer;
+}
+.kind-filter:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.kind-filter.active { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+
+.messages-conv-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.conv-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px var(--space-md);
+  border-bottom: 1px solid var(--color-border-light);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.conv-item:hover { background: var(--color-bg); }
+.conv-item.active { background: var(--color-primary-light); }
+
+.conv-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+  background: var(--color-bg);
+}
+.conv-icon.kind-Renseignement { background: var(--color-primary-light); }
+.conv-icon.kind-Incident { background: var(--color-warning-light); }
+.conv-icon.kind-Document { background: var(--color-success-light); }
+.conv-icon.kind-Quittance { background: var(--color-purple-light); }
+
+.conv-body { flex: 1; min-width: 0; }
+.conv-tenant { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-subject { font-size: 12px; color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.conv-meta { text-align: right; flex-shrink: 0; }
+.conv-date { font-size: 11px; color: var(--color-text-tertiary); }
+.conv-kind-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 99px;
+  display: inline-block;
+  margin-top: 3px;
+}
+.conv-kind-badge.kind-Incident { background: var(--color-warning-light); color: var(--color-warning); }
+.conv-kind-badge.kind-Renseignement { background: var(--color-primary-light); color: var(--color-primary); }
+.conv-kind-badge.kind-Document { background: var(--color-success-light); color: var(--color-success); }
+.conv-kind-badge.kind-Quittance { background: var(--color-purple-light); color: var(--color-purple); }
+
+/* Détail message */
+.messages-detail {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.messages-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-tertiary);
+  gap: var(--space-md);
+}
+.messages-empty-state span { font-size: 48px; }
+.messages-empty-state p { font-size: 14px; }
+
+.msg-detail-header {
+  padding: var(--space-lg);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+.msg-detail-title { font-size: 16px; font-weight: 700; }
+.msg-detail-sub { font-size: 12px; color: var(--color-text-secondary); margin-top: 3px; }
+
+.msg-detail-body {
+  flex: 1;
+  padding: var(--space-lg);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.msg-bubble {
+  max-width: 80%;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.msg-bubble.bailleur {
+  background: var(--color-primary);
+  color: #fff;
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+}
+.msg-bubble.locataire {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+}
+.msg-bubble-meta {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-top: 4px;
+}
+
+.msg-detail-footer {
+  padding: var(--space-md) var(--space-lg);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  gap: var(--space-md);
+  align-items: flex-end;
+}
+.msg-detail-footer textarea {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  resize: none;
+  font-size: 13px;
+  outline: none;
+  min-height: 44px;
+  max-height: 120px;
+  transition: border-color 0.15s;
+}
+.msg-detail-footer textarea:focus { border-color: var(--color-primary); }
+
+@media (max-width: 768px) {
+  .messages-layout { grid-template-columns: 1fr; height: auto; }
+  .messages-detail { display: none; }
+  .messages-detail.open { display: flex; height: 70vh; }
+  .messages-sidebar { height: 50vh; }
+}
+
 </style>
 </head>
 <body>
@@ -353,7 +555,30 @@
         <div class="page-header">
           <div><h1>Messages</h1><p class="page-sub">Échanges avec vos locataires</p></div>
         </div>
-        <p class="coming-soon">Messagerie — bientôt disponible.</p>
+        <div class="messages-layout">
+          <!-- Liste des conversations -->
+          <div class="messages-sidebar">
+            <div class="messages-search-bar">
+              <input type="text" id="messages-search" placeholder="Rechercher…" oninput="filterMessages()" />
+            </div>
+            <div class="messages-kind-filters">
+              <button class="kind-filter active" data-kind="" onclick="setKindFilter('', this)">Tous</button>
+              <button class="kind-filter" data-kind="Renseignement" onclick="setKindFilter('Renseignement', this)">Renseignements</button>
+              <button class="kind-filter" data-kind="Incident" onclick="setKindFilter('Incident', this)">Incidents</button>
+              <button class="kind-filter" data-kind="Document" onclick="setKindFilter('Document', this)">Documents</button>
+            </div>
+            <div id="messages-list" class="messages-conv-list">
+              <div class="list-loading">Chargement…</div>
+            </div>
+          </div>
+          <!-- Détail conversation -->
+          <div class="messages-detail" id="messages-detail">
+            <div class="messages-empty-state">
+              <span>💬</span>
+              <p>Sélectionnez un message</p>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- DOCUMENTS -->
@@ -534,6 +759,7 @@ function navigate(page, linkEl) {
   if (page === 'properties') loadProperties();
   if (page === 'tenants')    loadTenants();
   if (page === 'receipts')   loadReceipts();
+  if (page === 'messages')   loadMessages();
 }
 
 function toggleSidebar() {
@@ -1221,6 +1447,185 @@ async function createLease() {
 
 
 /* v3 */
+
+
+// ============================================================
+// MESSAGERIE
+// ============================================================
+let _allMessages = [];
+let _currentKindFilter = '';
+let _currentMessage = null;
+
+const KIND_ICONS = {
+  'Quittance': '🧾',
+  'Document': '📄',
+  'Incident': '⚠️',
+  'Renseignement': '💬',
+  'Information': 'ℹ️'
+};
+
+async function loadMessages() {
+  const el = document.getElementById('messages-list');
+  if (!el) return;
+  el.innerHTML = '<div class="list-loading">Chargement…</div>';
+
+  // Charger tous les messages sauf Quittances
+  const { data, error } = await db
+    .from('messages')
+    .select('id, lease_id, sender, kind, subject, body, urgency, status, incident_status, created_at, replies')
+    .neq('kind', 'Quittance')
+    .order('created_at', { ascending: false });
+
+  if (error) { el.innerHTML = '<div class="list-loading">Erreur : ' + error.message + '</div>'; return; }
+  _allMessages = data || [];
+
+  // Charger les baux si pas encore fait
+  if (!_allLeases.length) {
+    const { data: leases } = await db.from('leases').select('id, data');
+    _allLeases = leases || [];
+  }
+
+  renderMessagesList(_allMessages);
+
+  // Badge sur nav
+  const unread = _allMessages.filter(m => m.status === 'en-attente' && m.sender === 'Locataire').length;
+  const badge = document.getElementById('badge-messages');
+  if (badge) {
+    if (unread > 0) { badge.textContent = unread; badge.classList.remove('hidden'); }
+    else badge.classList.add('hidden');
+  }
+}
+
+function setKindFilter(kind, btn) {
+  _currentKindFilter = kind;
+  document.querySelectorAll('.kind-filter').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  filterMessages();
+}
+
+function filterMessages() {
+  const search = (document.getElementById('messages-search')?.value || '').toLowerCase();
+  const filtered = _allMessages.filter(m => {
+    const lease = _allLeases.find(l => l.id === m.lease_id);
+    const tenant = lease ? leaseTenantName(lease).toLowerCase() : '';
+    const subject = (m.subject || '').toLowerCase();
+    const matchSearch = !search || tenant.includes(search) || subject.includes(search);
+    const matchKind = !_currentKindFilter || m.kind === _currentKindFilter;
+    return matchSearch && matchKind;
+  });
+  renderMessagesList(filtered);
+}
+
+function renderMessagesList(messages) {
+  const el = document.getElementById('messages-list');
+  if (!el) return;
+  if (!messages.length) { el.innerHTML = emptyState('Aucun message.'); return; }
+
+  el.innerHTML = messages.map(m => {
+    const lease = _allLeases.find(l => l.id === m.lease_id);
+    const tenant = lease ? leaseTenantName(lease) : 'Locataire inconnu';
+    const icon = KIND_ICONS[m.kind] || '📌';
+    const isUnread = m.status === 'en-attente' && m.sender === 'Locataire';
+
+    return `<div class="conv-item${_currentMessage?.id === m.id ? ' active' : ''}" onclick="openMessage('${m.id}')">
+      <div class="conv-icon kind-${m.kind}">${icon}</div>
+      <div class="conv-body">
+        <div class="conv-tenant">${tenant}${isUnread ? ' <span style="width:7px;height:7px;background:var(--color-danger);border-radius:50%;display:inline-block;margin-left:4px"></span>' : ''}</div>
+        <div class="conv-subject">${m.subject || m.kind}</div>
+      </div>
+      <div class="conv-meta">
+        <div class="conv-date">${formatRelative(m.created_at)}</div>
+        <span class="conv-kind-badge kind-${m.kind}">${m.kind}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openMessage(id) {
+  _currentMessage = _allMessages.find(m => m.id === id);
+  if (!_currentMessage) return;
+
+  // Marquer actif dans la liste
+  document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
+  document.querySelector(`.conv-item[onclick="openMessage('${id}')"]`)?.classList.add('active');
+
+  const lease = _allLeases.find(l => l.id === _currentMessage.lease_id);
+  const tenant = lease ? leaseTenantName(lease) : 'Locataire inconnu';
+  const address = lease ? leaseAddress(lease) : '';
+  const icon = KIND_ICONS[_currentMessage.kind] || '📌';
+
+  // Construire les messages de la conversation (message + replies)
+  const replies = _currentMessage.replies || [];
+  const allBubbles = [
+    { sender: _currentMessage.sender, body: _currentMessage.body, date: _currentMessage.created_at },
+    ...replies.map(r => ({ sender: r.sender, body: r.body, date: r.created_at || _currentMessage.created_at }))
+  ].filter(b => b.body);
+
+  const detail = document.getElementById('messages-detail');
+  detail.innerHTML = `
+    <div class="msg-detail-header">
+      <div>
+        <div class="msg-detail-title">${icon} ${_currentMessage.subject || _currentMessage.kind}</div>
+        <div class="msg-detail-sub">${tenant} · ${address}</div>
+        <div style="margin-top:6px">
+          <span class="conv-kind-badge kind-${_currentMessage.kind}">${_currentMessage.kind}</span>
+          ${_currentMessage.urgency && _currentMessage.urgency !== 'Normale' ? 
+            `<span class="badge badge-pending" style="margin-left:4px">${_currentMessage.urgency}</span>` : ''}
+        </div>
+      </div>
+      <span style="font-size:12px;color:var(--color-text-tertiary)">${formatDate(_currentMessage.created_at)}</span>
+    </div>
+    <div class="msg-detail-body">
+      ${allBubbles.length ? allBubbles.map(b => `
+        <div>
+          <div class="msg-bubble ${b.sender === 'Bailleur' ? 'bailleur' : 'locataire'}">
+            ${b.body}
+            <div class="msg-bubble-meta">${b.sender} · ${formatRelative(b.date)}</div>
+          </div>
+        </div>`).join('') : '<div class="list-empty">Aucun contenu.</div>'}
+    </div>
+    <div class="msg-detail-footer">
+      <textarea id="msg-reply-input" placeholder="Votre réponse…" rows="2"></textarea>
+      <button class="btn-primary" onclick="sendReply('${id}')">Envoyer</button>
+    </div>
+  `;
+}
+
+async function sendReply(messageId) {
+  const input = document.getElementById('msg-reply-input');
+  const body = input?.value.trim();
+  if (!body) return;
+
+  const msg = _allMessages.find(m => m.id === messageId);
+  if (!msg) return;
+
+  const btn = document.querySelector('.msg-detail-footer .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'Envoi…'; }
+
+  const replies = [...(msg.replies || []), {
+    sender: 'Bailleur',
+    body: body,
+    created_at: new Date().toISOString()
+  }];
+
+  const { error } = await db
+    .from('messages')
+    .update({ replies: replies, status: 'traité' })
+    .eq('id', messageId);
+
+  if (error) {
+    showToast('Erreur : ' + error.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = 'Envoyer'; }
+    return;
+  }
+
+  // Mettre à jour localement
+  msg.replies = replies;
+  msg.status = 'traité';
+  showToast('Réponse envoyée !', 'success');
+  openMessage(messageId);
+  renderMessagesList(_allMessages.filter(m => !_currentKindFilter || m.kind === _currentKindFilter));
+}
 
 // ============================================================
 // QUITTANCES
