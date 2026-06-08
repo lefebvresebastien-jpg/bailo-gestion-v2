@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bailo Gestion v2</title>
+  <link rel="stylesheet" href="assets/css/main.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <!-- AUTH SCREEN -->
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <span class="logo-icon">🏠</span>
+        <span class="logo-text">Bailo <strong>Gestion</strong></span>
+      </div>
+      <h2>Connexion</h2>
+      <p class="auth-sub">Accédez à votre espace bailleur</p>
+      <input type="email" id="auth-email" placeholder="Email" autocomplete="email" />
+      <input type="password" id="auth-password" placeholder="Mot de passe" autocomplete="current-password" />
+      <button id="auth-btn" class="btn-primary" onclick="handleAuth()">Se connecter</button>
+      <div id="auth-error" class="auth-error hidden"></div>
+      <p class="auth-footer">Pas encore de compte ? <a href="#">Essai gratuit</a></p>
+    </div>
+  </div>
+
+  <!-- APP SHELL -->
+  <div id="app" class="app hidden">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <span class="logo-icon">🏠</span>
+        <span class="logo-text">Bailo <strong>Gestion</strong></span>
+        <button class="sidebar-close" onclick="toggleSidebar()" aria-label="Fermer">✕</button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="#" class="nav-item active" data-page="dashboard" onclick="navigate('dashboard', this)">
+          <span class="nav-icon">⊞</span>
+          <span class="nav-label">Tableau de bord</span>
+        </a>
+        <a href="#" class="nav-item" data-page="leases" onclick="navigate('leases', this)">
+          <span class="nav-icon">📄</span>
+          <span class="nav-label">Baux</span>
+          <span class="nav-badge" id="badge-leases"></span>
+        </a>
+        <a href="#" class="nav-item" data-page="receipts" onclick="navigate('receipts', this)">
+          <span class="nav-icon">🧾</span>
+          <span class="nav-label">Quittances</span>
+        </a>
+        <a href="#" class="nav-item" data-page="messages" onclick="navigate('messages', this)">
+          <span class="nav-icon">💬</span>
+          <span class="nav-label">Messagerie</span>
+          <span class="nav-badge hidden" id="badge-messages">!</span>
+        </a>
+        <a href="#" class="nav-item" data-page="tenant" onclick="navigate('tenant', this)">
+          <span class="nav-icon">👤</span>
+          <span class="nav-label">Espace locataire</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <div class="user-avatar" id="user-avatar">?</div>
+          <div class="user-details">
+            <span class="user-name" id="user-name">—</span>
+            <span class="user-email" id="user-email">—</span>
+          </div>
+        </div>
+        <button class="btn-logout" onclick="handleLogout()" title="Se déconnecter">⏻</button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main" id="main-content">
+
+      <!-- TOP BAR (mobile) -->
+      <div class="topbar">
+        <button class="menu-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button>
+        <span class="topbar-title" id="topbar-title">Tableau de bord</span>
+        <div class="topbar-actions" id="topbar-actions"></div>
+      </div>
+
+      <!-- PAGE: DASHBOARD -->
+      <section id="page-dashboard" class="page active">
+        <div class="page-header">
+          <h1>Tableau de bord</h1>
+          <p class="page-sub" id="dashboard-date"></p>
+        </div>
+        <div class="kpi-grid" id="kpi-grid">
+          <div class="kpi-card" id="kpi-baux">
+            <div class="kpi-icon blue">📄</div>
+            <div class="kpi-body">
+              <span class="kpi-value" id="kpi-baux-val">—</span>
+              <span class="kpi-label">Baux actifs</span>
+            </div>
+          </div>
+          <div class="kpi-card" id="kpi-loyers">
+            <div class="kpi-icon green">💶</div>
+            <div class="kpi-body">
+              <span class="kpi-value" id="kpi-loyers-val">—</span>
+              <span class="kpi-label">Loyers / mois</span>
+            </div>
+          </div>
+          <div class="kpi-card" id="kpi-retard">
+            <div class="kpi-icon orange">⚠️</div>
+            <div class="kpi-body">
+              <span class="kpi-value" id="kpi-retard-val">—</span>
+              <span class="kpi-label">Paiements en attente</span>
+            </div>
+          </div>
+          <div class="kpi-card" id="kpi-quittances">
+            <div class="kpi-icon purple">🧾</div>
+            <div class="kpi-body">
+              <span class="kpi-value" id="kpi-quittances-val">—</span>
+              <span class="kpi-label">Quittances ce mois</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-sections">
+          <div class="section-card">
+            <div class="section-title">Baux récents</div>
+            <div id="recent-leases-list" class="item-list">
+              <div class="list-loading">Chargement…</div>
+            </div>
+          </div>
+          <div class="section-card">
+            <div class="section-title">Activité récente</div>
+            <div id="activity-list" class="item-list">
+              <div class="list-loading">Chargement…</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PAGE: LEASES -->
+      <section id="page-leases" class="page hidden">
+        <div class="page-header">
+          <h1>Baux</h1>
+          <button class="btn-primary" onclick="openLeaseWizard()">+ Nouveau bail</button>
+        </div>
+        <div class="filter-bar">
+          <input type="text" id="leases-search" placeholder="Rechercher un locataire, adresse…" oninput="filterLeases()" />
+          <select id="leases-status-filter" onchange="filterLeases()">
+            <option value="">Tous les statuts</option>
+            <option value="active">Actif</option>
+            <option value="ended">Terminé</option>
+            <option value="draft">Brouillon</option>
+          </select>
+        </div>
+        <div id="leases-list" class="leases-grid">
+          <div class="list-loading">Chargement…</div>
+        </div>
+      </section>
+
+      <!-- PAGE: RECEIPTS -->
+      <section id="page-receipts" class="page hidden">
+        <div class="page-header">
+          <h1>Quittances</h1>
+        </div>
+        <p class="coming-soon">Module en cours de construction — disponible prochainement.</p>
+      </section>
+
+      <!-- PAGE: MESSAGES -->
+      <section id="page-messages" class="page hidden">
+        <div class="page-header">
+          <h1>Messagerie</h1>
+        </div>
+        <p class="coming-soon">Module en cours de construction — disponible prochainement.</p>
+      </section>
+
+      <!-- PAGE: TENANT -->
+      <section id="page-tenant" class="page hidden">
+        <div class="page-header">
+          <h1>Espace locataire</h1>
+        </div>
+        <p class="coming-soon">Module en cours de construction — disponible prochainement.</p>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- LEASE WIZARD MODAL -->
+  <div id="lease-wizard-overlay" class="modal-overlay hidden" onclick="closeLeaseWizard(event)">
+    <div class="modal-card wizard-card" onclick="event.stopPropagation()">
+      <div class="wizard-header">
+        <h2>Nouveau bail</h2>
+        <button class="modal-close" onclick="closeLeaseWizard()">✕</button>
+      </div>
+      <div class="wizard-steps" id="wizard-steps">
+        <span class="step active" data-step="1">1 Bien</span>
+        <span class="step-sep">›</span>
+        <span class="step" data-step="2">2 Locataire</span>
+        <span class="step-sep">›</span>
+        <span class="step" data-step="3">3 Conditions</span>
+        <span class="step-sep">›</span>
+        <span class="step" data-step="4">4 Confirmation</span>
+      </div>
+      <div class="wizard-body" id="wizard-body">
+        <!-- Injected by JS -->
+      </div>
+      <div class="wizard-footer">
+        <button class="btn-secondary" id="wizard-back" onclick="wizardBack()" style="display:none">← Retour</button>
+        <button class="btn-primary" id="wizard-next" onclick="wizardNext()">Suivant →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/auth.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script src="assets/js/dashboard.js"></script>
+  <script src="assets/js/leases.js"></script>
+  <script src="assets/js/wizard.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
