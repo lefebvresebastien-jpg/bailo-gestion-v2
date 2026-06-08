@@ -36,41 +36,69 @@
       <div class="sidebar-header">
         <span class="logo-icon">🏠</span>
         <span class="logo-text">Bailo <strong>Gestion</strong></span>
-        <button class="sidebar-close" onclick="toggleSidebar()" aria-label="Fermer">✕</button>
+        <button class="sidebar-close" onclick="toggleSidebar()">✕</button>
       </div>
 
       <nav class="sidebar-nav">
-        <a href="#" class="nav-item active" data-page="dashboard" onclick="navigate('dashboard', this)">
+
+        <!-- Dashboard seul, sans groupe -->
+        <a href="#" class="nav-item active" data-page="dashboard" onclick="navigate('dashboard',this)">
           <span class="nav-icon">⊞</span>
           <span class="nav-label">Tableau de bord</span>
         </a>
-        <a href="#" class="nav-item" data-page="leases" onclick="navigate('leases', this)">
+
+        <div class="nav-group-label">Gestion</div>
+
+        <a href="#" class="nav-item" data-page="properties" onclick="navigate('properties',this)">
+          <span class="nav-icon">🏠</span>
+          <span class="nav-label">Biens</span>
+        </a>
+        <a href="#" class="nav-item" data-page="leases" onclick="navigate('leases',this)">
           <span class="nav-icon">📄</span>
           <span class="nav-label">Baux</span>
-          <span class="nav-badge" id="badge-leases"></span>
         </a>
-        <a href="#" class="nav-item" data-page="receipts" onclick="navigate('receipts', this)">
+        <a href="#" class="nav-item" data-page="tenants" onclick="navigate('tenants',this)">
+          <span class="nav-icon">👤</span>
+          <span class="nav-label">Locataires</span>
+        </a>
+
+        <div class="nav-group-label">Finances</div>
+
+        <a href="#" class="nav-item" data-page="receipts" onclick="navigate('receipts',this)">
           <span class="nav-icon">🧾</span>
           <span class="nav-label">Quittances</span>
         </a>
-        <a href="#" class="nav-item" data-page="messages" onclick="navigate('messages', this)">
+        <a href="#" class="nav-item" data-page="payments" onclick="navigate('payments',this)">
+          <span class="nav-icon">💶</span>
+          <span class="nav-label">Paiements</span>
+        </a>
+
+        <div class="nav-group-label">Communication</div>
+
+        <a href="#" class="nav-item" data-page="messages" onclick="navigate('messages',this)">
           <span class="nav-icon">💬</span>
-          <span class="nav-label">Messagerie</span>
+          <span class="nav-label">Messages</span>
           <span class="nav-badge hidden" id="badge-messages">!</span>
         </a>
-        <a href="#" class="nav-item" data-page="tenant" onclick="navigate('tenant', this)">
-          <span class="nav-icon">👤</span>
-          <span class="nav-label">Espace locataire</span>
+        <a href="#" class="nav-item" data-page="documents" onclick="navigate('documents',this)">
+          <span class="nav-icon">📋</span>
+          <span class="nav-label">Documents</span>
         </a>
+
+        <div class="nav-group-label">Mon compte</div>
+
+        <a href="#" class="nav-item" data-page="settings" onclick="navigate('settings',this)">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-label">Paramètres</span>
+        </a>
+
       </nav>
 
       <div class="sidebar-footer">
-        <div class="user-info">
-          <div class="user-avatar" id="user-avatar">?</div>
-          <div class="user-details">
-            <span class="user-name" id="user-name">—</span>
-            <span class="user-email" id="user-email">—</span>
-          </div>
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-details">
+          <span class="user-name" id="user-name">—</span>
+          <span class="user-email" id="user-email">—</span>
         </div>
         <button class="btn-logout" onclick="handleLogout()" title="Se déconnecter">⏻</button>
       </div>
@@ -79,108 +107,138 @@
     <!-- MAIN CONTENT -->
     <main class="main" id="main-content">
 
-      <!-- TOP BAR (mobile) -->
+      <!-- TOP BAR mobile -->
       <div class="topbar">
-        <button class="menu-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button>
+        <button class="menu-btn" onclick="toggleSidebar()">☰</button>
         <span class="topbar-title" id="topbar-title">Tableau de bord</span>
         <div class="topbar-actions" id="topbar-actions"></div>
       </div>
 
-      <!-- PAGE: DASHBOARD -->
+      <!-- DASHBOARD -->
       <section id="page-dashboard" class="page active">
         <div class="page-header">
-          <h1>Tableau de bord</h1>
-          <p class="page-sub" id="dashboard-date"></p>
+          <div>
+            <h1>Tableau de bord</h1>
+            <p class="page-sub" id="dashboard-date"></p>
+          </div>
         </div>
-        <div class="kpi-grid" id="kpi-grid">
-          <div class="kpi-card" id="kpi-baux">
-            <div class="kpi-icon blue">📄</div>
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-icon blue">🏠</div>
+            <div class="kpi-body">
+              <span class="kpi-value" id="kpi-biens-val">—</span>
+              <span class="kpi-label">Biens</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon green">📄</div>
             <div class="kpi-body">
               <span class="kpi-value" id="kpi-baux-val">—</span>
               <span class="kpi-label">Baux actifs</span>
             </div>
           </div>
-          <div class="kpi-card" id="kpi-loyers">
-            <div class="kpi-icon green">💶</div>
+          <div class="kpi-card">
+            <div class="kpi-icon purple">💶</div>
             <div class="kpi-body">
               <span class="kpi-value" id="kpi-loyers-val">—</span>
               <span class="kpi-label">Loyers / mois</span>
             </div>
           </div>
-          <div class="kpi-card" id="kpi-retard">
-            <div class="kpi-icon orange">⚠️</div>
-            <div class="kpi-body">
-              <span class="kpi-value" id="kpi-retard-val">—</span>
-              <span class="kpi-label">Paiements en attente</span>
-            </div>
-          </div>
-          <div class="kpi-card" id="kpi-quittances">
-            <div class="kpi-icon purple">🧾</div>
+          <div class="kpi-card">
+            <div class="kpi-icon orange">🧾</div>
             <div class="kpi-body">
               <span class="kpi-value" id="kpi-quittances-val">—</span>
               <span class="kpi-label">Quittances ce mois</span>
             </div>
           </div>
         </div>
-
         <div class="dashboard-sections">
           <div class="section-card">
             <div class="section-title">Baux récents</div>
-            <div id="recent-leases-list" class="item-list">
-              <div class="list-loading">Chargement…</div>
-            </div>
+            <div id="recent-leases-list" class="item-list"><div class="list-loading">Chargement…</div></div>
           </div>
           <div class="section-card">
             <div class="section-title">Activité récente</div>
-            <div id="activity-list" class="item-list">
-              <div class="list-loading">Chargement…</div>
-            </div>
+            <div id="activity-list" class="item-list"><div class="list-loading">Chargement…</div></div>
           </div>
         </div>
       </section>
 
-      <!-- PAGE: LEASES -->
+      <!-- BIENS -->
+      <section id="page-properties" class="page hidden">
+        <div class="page-header">
+          <div><h1>Biens</h1><p class="page-sub">Vos logements en gestion</p></div>
+          <button class="btn-primary" onclick="openPropertyForm()">+ Ajouter un bien</button>
+        </div>
+        <div id="properties-list" class="properties-grid">
+          <div class="list-loading">Chargement…</div>
+        </div>
+      </section>
+
+      <!-- BAUX -->
       <section id="page-leases" class="page hidden">
         <div class="page-header">
-          <h1>Baux</h1>
+          <div><h1>Baux</h1><p class="page-sub">Contrats de location en cours</p></div>
           <button class="btn-primary" onclick="openLeaseWizard()">+ Nouveau bail</button>
         </div>
         <div class="filter-bar">
-          <input type="text" id="leases-search" placeholder="Rechercher un locataire, adresse…" oninput="filterLeases()" />
+          <input type="text" id="leases-search" placeholder="Locataire, adresse…" oninput="filterLeases()" />
           <select id="leases-status-filter" onchange="filterLeases()">
-            <option value="">Tous les statuts</option>
+            <option value="">Tous</option>
             <option value="active">Actif</option>
             <option value="ended">Terminé</option>
             <option value="draft">Brouillon</option>
           </select>
         </div>
-        <div id="leases-list" class="leases-grid">
-          <div class="list-loading">Chargement…</div>
-        </div>
+        <div id="leases-list" class="leases-grid"><div class="list-loading">Chargement…</div></div>
       </section>
 
-      <!-- PAGE: RECEIPTS -->
+      <!-- LOCATAIRES -->
+      <section id="page-tenants" class="page hidden">
+        <div class="page-header">
+          <div><h1>Locataires</h1><p class="page-sub">Fiches et coordonnées</p></div>
+        </div>
+        <div id="tenants-list" class="item-list"><div class="list-loading">Chargement…</div></div>
+      </section>
+
+      <!-- QUITTANCES -->
       <section id="page-receipts" class="page hidden">
         <div class="page-header">
-          <h1>Quittances</h1>
+          <div><h1>Quittances</h1><p class="page-sub">Historique des quittances émises</p></div>
         </div>
-        <p class="coming-soon">Module en cours de construction — disponible prochainement.</p>
+        <p class="coming-soon">Module quittances — bientôt disponible.</p>
       </section>
 
-      <!-- PAGE: MESSAGES -->
+      <!-- PAIEMENTS -->
+      <section id="page-payments" class="page hidden">
+        <div class="page-header">
+          <div><h1>Paiements</h1><p class="page-sub">Suivi des encaissements</p></div>
+        </div>
+        <p class="coming-soon">Module paiements — bientôt disponible.</p>
+      </section>
+
+      <!-- MESSAGES -->
       <section id="page-messages" class="page hidden">
         <div class="page-header">
-          <h1>Messagerie</h1>
+          <div><h1>Messages</h1><p class="page-sub">Échanges avec vos locataires</p></div>
         </div>
-        <p class="coming-soon">Module en cours de construction — disponible prochainement.</p>
+        <p class="coming-soon">Messagerie — bientôt disponible.</p>
       </section>
 
-      <!-- PAGE: TENANT -->
-      <section id="page-tenant" class="page hidden">
+      <!-- DOCUMENTS -->
+      <section id="page-documents" class="page hidden">
         <div class="page-header">
-          <h1>Espace locataire</h1>
+          <div><h1>Documents</h1><p class="page-sub">Contrats, EDL, annexes</p></div>
         </div>
-        <p class="coming-soon">Module en cours de construction — disponible prochainement.</p>
+        <p class="coming-soon">Gestionnaire de documents — bientôt disponible.</p>
+      </section>
+
+      <!-- PARAMÈTRES -->
+      <section id="page-settings" class="page hidden">
+        <div class="page-header">
+          <div><h1>Paramètres</h1><p class="page-sub">Mon compte et préférences</p></div>
+        </div>
+        <p class="coming-soon">Paramètres — bientôt disponible.</p>
       </section>
 
     </main>
@@ -202,9 +260,7 @@
         <span class="step-sep">›</span>
         <span class="step" data-step="4">4 Confirmation</span>
       </div>
-      <div class="wizard-body" id="wizard-body">
-        <!-- Injected by JS -->
-      </div>
+      <div class="wizard-body" id="wizard-body"></div>
       <div class="wizard-footer">
         <button class="btn-secondary" id="wizard-back" onclick="wizardBack()" style="display:none">← Retour</button>
         <button class="btn-primary" id="wizard-next" onclick="wizardNext()">Suivant →</button>
@@ -220,6 +276,8 @@
   <script src="assets/js/ui.js"></script>
   <script src="assets/js/dashboard.js"></script>
   <script src="assets/js/leases.js"></script>
+  <script src="assets/js/properties.js"></script>
+  <script src="assets/js/tenants.js"></script>
   <script src="assets/js/wizard.js"></script>
   <script src="assets/js/app.js"></script>
 </body>
