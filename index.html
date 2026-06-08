@@ -269,16 +269,805 @@
 
   <!-- TOAST -->
   <div id="toast" class="toast hidden"></div>
-
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-  <script src="assets/js/supabase-init.js"></script>
-  <script src="assets/js/auth.js"></script>
-  <script src="assets/js/ui.js"></script>
-  <script src="assets/js/dashboard.js"></script>
-  <script src="assets/js/leases.js"></script>
-  <script src="assets/js/properties.js"></script>
-  <script src="assets/js/tenants.js"></script>
-  <script src="assets/js/wizard.js"></script>
-  <script src="assets/js/app.js"></script>
+  <script>
+// ============================================================
+// BAILO GESTION v2 — Config & Supabase Init
+// ============================================================
+
+const SUPABASE_URL = 'https://nltuysmnxsomlhgvbtwz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0';
+
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+
+/* v3 */
+// ============================================================
+// BAILO GESTION v2 — Auth
+// ============================================================
+
+async function handleAuth() {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const btn = document.getElementById('auth-btn');
+  const errEl = document.getElementById('auth-error');
+
+  if (!email || !password) {
+    showAuthError('Veuillez saisir votre email et mot de passe.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Connexion…';
+  errEl.classList.add('hidden');
+
+  const { data, error } = await db.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    showAuthError('Email ou mot de passe incorrect.');
+    btn.disabled = false;
+    btn.textContent = 'Se connecter';
+    return;
+  }
+
+  onAuthSuccess(data.user);
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+async function handleLogout() {
+  await db.auth.signOut();
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('auth-screen').classList.remove('hidden');
+  document.getElementById('auth-email').value = '';
+  document.getElementById('auth-password').value = '';
+}
+
+function onAuthSuccess(user) {
+  // Update UI with user info
+  const name = user.user_metadata?.full_name || user.email.split('@')[0];
+  const initials = name.charAt(0).toUpperCase();
+
+  document.getElementById('user-avatar').textContent = initials;
+  document.getElementById('user-name').textContent = name;
+  document.getElementById('user-email').textContent = user.email;
+
+  // Show app
+  document.getElementById('auth-screen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+
+  // Load initial data
+  initApp();
+}
+
+// Check existing session on load
+async function checkSession() {
+  const { data: { session } } = await db.auth.getSession();
+  if (session) {
+    onAuthSuccess(session.user);
+  }
+}
+
+// Enter key on auth inputs
+document.addEventListener('DOMContentLoaded', () => {
+  ['auth-email', 'auth-password'].forEach(id => {
+    document.getElementById(id)?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') handleAuth();
+    });
+  });
+});
+
+
+/* v3 */
+// ============================================================
+// BAILO GESTION v2 — UI Utilities
+// ============================================================
+
+const PAGE_TITLES = {
+  dashboard:  'Tableau de bord',
+  properties: 'Biens',
+  leases:     'Baux',
+  tenants:    'Locataires',
+  receipts:   'Quittances',
+  payments:   'Paiements',
+  messages:   'Messages',
+  documents:  'Documents',
+  settings:   'Paramètres'
+};
+
+function navigate(page, linkEl) {
+  document.querySelectorAll('.page').forEach(p => {
+    p.classList.remove('active');
+    p.classList.add('hidden');
+  });
+
+  const target = document.getElementById('page-' + page);
+  if (target) { target.classList.remove('hidden'); target.classList.add('active'); }
+
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  if (linkEl) linkEl.classList.add('active');
+
+  const title = PAGE_TITLES[page] || page;
+  const topbarTitle = document.getElementById('topbar-title');
+  if (topbarTitle) topbarTitle.textContent = title;
+
+  if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('open');
+
+  // Trigger page loaders
+  if (page === 'leases')     loadLeases();
+  if (page === 'properties') loadProperties();
+  if (page === 'tenants')    loadTenants();
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+// ---- Toast ----
+let _toastTimer = null;
+function showToast(msg, type = '', duration = 3000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.classList.remove('hidden');
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.add('hidden'), duration);
+}
+
+// ---- Formatters ----
+function formatCurrency(amount) {
+  if (amount == null || amount === '') return '—';
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(amount);
+}
+function formatDate(dateStr) {
+  if (!dateStr) return '—';
+  return new Intl.DateTimeFormat('fr-FR').format(new Date(dateStr));
+}
+function formatRelative(dateStr) {
+  if (!dateStr) return '';
+  const diff = Math.floor((new Date() - new Date(dateStr)) / 86400000);
+  if (diff === 0) return "Aujourd'hui";
+  if (diff === 1) return 'Hier';
+  if (diff < 7)  return `Il y a ${diff} j`;
+  return formatDate(dateStr);
+}
+
+// ---- Badges ----
+function leaseStatusBadge(status) {
+  const map = { active: ['badge-active','Actif'], ended: ['badge-ended','Terminé'], draft: ['badge-draft','Brouillon'] };
+  const [cls, label] = map[status] || ['badge-ended', status || '—'];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function emptyState(msg) {
+  return `<div class="list-empty">${msg}</div>`;
+}
+
+
+/* v3 */
+// ============================================================
+// BAILO GESTION v2 — Dashboard
+// ============================================================
+
+async function loadDashboard() {
+  const dateEl = document.getElementById('dashboard-date');
+  if (dateEl) {
+    dateEl.textContent = new Intl.DateTimeFormat('fr-FR', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+    }).format(new Date());
+  }
+  await Promise.all([loadKPIs(), loadRecentLeases(), loadRecentActivity()]);
+}
+
+async function loadKPIs() {
+  const { data: leases } = await supabase
+    .from('leases')
+    .select('id, loyer, charges, statut');
+
+  const all = leases || [];
+  const active = all.filter(l => l.statut === 'active' || !l.statut);
+  const totalLoyer = active.reduce((sum, l) => sum + (parseFloat(l.loyer)||0) + (parseFloat(l.charges)||0), 0);
+
+  const biensEl = document.getElementById('kpi-biens-val');
+  if (biensEl) biensEl.textContent = all.length;
+
+  const bauxEl = document.getElementById('kpi-baux-val');
+  if (bauxEl) bauxEl.textContent = active.length;
+
+  const loyersEl = document.getElementById('kpi-loyers-val');
+  if (loyersEl) loyersEl.textContent = formatCurrency(totalLoyer);
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const { count } = await supabase
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('kind', 'Quittance')
+    .gte('created_at', monthStart);
+
+  const qEl = document.getElementById('kpi-quittances-val');
+  if (qEl) qEl.textContent = count || 0;
+}
+
+async function loadRecentLeases() {
+  const el = document.getElementById('recent-leases-list');
+  if (!el) return;
+
+  const { data, error } = await supabase
+    .from('leases')
+    .select('id, nom_locataire, prenom_locataire, adresse, loyer, charges, statut')
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  if (error || !data?.length) { el.innerHTML = emptyState('Aucun bail pour le moment.'); return; }
+
+  el.innerHTML = data.map(l => {
+    const name = [l.prenom_locataire, l.nom_locataire].filter(Boolean).join(' ') || 'Locataire';
+    const loyer = (parseFloat(l.loyer)||0) + (parseFloat(l.charges)||0);
+    return `
+      <div class="list-item" onclick="navigate('leases')">
+        <div class="list-item-icon">📄</div>
+        <div class="list-item-body">
+          <div class="list-item-title">${name}</div>
+          <div class="list-item-sub">${l.adresse || '—'}</div>
+        </div>
+        <div class="list-item-right">
+          <div class="list-item-amount">${formatCurrency(loyer)}</div>
+          <div class="list-item-date">${leaseStatusBadge(l.statut)}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function loadRecentActivity() {
+  const el = document.getElementById('activity-list');
+  if (!el) return;
+
+  const { data, error } = await supabase
+    .from('messages')
+    .select('id, kind, created_at, lease_id')
+    .order('created_at', { ascending: false })
+    .limit(6);
+
+  if (error || !data?.length) { el.innerHTML = emptyState('Aucune activité récente.'); return; }
+
+  const icons = { 'Quittance':'🧾', 'Message':'💬', 'EDL':'📋', 'Document':'📄' };
+  const labels = { 'Quittance':'Quittance envoyée', 'Message':'Message', 'EDL':'État des lieux', 'Document':'Document' };
+
+  el.innerHTML = data.map(m => `
+    <div class="list-item">
+      <div class="list-item-icon">${icons[m.kind] || '📌'}</div>
+      <div class="list-item-body">
+        <div class="list-item-title">${labels[m.kind] || m.kind || 'Événement'}</div>
+        <div class="list-item-sub">Bail #${(m.lease_id||'').substring(0,8)}</div>
+      </div>
+      <div class="list-item-right">
+        <div class="list-item-date">${formatRelative(m.created_at)}</div>
+      </div>
+    </div>`).join('');
+}
+
+
+/* v3 */
+// ============================================================
+// BAILO GESTION v2 — Leases
+// ============================================================
+
+let _allLeases = [];
+
+async function loadLeases() {
+  const el = document.getElementById('leases-list');
+  if (!el) return;
+  el.innerHTML = '<div class="list-loading">Chargement des baux…</div>';
+
+  const { data, error } = await supabase
+    .from('leases')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    el.innerHTML = '<div class="list-loading">Erreur lors du chargement.</div>';
+    console.error(error);
+    return;
+  }
+
+  _allLeases = data || [];
+  updateBadgeLease(_allLeases.filter(l => l.statut === 'active' || !l.statut).length);
+  renderLeases(_allLeases);
+}
+
+function filterLeases() {
+  const search = (document.getElementById('leases-search')?.value || '').toLowerCase();
+  const status = document.getElementById('leases-status-filter')?.value || '';
+
+  const filtered = _allLeases.filter(l => {
+    const matchSearch = !search ||
+      (l.nom_locataire || '').toLowerCase().includes(search) ||
+      (l.adresse || '').toLowerCase().includes(search) ||
+      (l.prenom_locataire || '').toLowerCase().includes(search);
+    const matchStatus = !status || l.statut === status || (!l.statut && status === 'active');
+    return matchSearch && matchStatus;
+  });
+
+  renderLeases(filtered);
+}
+
+function renderLeases(leases) {
+  const el = document.getElementById('leases-list');
+  if (!el) return;
+
+  if (!leases.length) {
+    el.innerHTML = `
+      <div style="grid-column:1/-1;padding:48px;text-align:center;color:var(--color-text-secondary);">
+        Aucun bail trouvé. <button class="btn-ghost" onclick="openLeaseWizard()">Créer un bail</button>
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = leases.map(l => renderLeaseCard(l)).join('');
+}
+
+function renderLeaseCard(l) {
+  const tenant = [l.prenom_locataire, l.nom_locataire].filter(Boolean).join(' ') || 'Locataire';
+  const status = l.statut || 'active';
+  const charges = l.charges ? ` + ${formatCurrency(l.charges)} charges` : '';
+
+  return `
+    <div class="lease-card" onclick="openLeaseDetail('${l.id}')">
+      <div class="lease-card-header">
+        <div>
+          <div class="lease-tenant">${tenant}</div>
+          <div class="lease-address">${l.adresse || '—'}</div>
+        </div>
+        ${leaseStatusBadge(status)}
+      </div>
+      <div class="lease-card-body">
+        <div class="lease-detail">
+          <span class="lease-detail-label">Loyer CC</span>
+          <span class="lease-detail-value">${formatCurrency(l.loyer)}${charges}</span>
+        </div>
+        <div class="lease-detail">
+          <span class="lease-detail-label">Début</span>
+          <span class="lease-detail-value">${formatDate(l.date_debut)}</span>
+        </div>
+        ${l.date_fin ? `<div class="lease-detail">
+          <span class="lease-detail-label">Fin</span>
+          <span class="lease-detail-value">${formatDate(l.date_fin)}</span>
+        </div>` : ''}
+      </div>
+      <div class="lease-card-footer">
+        <span>${l.type_bail || 'Bail nu'}</span>
+        <span>ID: ${l.id.substring(0, 8)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function updateBadgeLease(count) {
+  const el = document.getElementById('badge-leases');
+  if (!el) return;
+  if (count > 0) {
+    el.textContent = count;
+    el.classList.remove('hidden');
+  } else {
+    el.classList.add('hidden');
+  }
+}
+
+function openLeaseDetail(id) {
+  // Future: open detail panel or page
+  showToast('Détail du bail — bientôt disponible.', '', 2000);
+}
+
+
+/* v3 */
+// ============================================================
+// BAILO GESTION v2 — Properties (Biens)
+// Lecture depuis la table leases (champ adresse + type_bail)
+// En v2 on extraira les biens dans leur propre table plus tard
+// ============================================================
+
+async function loadProperties() {
+  const el = document.getElementById('properties-list');
+  if (!el) return;
+  el.innerHTML = '<div class="list-loading">Chargement…</div>';
+
+  // Pour l'instant on déduplique les adresses depuis les baux
+  const { data, error } = await supabase
+    .from('leases')
+    .select('id, adresse, type_bail, surface, pieces, loyer, charges, statut, nom_locataire, prenom_locataire')
+    .order('adresse');
+
+  if (error) { el.innerHTML = '<div class="list-loading">Erreur de chargement.</div>'; return; }
+  if (!data?.length) {
+    el.innerHTML = `<div style="grid-column:1/-1;padding:48px;text-align:center;color:var(--color-text-secondary);">
+      Aucun bien enregistré. <button class="btn-ghost" onclick="openLeaseWizard()">Créer un premier bail</button>
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = data.map(b => renderPropertyCard(b)).join('');
+}
+
+function renderPropertyCard(b) {
+  const tenant = [b.prenom_locataire, b.nom_locataire].filter(Boolean).join(' ') || null;
+  const loyer = (parseFloat(b.loyer)||0) + (parseFloat(b.charges)||0);
+  return `
+    <div class="property-card" onclick="navigate('leases')">
+      <div class="property-card-header">
+        <div>
+          <div class="property-address">${b.adresse || '—'}</div>
+          <div class="property-type">${b.type_bail || 'Bail nu'}${b.surface ? ' · ' + b.surface + ' m²' : ''}${b.pieces ? ' · ' + b.pieces + ' pièces' : ''}</div>
+        </div>
+        ${leaseStatusBadge(b.statut || 'active')}
+      </div>
+      <div class="property-card-body">
+        <div class="property-stat">
+          <span class="property-stat-label">Loyer CC</span>
+          <span class="property-stat-value">${formatCurrency(loyer)}</span>
+        </div>
+        ${tenant ? `<div class="property-stat">
+          <span class="property-stat-label">Locataire</span>
+          <span class="property-stat-value">${tenant}</span>
+        </div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function openPropertyForm() {
+  // Pour l'instant on redirige vers la création de bail
+  openLeaseWizard();
+}
+
+
+/* v3 */
+// ============================================================
+// BAILO GESTION v2 — Tenants (Locataires)
+// ============================================================
+
+async function loadTenants() {
+  const el = document.getElementById('tenants-list');
+  if (!el) return;
+  el.innerHTML = '<div class="list-loading">Chargement…</div>';
+
+  const { data, error } = await supabase
+    .from('leases')
+    .select('id, nom_locataire, prenom_locataire, email_locataire, tel_locataire, adresse, statut, date_debut')
+    .order('nom_locataire');
+
+  if (error) { el.innerHTML = '<div class="list-loading">Erreur de chargement.</div>'; return; }
+  if (!data?.length) { el.innerHTML = emptyState('Aucun locataire pour le moment.'); return; }
+
+  el.innerHTML = `
+    <div class="tenants-table">
+      <div class="tenant-row-header">
+        <span>Locataire</span>
+        <span>Contact</span>
+        <span>Bien</span>
+        <span>Statut</span>
+      </div>
+      ${data.map(t => renderTenantRow(t)).join('')}
+    </div>
+  `;
+}
+
+function renderTenantRow(t) {
+  const name = [t.prenom_locataire, t.nom_locataire].filter(Boolean).join(' ') || '—';
+  return `
+    <div class="tenant-row" onclick="navigate('leases')">
+      <div>
+        <div class="tenant-name">${name}</div>
+        ${t.tel_locataire ? `<div style="font-size:11px;color:var(--color-text-tertiary)">${t.tel_locataire}</div>` : ''}
+      </div>
+      <div class="tenant-email">${t.email_locataire || '—'}</div>
+      <div class="tenant-lease">${t.adresse || '—'}</div>
+      <div>${leaseStatusBadge(t.statut || 'active')}</div>
+    </div>
+  `;
+}
+
+
+/* v3 */
+// ============================================================
+// BAILO GESTION v2 — Lease Wizard
+// ============================================================
+
+let _wizardStep = 1;
+const WIZARD_TOTAL_STEPS = 4;
+let _wizardData = {};
+
+const WIZARD_STEPS_CONTENT = {
+  1: () => `
+    <div class="wizard-section-title">Le bien immobilier</div>
+    <div class="form-group">
+      <label>Adresse complète *</label>
+      <input type="text" id="w-adresse" value="${_wizardData.adresse || ''}" placeholder="12 rue de la Paix, 75001 Paris" />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Type de bail</label>
+        <select id="w-type-bail">
+          <option value="Bail nu" ${_wizardData.type_bail === 'Bail nu' ? 'selected' : ''}>Bail nu</option>
+          <option value="Bail meublé" ${_wizardData.type_bail === 'Bail meublé' ? 'selected' : ''}>Bail meublé</option>
+          <option value="Bail mobilité" ${_wizardData.type_bail === 'Bail mobilité' ? 'selected' : ''}>Bail mobilité</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Surface (m²)</label>
+        <input type="number" id="w-surface" value="${_wizardData.surface || ''}" placeholder="45" min="1" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Étage</label>
+        <input type="text" id="w-etage" value="${_wizardData.etage || ''}" placeholder="2ème" />
+      </div>
+      <div class="form-group">
+        <label>Nombre de pièces</label>
+        <input type="number" id="w-pieces" value="${_wizardData.pieces || ''}" placeholder="3" min="1" />
+      </div>
+    </div>
+  `,
+
+  2: () => `
+    <div class="wizard-section-title">Le(s) locataire(s)</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Prénom *</label>
+        <input type="text" id="w-prenom" value="${_wizardData.prenom_locataire || ''}" placeholder="Marie" />
+      </div>
+      <div class="form-group">
+        <label>Nom *</label>
+        <input type="text" id="w-nom" value="${_wizardData.nom_locataire || ''}" placeholder="Dupont" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Email du locataire</label>
+      <input type="email" id="w-email" value="${_wizardData.email_locataire || ''}" placeholder="marie.dupont@mail.com" />
+    </div>
+    <div class="form-group">
+      <label>Téléphone</label>
+      <input type="tel" id="w-tel" value="${_wizardData.tel_locataire || ''}" placeholder="06 12 34 56 78" />
+    </div>
+  `,
+
+  3: () => `
+    <div class="wizard-section-title">Conditions financières</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Loyer hors charges (€) *</label>
+        <input type="number" id="w-loyer" value="${_wizardData.loyer || ''}" placeholder="750" min="0" step="0.01" />
+      </div>
+      <div class="form-group">
+        <label>Charges (€)</label>
+        <input type="number" id="w-charges" value="${_wizardData.charges || ''}" placeholder="50" min="0" step="0.01" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Dépôt de garantie (€)</label>
+        <input type="number" id="w-depot" value="${_wizardData.depot_garantie || ''}" placeholder="750" min="0" step="0.01" />
+      </div>
+      <div class="form-group">
+        <label>Jour d'échéance</label>
+        <select id="w-echeance">
+          ${[1,5,8,10,15,20].map(d =>
+            `<option value="${d}" ${_wizardData.jour_echeance == d ? 'selected' : ''}>${d}</option>`
+          ).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Date de début *</label>
+        <input type="date" id="w-date-debut" value="${_wizardData.date_debut || ''}" />
+      </div>
+      <div class="form-group">
+        <label>Date de fin (optionnel)</label>
+        <input type="date" id="w-date-fin" value="${_wizardData.date_fin || ''}" />
+      </div>
+    </div>
+  `,
+
+  4: () => {
+    const tenant = [_wizardData.prenom_locataire, _wizardData.nom_locataire].filter(Boolean).join(' ') || '—';
+    const loyer = parseFloat(_wizardData.loyer || 0);
+    const charges = parseFloat(_wizardData.charges || 0);
+    return `
+    <div class="wizard-section-title">Confirmation</div>
+    <div class="confirm-summary">
+      <div class="confirm-row"><span>Adresse</span><span>${_wizardData.adresse || '—'}</span></div>
+      <div class="confirm-row"><span>Type</span><span>${_wizardData.type_bail || 'Bail nu'}</span></div>
+      <div class="confirm-row"><span>Locataire</span><span>${tenant}</span></div>
+      <div class="confirm-row"><span>Email</span><span>${_wizardData.email_locataire || '—'}</span></div>
+      <div class="confirm-row"><span>Loyer HC</span><span>${formatCurrency(loyer)}</span></div>
+      <div class="confirm-row"><span>Charges</span><span>${formatCurrency(charges)}</span></div>
+      <div class="confirm-row"><span>Loyer CC</span><span><strong>${formatCurrency(loyer + charges)}</strong></span></div>
+      <div class="confirm-row"><span>Début</span><span>${formatDate(_wizardData.date_debut)}</span></div>
+    </div>
+    <p style="margin-top:16px;font-size:13px;color:var(--color-text-secondary);">
+      Vérifiez les informations puis cliquez sur <strong>Créer le bail</strong>.
+    </p>
+  `;
+  }
+};
+
+function openLeaseWizard() {
+  _wizardStep = 1;
+  _wizardData = {};
+  renderWizardStep();
+  document.getElementById('lease-wizard-overlay').classList.remove('hidden');
+}
+
+function closeLeaseWizard(event) {
+  if (event && event.target !== document.getElementById('lease-wizard-overlay')) return;
+  document.getElementById('lease-wizard-overlay').classList.add('hidden');
+}
+
+function renderWizardStep() {
+  // Body
+  const bodyEl = document.getElementById('wizard-body');
+  bodyEl.innerHTML = WIZARD_STEPS_CONTENT[_wizardStep]();
+
+  // Steps indicator
+  document.querySelectorAll('.wizard-steps .step').forEach(el => {
+    const s = parseInt(el.dataset.step);
+    el.className = 'step';
+    if (s === _wizardStep) el.classList.add('active');
+    if (s < _wizardStep) el.classList.add('done');
+  });
+
+  // Buttons
+  const backBtn = document.getElementById('wizard-back');
+  const nextBtn = document.getElementById('wizard-next');
+  backBtn.style.display = _wizardStep > 1 ? '' : 'none';
+  nextBtn.textContent = _wizardStep === WIZARD_TOTAL_STEPS ? 'Créer le bail' : 'Suivant →';
+}
+
+function collectStepData() {
+  switch (_wizardStep) {
+    case 1:
+      _wizardData.adresse = document.getElementById('w-adresse')?.value.trim();
+      _wizardData.type_bail = document.getElementById('w-type-bail')?.value;
+      _wizardData.surface = document.getElementById('w-surface')?.value;
+      _wizardData.etage = document.getElementById('w-etage')?.value.trim();
+      _wizardData.pieces = document.getElementById('w-pieces')?.value;
+      break;
+    case 2:
+      _wizardData.prenom_locataire = document.getElementById('w-prenom')?.value.trim();
+      _wizardData.nom_locataire = document.getElementById('w-nom')?.value.trim();
+      _wizardData.email_locataire = document.getElementById('w-email')?.value.trim();
+      _wizardData.tel_locataire = document.getElementById('w-tel')?.value.trim();
+      break;
+    case 3:
+      _wizardData.loyer = document.getElementById('w-loyer')?.value;
+      _wizardData.charges = document.getElementById('w-charges')?.value;
+      _wizardData.depot_garantie = document.getElementById('w-depot')?.value;
+      _wizardData.jour_echeance = document.getElementById('w-echeance')?.value;
+      _wizardData.date_debut = document.getElementById('w-date-debut')?.value;
+      _wizardData.date_fin = document.getElementById('w-date-fin')?.value || null;
+      break;
+  }
+}
+
+function validateStep() {
+  switch (_wizardStep) {
+    case 1:
+      if (!document.getElementById('w-adresse')?.value.trim()) {
+        showToast("L'adresse est obligatoire.", 'error');
+        return false;
+      }
+      break;
+    case 2:
+      if (!document.getElementById('w-nom')?.value.trim()) {
+        showToast('Le nom du locataire est obligatoire.', 'error');
+        return false;
+      }
+      break;
+    case 3:
+      if (!document.getElementById('w-loyer')?.value) {
+        showToast('Le loyer est obligatoire.', 'error');
+        return false;
+      }
+      if (!document.getElementById('w-date-debut')?.value) {
+        showToast('La date de début est obligatoire.', 'error');
+        return false;
+      }
+      break;
+  }
+  return true;
+}
+
+async function wizardNext() {
+  if (!validateStep()) return;
+  collectStepData();
+
+  if (_wizardStep < WIZARD_TOTAL_STEPS) {
+    _wizardStep++;
+    renderWizardStep();
+  } else {
+    await createLease();
+  }
+}
+
+function wizardBack() {
+  if (_wizardStep > 1) {
+    _wizardStep--;
+    renderWizardStep();
+  }
+}
+
+async function createLease() {
+  const nextBtn = document.getElementById('wizard-next');
+  nextBtn.disabled = true;
+  nextBtn.textContent = 'Enregistrement…';
+
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) {
+    showToast('Session expirée. Reconnectez-vous.', 'error');
+    return;
+  }
+
+  const payload = {
+    user_id: session.user.id,
+    adresse: _wizardData.adresse,
+    type_bail: _wizardData.type_bail || 'Bail nu',
+    surface: _wizardData.surface ? parseFloat(_wizardData.surface) : null,
+    etage: _wizardData.etage || null,
+    pieces: _wizardData.pieces ? parseInt(_wizardData.pieces) : null,
+    prenom_locataire: _wizardData.prenom_locataire || null,
+    nom_locataire: _wizardData.nom_locataire,
+    email_locataire: _wizardData.email_locataire || null,
+    tel_locataire: _wizardData.tel_locataire || null,
+    loyer: parseFloat(_wizardData.loyer),
+    charges: _wizardData.charges ? parseFloat(_wizardData.charges) : 0,
+    depot_garantie: _wizardData.depot_garantie ? parseFloat(_wizardData.depot_garantie) : null,
+    jour_echeance: _wizardData.jour_echeance ? parseInt(_wizardData.jour_echeance) : 1,
+    date_debut: _wizardData.date_debut,
+    date_fin: _wizardData.date_fin || null,
+    statut: 'active',
+  };
+
+  const { error } = await db.from('leases').insert(payload);
+
+  if (error) {
+    console.error(error);
+    showToast('Erreur lors de la création : ' + error.message, 'error');
+    nextBtn.disabled = false;
+    nextBtn.textContent = 'Créer le bail';
+    return;
+  }
+
+  document.getElementById('lease-wizard-overlay').classList.add('hidden');
+  showToast('Bail créé avec succès !', 'success');
+  _wizardData = {};
+
+  // Refresh
+  loadLeases();
+  loadDashboard();
+}
+
+
+/* v3 */
+// ============================================================
+// BAILO GESTION v2 — App Entry
+// ============================================================
+
+function initApp() {
+  // Load dashboard (default page)
+  loadDashboard();
+}
+
+// Boot on DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+  checkSession();
+});
+
+  </script>
 </body>
 </html>
