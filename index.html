@@ -515,7 +515,7 @@ async function loadKPIs() {
 async function loadRecentLeases() {
   const el = document.getElementById('recent-leases-list');
   if (!el) return;
-  const { data, error } = await db.from('leases').select('id, data').order('created_at', { ascending: false }).limit(5);
+  const { data, error } = await db.from('leases').select('id, data').order('updated_at', { ascending: false }).limit(5);
   if (error || !data?.length) { el.innerHTML = emptyState('Aucun bail pour le moment.'); return; }
   el.innerHTML = data.map(l => `
     <div class="list-item" onclick="navigate('leases')">
@@ -560,7 +560,7 @@ async function loadLeases() {
   const el = document.getElementById('leases-list');
   if (!el) return;
   el.innerHTML = '<div class="list-loading">Chargement…</div>';
-  const { data, error } = await db.from('leases').select('id, data, created_at').order('created_at', { ascending: false });
+  const { data, error } = await db.from('leases').select('id, data, updated_at').order('updated_at', { ascending: false });
   if (error) { el.innerHTML = '<div class="list-loading">Erreur de chargement.</div>'; return; }
   _allLeases = data || [];
   renderLeases(_allLeases);
@@ -633,7 +633,7 @@ async function loadProperties() {
   const el = document.getElementById('properties-list');
   if (!el) return;
   el.innerHTML = '<div class="list-loading">Chargement…</div>';
-  const { data, error } = await db.from('leases').select('id, data').order('created_at', { ascending: false });
+  const { data, error } = await db.from('leases').select('id, data').order('updated_at', { ascending: false });
   if (error) { el.innerHTML = '<div class="list-loading">Erreur de chargement.</div>'; return; }
   if (!data?.length) {
     el.innerHTML = '<div style="grid-column:1/-1;padding:48px;text-align:center;color:var(--color-text-secondary);">Aucun bien. <button class="btn-ghost" onclick="openLeaseWizard()">Créer un bail</button></div>';
@@ -675,7 +675,7 @@ async function loadTenants() {
   const el = document.getElementById('tenants-list');
   if (!el) return;
   el.innerHTML = '<div class="list-loading">Chargement…</div>';
-  const { data, error } = await db.from('leases').select('id, data').order('created_at', { ascending: false });
+  const { data, error } = await db.from('leases').select('id, data').order('updated_at', { ascending: false });
   if (error) { el.innerHTML = '<div class="list-loading">Erreur.</div>'; return; }
   if (!data?.length) { el.innerHTML = emptyState('Aucun locataire.'); return; }
   el.innerHTML = `
@@ -939,23 +939,27 @@ async function createLease() {
   }
 
   const payload = {
-    user_id: session.user.id,
-    adresse: _wizardData.adresse,
-    type_bail: _wizardData.type_bail || 'Bail nu',
-    surface: _wizardData.surface ? parseFloat(_wizardData.surface) : null,
-    etage: _wizardData.etage || null,
-    pieces: _wizardData.pieces ? parseInt(_wizardData.pieces) : null,
-    prenom_locataire: _wizardData.prenom_locataire || null,
-    nom_locataire: _wizardData.nom_locataire,
-    email_locataire: _wizardData.email_locataire || null,
-    tel_locataire: _wizardData.tel_locataire || null,
-    loyer: parseFloat(_wizardData.loyer),
-    charges: _wizardData.charges ? parseFloat(_wizardData.charges) : 0,
-    depot_garantie: _wizardData.depot_garantie ? parseFloat(_wizardData.depot_garantie) : null,
-    jour_echeance: _wizardData.jour_echeance ? parseInt(_wizardData.jour_echeance) : 1,
-    date_debut: _wizardData.date_debut,
-    date_fin: _wizardData.date_fin || null,
-    statut: 'active',
+    bailleur_id: session.user.id,
+    data: {
+      formData: {
+        propertyAddress: _wizardData.adresse || '',
+        leaseType: _wizardData.type_bail || 'Bail nu',
+        surface: _wizardData.surface || '',
+        etage: _wizardData.etage || '',
+        rooms: _wizardData.pieces || '',
+        tenantName: [_wizardData.prenom_locataire, _wizardData.nom_locataire].filter(Boolean).join(' '),
+        tenantEmail: _wizardData.email_locataire || '',
+        tenantPhone: _wizardData.tel_locataire || '',
+        rent: _wizardData.loyer || '0',
+        charges: _wizardData.charges || '0',
+        deposit: _wizardData.depot_garantie || '',
+        rentDueDay: _wizardData.jour_echeance ? 'Le ' + _wizardData.jour_echeance + ' de chaque mois' : '',
+        effectiveDate: _wizardData.date_debut || '',
+        exitDate: _wizardData.date_fin || '',
+        leaseStatus: 'Actif',
+      }
+    },
+    updated_at: new Date().toISOString(),
   };
 
   const { error } = await db.from('leases').insert(payload);
