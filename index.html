@@ -1095,7 +1095,19 @@ function openLeaseDetail(id) {
 
 var currentDetailLeaseId = null;
 
-async function ouvrirContratV1(leaseId) {
+function ouvrirContratV1(leaseId) {
+  if (!leaseId) { showToast('Bail introuvable.', 'error'); return; }
+
+  // Trouver le nom du locataire
+  var lease = _allLeases.find(function(l){ return l.id === leaseId; });
+  var tenant = lease ? leaseTenantName(lease) : '';
+
+  // Ouvrir la v1 sur l'onglet Aperçu & PDF
+  window.open('https://gestion.bailo.pro', '_blank');
+
+  // Afficher un toast avec le nom du bail à sélectionner
+  showToast('Dans la v1 : sélectionnez le bail "' + tenant + '" puis cliquez Apercu & PDF', '', 6000);
+}ync function ouvrirContratV1(leaseId) {
   if (!leaseId) { showToast('Bail introuvable.', 'error'); return; }
 
   showToast('Chargement du contrat…', '', 4000);
