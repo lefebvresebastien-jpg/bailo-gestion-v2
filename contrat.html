@@ -486,6 +486,15 @@
       out += '<p style="margin-top:8px;font-style:italic;color:#8a7060">Document ERP complet disponible sur georisques.gouv.fr</p>';
       out += '</div></div>';
 
+      // ── LIEN DPE si disponible ──
+      if (f.dpeFileUrl) {
+        out += '<div style="margin:8px 0 20px;padding:10px 16px;background:#ecfdf5;border:1px solid #10b981;border-radius:8px;display:flex;align-items:center;gap:12px">';
+        out += '<span style="font-size:20px">📄</span>';
+        out += '<div style="flex:1"><p style="font-size:.82rem;font-weight:600">Fichier DPE joint</p>';
+        out += '<a href="' + f.dpeFileUrl + '" target="_blank" style="font-size:.78rem;color:#10b981">Ouvrir le DPE complet</a></div>';
+        out += '</div>';
+      }
+
       // ── ANNEXE 4 : Repartition reparations ──
       var cats = [
         { cat:"Plomberie et robinetterie", charge:"Locataire", color:"#d97706", bg:"#fffbeb",
