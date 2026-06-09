@@ -1343,16 +1343,7 @@ const WIZARD_STEPS_CONTENT = {
         '<div class="form-group"><label>Eau chaude</label>' +
         '<input type="text" id="w-hotWaterType" value="' + (d.hotWaterType||'') + '" placeholder="Individuelle" /></div>' +
       '</div>' +
-      '<div class="form-group">' +
-        '<label>Fichier DPE (PDF ou image)</label>' +
-        '<div class="file-upload-zone" id="w-dpe-zone" onclick="document.getElementById('w-dpe-input').click()" style="' + (d.dpeFileUrl ? 'border-color:var(--color-success);background:var(--color-success-light)' : '') + '">' +
-          '<input type="file" id="w-dpe-input" style="display:none" accept=".pdf,.jpg,.jpeg,.png" onchange="handleDpeFile(this)" />' +
-          '<div id="w-dpe-preview">' + (d.dpeFileUrl ?
-            '<span style=\"font-size:20px\">📄</span><span style=\"font-size:13px;font-weight:600\">DPE joint</span>' :
-            '<span style=\"font-size:24px\">📎</span><span style=\"font-size:13px;color:var(--color-text-secondary)\">Joindre le fichier DPE</span>'
-          ) + '</div>' +
-        '</div>' +
-      '</div>';
+      buildDpeField(d) +
   },
 
   3: function() {
@@ -1491,6 +1482,20 @@ const WIZARD_STEPS_CONTENT = {
 
 var _wizardDpeFile = null;
 
+function buildDpeField(d) {
+  var hasFile = d && d.dpeFileUrl;
+  var style = hasFile ? 'border-color:var(--color-success);background:var(--color-success-light)' : '';
+  var preview = hasFile
+    ? '<span style="font-size:20px">&#128196;</span><span style="font-size:13px;font-weight:600">DPE joint</span>'
+    : '<span style="font-size:24px">&#128206;</span><span style="font-size:13px;color:var(--color-text-secondary)">Joindre le fichier DPE</span>';
+  return '<div class="form-group">' +
+    '<label>Fichier DPE (PDF ou image)</label>' +
+    '<div class="file-upload-zone" id="w-dpe-zone" onclick="document.getElementById(String.fromCharCode(39)+'w-dpe-input'+String.fromCharCode(39))&&void 0" style="' + style + '" data-dpe="1">' +
+    '<input type="file" id="w-dpe-input" style="display:none" accept=".pdf,.jpg,.jpeg,.png" onchange="handleDpeFile(this)" />' +
+    '<div id="w-dpe-preview">' + preview + '</div>' +
+    '</div></div>';
+}
+
 function handleDpeFile(input) {
   var file = input.files[0];
   if (!file) return;
@@ -1526,6 +1531,12 @@ function renderWizardStep() {
     if (s === _wizardStep) el.classList.add('active');
     if (s < _wizardStep) el.classList.add('done');
   });
+
+  // DPE zone click handler
+  setTimeout(function() {
+    var dpeZone = document.getElementById('w-dpe-zone');
+    if (dpeZone) dpeZone.onclick = function() { document.getElementById('w-dpe-input').click(); };
+  }, 50);
 
   // Buttons
   const backBtn = document.getElementById('wizard-back');
