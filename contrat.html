@@ -421,7 +421,132 @@
       '</div>';
     }
 
-        function initSignatureCanvas(canvasId) {
+    
+    function generateAnnexes(f) {
+      var rent = parseFloat(f.rent) || 0;
+      var charges = parseFloat(f.charges) || 0;
+      var monthly = rent + charges;
+      var maxAmt = monthly * 36;
+      var fmtEur = function(v) {
+        return new Intl.NumberFormat("fr-FR", {style:"currency", currency:"EUR", maximumFractionDigits:0}).format(v);
+      };
+
+      var out = '<div style="page-break-before:always">';
+      out += '<h2 style="font-size:1.1rem;font-family:Inter,sans-serif;font-weight:700;margin:0 0 4px;color:#5a3a20">ANNEXES AU CONTRAT DE BAIL</h2>';
+      out += '<p style="font-size:.78rem;color:#9a7060;margin-bottom:24px">' + (f.propertyAddress||'') + ' — ' + (f.tenantName||'') + '</p>';
+
+      // ── ANNEXE 1 : Notice d information ──
+      out += '<div style="margin-bottom:32px;padding:20px;background:#fdfaf6;border:1px solid #e0d5c8;border-radius:10px;page-break-inside:avoid">';
+      out += '<h3 style="font-size:.9rem;font-family:Inter,sans-serif;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;color:#e8793a">Annexe 1 — Notice d'information</h3>';
+      out += '<p style="font-size:.78rem;color:#8a7060;margin-bottom:12px">Décret n° 2015-587 du 29 mai 2015 — Obligatoire pour tout bail d'habitation</p>';
+      out += '<div style="font-size:.82rem;line-height:1.7;color:#3a2010">';
+      out += '<p><strong>Droits et obligations du locataire :</strong></p>';
+      out += '<ul style="padding-left:16px;margin:6px 0">';
+      out += '<li>Payer le loyer et les charges aux termes convenus</li>';
+      out += '<li>User paisiblement des locaux loués</li>';
+      out += '<li>Répondre des dégradations et pertes survenant pendant la durée du contrat</li>';
+      out += '<li>Prendre à sa charge l'entretien courant du logement</li>';
+      out += '<li>Souscrire une assurance contre les risques locatifs</li>';
+      out += '<li>Ne pas transformer les locaux et équipements sans accord écrit du bailleur</li>';
+      out += '<li>Laisser exécuter les travaux urgents dans le logement</li>';
+      out += '</ul>';
+      out += '<p style="margin-top:10px"><strong>Droits et obligations du bailleur :</strong></p>';
+      out += '<ul style="padding-left:16px;margin:6px 0">';
+      out += '<li>Remettre au locataire un logement décent</li>';
+      out += '<li>Assurer la jouissance paisible du logement</li>';
+      out += '<li>Entretenir les locaux en état de servir à l'usage prévu</li>';
+      out += '<li>Effectuer les réparations autres que locatives</li>';
+      out += '</ul>';
+      out += '<p style="margin-top:10px"><strong>Congé :</strong> Le locataire peut donner congé à tout moment avec un préavis de ' + (f.noticePeriodTenant||'3 mois') + '. Le bailleur doit respecter un préavis de ' + (f.noticePeriodLandlord||'6 mois') + ' et ne peut donner congé que pour vente, reprise ou motif légitime et sérieux.</p>';
+      out += '</div></div>';
+
+      // ── ANNEXE 2 : DPE ──
+      out += '<div style="margin-bottom:32px;padding:20px;background:#fdfaf6;border:1px solid #e0d5c8;border-radius:10px;page-break-inside:avoid">';
+      out += '<h3 style="font-size:.9rem;font-family:Inter,sans-serif;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;color:#e8793a">Annexe 2 — Diagnostic de Performance Energetique (DPE)</h3>';
+      out += '<p style="font-size:.78rem;color:#8a7060;margin-bottom:12px">Art. L.134-1 du Code de la Construction — Obligatoire</p>';
+      var dpeColors = {A:"#00a651",B:"#57b947",C:"#b5d334",D:"#fff200",E:"#fcb814",F:"#f26522",G:"#ed1c24"};
+      var dpeClass = f.dpeClass || "D";
+      var dpeColor = dpeColors[dpeClass] || "#ccc";
+      out += '<div style="display:flex;align-items:center;gap:20px;margin:12px 0">';
+      out += '<div style="width:60px;height:60px;background:' + dpeColor + ';border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;color:#fff">' + dpeClass + '</div>';
+      out += '<div style="font-size:.85rem"><p><strong>Classe énergétique : ' + dpeClass + '</strong></p>';
+      out += '<p style="color:#8a7060">Logement situé : ' + (f.propertyAddress||'') + '</p>';
+      out += '<p style="color:#8a7060">Surface : ' + (f.surface||'') + '</p></div></div>';
+      out += '<p style="font-size:.8rem;color:#5a3a20;margin-top:8px">Le DPE complet est joint au présent bail. En cas de classe F ou G, le bailleur est soumis aux obligations de rénovation énergétique prévues par la loi Climat et Résilience.</p>';
+      out += '</div>';
+
+      // ── ANNEXE 3 : ERP ──
+      out += '<div style="margin-bottom:32px;padding:20px;background:#fdfaf6;border:1px solid #e0d5c8;border-radius:10px;page-break-inside:avoid">';
+      out += '<h3 style="font-size:.9rem;font-family:Inter,sans-serif;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;color:#e8793a">Annexe 3 — Etat des Risques et Pollutions (ERP)</h3>';
+      out += '<p style="font-size:.78rem;color:#8a7060;margin-bottom:12px">Art. L.125-5 du Code de l'environnement — Obligatoire</p>';
+      out += '<div style="font-size:.82rem;line-height:1.7">';
+      out += '<p>Bien situé : <strong>' + (f.propertyAddress||'') + '</strong></p>';
+      out += '<p style="margin-top:8px">L'état des risques et pollutions a été établi conformément aux informations mises à disposition par les services de l'État. Ce document est joint au présent contrat.</p>';
+      out += '<p style="margin-top:8px"><strong>Risques à vérifier selon la commune :</strong> inondation, mouvement de terrain, sismique, radon, pollution des sols, risques technologiques.</p>';
+      out += '<p style="margin-top:8px;font-style:italic;color:#8a7060">Document ERP complet disponible sur georisques.gouv.fr</p>';
+      out += '</div></div>';
+
+      // ── ANNEXE 4 : Repartition reparations ──
+      var cats = [
+        { cat:"Plomberie et robinetterie", charge:"Locataire", color:"#d97706", bg:"#fffbeb",
+          items:["Remplacement joints, clapets des robinets","Remplacement garnitures de douches","Vidange des chauffe-eau","Remplacement tuyaux flexibles de douche","Debouchage des canalisations","Remplacement abattants de WC","Remplacement flotteurs et joints WC"] },
+        { cat:"Installations electriques", charge:"Locataire", color:"#d97706", bg:"#fffbeb",
+          items:["Remplacement interrupteurs, prises, coupe-circuits","Remplacement des fusibles","Entretien eclairage interieur","Remplacement ampoules et tubes"] },
+        { cat:"Menuiseries et fermetures", charge:"Locataire", color:"#d97706", bg:"#fffbeb",
+          items:["Graissage gonds, verrous et serrures","Remplacement des cles perdues","Remplacement poignees et targettes","Mastic des vitres cassees par le locataire","Entretien des volets"] },
+        { cat:"Peintures et revetements", charge:"Locataire", color:"#d97706", bg:"#fffbeb",
+          items:["Rebouchage petits trous et fissures","Peinture interieure si degradation anormale","Entretien des parquets"] },
+        { cat:"Gros oeuvre", charge:"Bailleur", color:"#16a34a", bg:"#f0fdf4",
+          items:["Remplacement canalisations vetustes","Reparation toiture, charpente, gros murs","Remplacement chauffe-eau, chaudiere","Remise en etat apres sinistre","Remplacement fenetres et portes exterieures vetustes","Travaux de mise aux normes"] }
+      ];
+      out += '<div style="margin-bottom:32px;padding:20px;background:#fdfaf6;border:1px solid #e0d5c8;border-radius:10px">';
+      out += '<h3 style="font-size:.9rem;font-family:Inter,sans-serif;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;color:#e8793a">Annexe 4 — Repartition des reparations locatives</h3>';
+      out += '<p style="font-size:.78rem;color:#8a7060;margin-bottom:12px">Decret n°87-712 du 26 aout 1987 — Art. 3 loi 89-462</p>';
+      cats.forEach(function(c) {
+        out += '<div style="border:1px solid ' + c.color + ';border-radius:8px;padding:10px 14px;margin-bottom:8px;background:' + c.bg + '">';
+        out += '<div style="display:flex;justify-content:space-between;margin-bottom:6px">';
+        out += '<strong style="font-size:.82rem">' + c.cat + '</strong>';
+        out += '<span style="font-size:.76rem;font-weight:600;color:' + c.color + '">' + c.charge + '</span>';
+        out += '</div>';
+        out += '<ul style="padding-left:16px;margin:0">';
+        c.items.forEach(function(item) {
+          out += '<li style="font-size:.78rem;margin-bottom:2px">' + item + '</li>';
+        });
+        out += '</ul></div>';
+      });
+      out += '</div>';
+
+      // ── ANNEXE 5 : Acte de caution solidaire ──
+      if (f.guarantorName && f.guarantorName.trim()) {
+        out += '<div style="margin-bottom:32px;padding:20px;background:#fdfaf6;border:1px solid #e0d5c8;border-radius:10px;page-break-inside:avoid">';
+        out += '<h3 style="font-size:.9rem;font-family:Inter,sans-serif;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;color:#e8793a">Annexe 5 — Acte de caution solidaire</h3>';
+        out += '<p style="font-size:.78rem;color:#8a7060;margin-bottom:12px">Art. 22-1 de la loi du 6 juillet 1989 — Caution : ' + f.guarantorType + '</p>';
+        out += '<div style="font-size:.82rem;line-height:1.8">';
+        out += '<p>Je soussigné(e) <strong>' + f.guarantorName + '</strong>';
+        out += (f.guarantorAddress ? ', demeurant au <strong>' + f.guarantorAddress + '</strong>' : '') + ',</p>';
+        out += '<p style="margin-top:8px">me porte caution solidaire de <strong>' + (f.tenantName||'') + '</strong> pour le paiement du loyer et des charges ainsi que pour l'execution de toutes les obligations du bail concernant le logement situé <strong>' + (f.propertyAddress||'') + '</strong>.</p>';
+        out += '<p style="margin-top:8px">Le montant du loyer charges comprises est de <strong>' + fmtEur(monthly) + ' par mois</strong>.</p>';
+        out += '<p>Mon engagement est limité à <strong>' + fmtEur(maxAmt) + '</strong> (36 mois de loyer CC) pour une durée correspondant à celle du bail et de ses renouvellements.</p>';
+        out += '<p style="margin-top:12px;font-style:italic;font-size:.78rem;color:#8a7060">Conformément à l'article 22-1 de la loi du 6 juillet 1989, la caution doit recopier manuscritement la mention légale ci-dessous avant de signer.</p>';
+        out += '<div style="margin-top:12px;padding:12px;background:#fff8f0;border:1px dashed #e8793a;border-radius:6px;font-size:.78rem;font-style:italic;line-height:1.7;color:#5a3a20">';
+        out += '"En me portant caution de ' + (f.tenantName||'______') + ' dans la limite de la somme de ' + fmtEur(maxAmt) + ' couvrant le paiement du loyer, des charges, des indemnités d'occupation et des réparations locatives pour la durée du bail et ses renouvellements, je m'engage à rembourser le bailleur si ' + (f.tenantName||'______') + ' n'y satisfait pas lui-même."';
+        out += '</div>';
+        out += '</div>';
+        // Zone signature caution
+        out += '<div style="margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:24px">';
+        out += '<div><p style="font-size:.78rem;font-weight:600;font-family:Inter,sans-serif;margin-bottom:4px">Mention manuscrite + Signature du garant</p>';
+        out += '<div style="border:1px solid #c0b0a0;border-radius:6px;height:80px;background:#fff"></div></div>';
+        out += '<div><p style="font-size:.78rem;font-weight:600;font-family:Inter,sans-serif;margin-bottom:4px">Date et lieu</p>';
+        out += '<div style="border:1px solid #c0b0a0;border-radius:6px;height:80px;background:#fff"></div></div>';
+        out += '</div>';
+        out += '</div>';
+      }
+
+      out += '</div>'; // page-break-before
+      return out;
+    }
+
+    function initSignatureCanvas(canvasId) {
       var canvas = document.getElementById(canvasId);
       if (!canvas) return;
       var ctx = canvas.getContext('2d');
@@ -518,6 +643,11 @@
 
       // Injecter dans la page
       document.getElementById('print-area').innerHTML = html;
+
+      // Ajouter les annexes après le contrat
+      var annexesDiv = document.createElement('div');
+      annexesDiv.innerHTML = generateAnnexes(f);
+      document.getElementById('page-wrapper').appendChild(annexesDiv);
 
       // Mettre à jour toolbar
       document.getElementById('toolbar-title').textContent = f.tenantName || 'Contrat de bail';
