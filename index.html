@@ -1479,9 +1479,22 @@ const WIZARD_STEPS_CONTENT = {
 };
 
 
+var _wizardDpeFile = null;
+
+function handleDpeFile(input) {
+  var file = input.files[0];
+  if (!file) return;
+  _wizardDpeFile = file;
+  var zone = document.getElementById('w-dpe-zone');
+  var preview = document.getElementById('w-dpe-preview');
+  if (zone) { zone.style.borderColor = 'var(--color-success)'; zone.style.background = 'var(--color-success-light)'; }
+  if (preview) preview.innerHTML = '<span style="font-size:20px">📄</span><span style="font-size:13px;font-weight:600">' + file.name + '</span><span style="font-size:11px;color:var(--color-text-secondary)">' + (file.size/1024).toFixed(0) + ' Ko</span>';
+}
+
 function openLeaseWizard() {
   _wizardStep = 1;
   _wizardData = {};
+  _wizardDpeFile = null;
   renderWizardStep();
   document.getElementById('lease-wizard-overlay').classList.remove('hidden');
 }
@@ -1535,6 +1548,7 @@ function collectStepData() {
       _wizardData.heatingType = g('w-heatingType');
       _wizardData.hotWaterType = g('w-hotWaterType');
       _wizardData.propertyCadastral = g('w-propertyCadastral');
+      // dpeFileUrl déjà stocké par handleDpeFile
       break;
     case 3:
       _wizardData.tenantName = g('w-tenantName');
@@ -1662,6 +1676,7 @@ async function createLease() {
         surface: _wizardData.surface || '',
         rooms: _wizardData.rooms || '',
         dpeClass: _wizardData.dpeClass || 'D',
+        dpeFileUrl: _wizardData.dpeFileUrl || '',
         keysCount: _wizardData.keysCount || '2',
         heatingType: _wizardData.heatingType || '',
         hotWaterType: _wizardData.hotWaterType || '',
