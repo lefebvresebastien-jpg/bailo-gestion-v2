@@ -1107,64 +1107,9 @@ function ouvrirContratV1(leaseId) {
 
   // Afficher un toast avec le nom du bail à sélectionner
   showToast('Dans la v1 : sélectionnez le bail "' + tenant + '" puis cliquez Apercu & PDF', '', 6000);
-}ync function ouvrirContratV1(leaseId) {
-  if (!leaseId) { showToast('Bail introuvable.', 'error'); return; }
-
-  showToast('Chargement du contrat…', '', 4000);
-
-  // Charger le bail complet depuis Supabase
-  const { data: lease, error } = await db
-    .from('leases')
-    .select('id, data, bailleur_id, updated_at')
-    .eq('id', leaseId)
-    .single();
-
-  if (error || !lease) {
-    showToast('Erreur lors du chargement du bail.', 'error');
-    return;
-  }
-
-  const f = lease.data?.formData || {};
-
-  // Construire un objet bail compatible avec le format v1
-  const bailV1 = {
-    id: lease.id,
-    bailleurId: lease.bailleur_id || 'default',
-    updatedAt: lease.updated_at,
-    formData: f,
-    messages: [],
-    rooms: [],
-    archived: false
-  };
-
-  // Injecter dans localStorage de la v1
-  // La v1 lit 'bailo-lease-library-v1' au démarrage
-  const LIBRARY_KEY = 'bailo-lease-library-v1';
-  const DRAFT_KEY = 'bailo-lease-draft-v2';
-
-  try {
-    // Lire la library existante (peut être vide si autre domaine)
-    let library = [];
-    try {
-      const raw = localStorage.getItem(LIBRARY_KEY);
-      if (raw) library = JSON.parse(raw);
-    } catch(e) {}
-
-    // Remplacer ou ajouter ce bail
-    const idx = library.findIndex(l => l.id === leaseId);
-    if (idx >= 0) library[idx] = bailV1;
-    else library.unshift(bailV1);
-
-    localStorage.setItem(LIBRARY_KEY, JSON.stringify(library));
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(bailV1));
-    localStorage.setItem('bailo-open-lease-id', leaseId);
-  } catch(e) {
-    console.warn('localStorage write failed:', e);
-  }
-
-  // Ouvrir la v1 — le bail sera déjà dans localStorage
-  window.open('https://gestion.bailo.pro/open-lease.html?lease=' + leaseId + '&view=preview', '_blank');
 }
+
+
 
 function renderLeaseDetail(lease) {
   const f = fd(lease);
