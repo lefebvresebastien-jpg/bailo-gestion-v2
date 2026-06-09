@@ -1342,6 +1342,16 @@ const WIZARD_STEPS_CONTENT = {
         '<input type="text" id="w-heatingType" value="' + (d.heatingType||'') + '" placeholder="Individuel gaz" /></div>' +
         '<div class="form-group"><label>Eau chaude</label>' +
         '<input type="text" id="w-hotWaterType" value="' + (d.hotWaterType||'') + '" placeholder="Individuelle" /></div>' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label>Fichier DPE (PDF ou image)</label>' +
+        '<div class="file-upload-zone" id="w-dpe-zone" onclick="document.getElementById('w-dpe-input').click()" style="' + (d.dpeFileUrl ? 'border-color:var(--color-success);background:var(--color-success-light)' : '') + '">' +
+          '<input type="file" id="w-dpe-input" style="display:none" accept=".pdf,.jpg,.jpeg,.png" onchange="handleDpeFile(this)" />' +
+          '<div id="w-dpe-preview">' + (d.dpeFileUrl ?
+            '<span style=\"font-size:20px\">📄</span><span style=\"font-size:13px;font-weight:600\">DPE joint</span>' :
+            '<span style=\"font-size:24px\">📎</span><span style=\"font-size:13px;color:var(--color-text-secondary)\">Joindre le fichier DPE</span>'
+          ) + '</div>' +
+        '</div>' +
       '</div>';
   },
 
