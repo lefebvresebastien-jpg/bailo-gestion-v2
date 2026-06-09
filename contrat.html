@@ -322,7 +322,106 @@
       '</div>';
     }
 
-    function initSignatureCanvas(canvasId) {
+
+    function generateEDL(f) {
+      var today = new Intl.DateTimeFormat('fr-FR').format(new Date());
+      var entryDate = f.effectiveDate ? formatDate(f.effectiveDate) : today;
+
+      var pieces = [];
+      var nbPieces = parseInt(f.rooms) || 0;
+
+      // Pièces standards selon le nombre de pièces
+      var pieceNames = ['Entrée / Couloir', 'Séjour / Salon', 'Chambre 1', 'Chambre 2',
+                        'Chambre 3', 'Cuisine', 'Salle de bain', 'WC', 'Balcon / Terrasse', 'Cave / Annexe'];
+      var piecesAffichees = nbPieces > 0
+        ? pieceNames.slice(0, Math.min(nbPieces + 2, pieceNames.length))
+        : ['Entrée', 'Séjour', 'Cuisine', 'Salle de bain', 'WC'];
+
+      var lignesPieces = piecesAffichees.map(function(nom) {
+        return '<tr>' +
+          '<td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem">' + nom + '</td>' +
+          '<td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem;color:#8a7060">À compléter</td>' +
+          '<td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem;color:#8a7060">À compléter</td>' +
+          '<td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem;min-width:120px"> </td>' +
+        '</tr>';
+      }).join('');
+
+      return '<div id="annex-preview" class="annex-preview">' +
+
+        // EDL Entrée
+        '<div style="margin-bottom:20px">' +
+          '<h5 style="font-size:.85rem;font-weight:700;font-family:Inter,sans-serif;margin-bottom:10px;color:#5a3a20">' +
+            '📋 État des lieux d'entrée — ' + entryDate +
+          '</h5>' +
+          '<p style="font-size:.8rem;color:#8a7060;margin-bottom:10px">Logement situé : ' + (f.propertyAddress || '—') +
+          ' — Surface : ' + (f.surface || '—') +
+          ' — ' + (f.rooms || '—') + ' pièce(s) — Étage : ' + (f.propertyFloor || '—') + '</p>' +
+
+          // Relevés compteurs
+          '<div style="margin-bottom:12px;padding:10px;background:#faf7f2;border-radius:8px;border:1px solid #e0d5c8">' +
+            '<p style="font-size:.8rem;font-weight:600;font-family:Inter,sans-serif;margin-bottom:6px">Relevés de compteurs à l'entrée</p>' +
+            '<table style="width:100%;border-collapse:collapse">' +
+              '<tr>' +
+                '<td style="padding:5px 10px;border:1px solid #e0d5c8;font-size:.8rem;font-weight:600;background:#f5f0e8">Compteur</td>' +
+                '<td style="padding:5px 10px;border:1px solid #e0d5c8;font-size:.8rem;font-weight:600;background:#f5f0e8">Index entrée</td>' +
+              '</tr>' +
+              '<tr><td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem">Électricité (kWh)</td><td style="padding:6px 10px;border:1px solid #e0d5c8;min-width:100px"> </td></tr>' +
+              '<tr><td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem">Eau froide (m³)</td><td style="padding:6px 10px;border:1px solid #e0d5c8"> </td></tr>' +
+              '<tr><td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem">Eau chaude (m³)</td><td style="padding:6px 10px;border:1px solid #e0d5c8"> </td></tr>' +
+              '<tr><td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem">Gaz (m³)</td><td style="padding:6px 10px;border:1px solid #e0d5c8"> </td></tr>' +
+            '</table>' +
+          '</div>' +
+
+          // Tableau des pièces
+          '<p style="font-size:.8rem;font-weight:600;font-family:Inter,sans-serif;margin-bottom:6px">État des pièces</p>' +
+          '<table style="width:100%;border-collapse:collapse">' +
+            '<tr>' +
+              '<th style="padding:5px 10px;border:1px solid #e0d5c8;font-size:.8rem;background:#f5f0e8;text-align:left">Pièce</th>' +
+              '<th style="padding:5px 10px;border:1px solid #e0d5c8;font-size:.8rem;background:#f5f0e8;text-align:left">État général</th>' +
+              '<th style="padding:5px 10px;border:1px solid #e0d5c8;font-size:.8rem;background:#f5f0e8;text-align:left">Observations</th>' +
+              '<th style="padding:5px 10px;border:1px solid #e0d5c8;font-size:.8rem;background:#f5f0e8;text-align:left">Photos</th>' +
+            '</tr>' +
+            lignesPieces +
+          '</table>' +
+
+          // Clés remises
+          '<div style="margin-top:10px;padding:8px 12px;background:#faf7f2;border-radius:6px;border:1px solid #e0d5c8">' +
+            '<p style="font-size:.8rem"><strong>Clés remises :</strong> ' + (f.keysCount || '2') + ' jeu(x)</p>' +
+          '</div>' +
+
+          // Signature EDL
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:16px">' +
+            '<div>' +
+              '<p style="font-size:.78rem;font-weight:600;font-family:Inter,sans-serif;margin-bottom:4px">Signature Bailleur</p>' +
+              '<div style="border:1px solid #c0b0a0;border-radius:6px;height:60px;background:#fff"></div>' +
+            '</div>' +
+            '<div>' +
+              '<p style="font-size:.78rem;font-weight:600;font-family:Inter,sans-serif;margin-bottom:4px">Signature Locataire</p>' +
+              '<div style="border:1px solid #c0b0a0;border-radius:6px;height:60px;background:#fff"></div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+
+        // Annexes légales
+        '<div style="margin-top:20px;padding:14px;background:#faf7f2;border-radius:8px;border:1px solid #e0d5c8">' +
+          '<h5 style="font-size:.85rem;font-weight:700;font-family:Inter,sans-serif;margin-bottom:10px;color:#5a3a20">' +
+            '📎 Annexes légales obligatoires' +
+          '</h5>' +
+          '<ul style="font-size:.82rem;line-height:1.8;padding-left:16px;color:#4a3728">' +
+            '<li>Notice d'information relative aux droits et obligations des locataires et des bailleurs (Décret n° 2015-587)</li>' +
+            '<li>Diagnostic de Performance Énergétique (DPE) — Classe ' + (f.dpeClass || '—') + '</li>' +
+            '<li>État des risques et pollutions (ERP) — établi à la date de signature</li>' +
+            '<li>Grille de vétusté (si applicable)</li>' +
+            (f.leaseType && f.leaseType.includes('meublé') ? '<li>Inventaire et état du mobilier (bail meublé)</li>' : '') +
+            (f.guarantorName ? '<li>Acte de cautionnement solidaire — ' + f.guarantorName + '</li>' : '') +
+            '<li>' + (f.annexesProvided || 'Documents remis selon liste convenue') + '</li>' +
+          '</ul>' +
+        '</div>' +
+
+      '</div>';
+    }
+
+        function initSignatureCanvas(canvasId) {
       var canvas = document.getElementById(canvasId);
       if (!canvas) return;
       var ctx = canvas.getContext('2d');
@@ -410,6 +509,12 @@
 
       // Ajouter la section signatures
       html = html + addSignatureSection(f);
+
+      // Remplir l'état des lieux
+      html = html.replace(
+        '<div id="annex-preview" class="annex-preview">\n            <div class="annex-room"><p>Aucun état des lieux renseigné.</p></div>\n          </div>',
+        generateEDL(f)
+      );
 
       // Injecter dans la page
       document.getElementById('print-area').innerHTML = html;
