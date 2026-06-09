@@ -501,8 +501,11 @@
             <h1 id="detail-title">Détail du bail</h1>
             <p class="page-sub" id="detail-sub"></p>
           </div>
-          <div style="display:flex;gap:8px;align-items:center">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <span id="detail-status-badge"></span>
+            <button class="btn-secondary" onclick="modifierBail(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
+              ✏️ Modifier
+            </button>
             <button class="btn-primary" id="btn-voir-contrat" onclick="ouvrirContratV1(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
               📄 Voir le contrat
             </button>
@@ -1095,6 +1098,78 @@ function openLeaseDetail(id) {
 
 var currentDetailLeaseId = null;
 
+function modifierBail(leaseId) {
+  if (!leaseId) return;
+  var lease = _allLeases.find(function(l){ return l.id === leaseId; });
+  if (!lease) { showToast('Bail introuvable.', 'error'); return; }
+
+  var f = fd(lease);
+  // Pré-remplir _wizardData avec les données existantes
+  _wizardData = {
+    landlordName: f.landlordName || '',
+    landlordRepresentative: f.landlordRepresentative || '',
+    landlordAddress: f.landlordAddress || '',
+    landlordEmail: f.landlordEmail || '',
+    signatureCity: f.signatureCity || '',
+    signatureDate: f.signatureDate || '',
+    effectiveDate: f.effectiveDate || '',
+    propertyAddress: f.propertyAddress || '',
+    leaseType: f.leaseType || 'Location vide',
+    surface: f.surface || '',
+    propertyFloor: f.propertyFloor || '',
+    rooms: f.rooms || '',
+    dpeClass: f.dpeClass || 'D',
+    keysCount: f.keysCount || '2',
+    heatingType: f.heatingType || '',
+    hotWaterType: f.hotWaterType || '',
+    propertyCadastral: f.propertyCadastral || '',
+    dpeFileUrl: f.dpeFileUrl || '',
+    tenantName: f.tenantName || '',
+    tenantDOB: f.tenantDOB || '',
+    tenantEmail: f.tenantEmail || '',
+    tenantPhone: f.tenantPhone || '',
+    tenantAddress: f.tenantAddress || '',
+    tenantIdDoc: f.tenantIdDoc || '',
+    guarantorName: f.guarantorName || '',
+    guarantorType: f.guarantorType || '',
+    guarantorAddress: f.guarantorAddress || '',
+    guarantorIncome: f.guarantorIncome || '',
+    rent: f.rent || '',
+    charges: f.charges || '',
+    deposit: f.deposit || '',
+    rentDueDay: f.rentDueDay || 'Le 1 de chaque mois',
+    duration: f.duration || '',
+    irlReference: f.irlReference || '',
+    chargesRegime: f.chargesRegime || '',
+    paymentTerms: f.paymentTerms || '',
+    clauseRentReview: f.clauseRentReview === 'on',
+    clauseResolutory: f.clauseResolutory === 'on',
+    clauseInsurance: f.clauseInsurance === 'on',
+    clauseMaintenance: f.clauseMaintenance === 'on',
+    clauseVisits: f.clauseVisits === 'on',
+    clauseNoSubletting: f.clauseNoSubletting === 'on',
+    clausePrimaryResidence: f.clausePrimaryResidence === 'on',
+    clauseNoTransformation: f.clauseNoTransformation === 'on',
+    clauseSolidarity: f.clauseSolidarity === 'on',
+    clauseLatePenalty: f.clauseLatePenalty === 'on',
+    specialClauses: f.specialClauses || '',
+    suspensiveConditions: f.suspensiveConditions || '',
+    annexesProvided: f.annexesProvided || '',
+  };
+
+  // Stocker l'ID pour la mise à jour
+  _wizardEditId = leaseId;
+  _wizardStep = 1;
+  _wizardDpeFile = null;
+  renderWizardStep();
+
+  // Changer le titre du wizard
+  document.querySelector('.wizard-header h2').textContent = 'Modifier le bail';
+  document.getElementById('wizard-next').textContent = _wizardStep === 6 ? 'Enregistrer' : 'Suivant →';
+
+  document.getElementById('lease-wizard-overlay').classList.remove('hidden');
+}
+
 function ouvrirContratV1(leaseId) {
   if (!leaseId) { showToast('Bail introuvable.', 'error'); return; }
   window.open('/contrat.html?lease=' + leaseId, '_blank');
@@ -1481,6 +1556,7 @@ const WIZARD_STEPS_CONTENT = {
 
 
 var _wizardDpeFile = null;
+var _wizardEditId = null;
 
 function buildDpeField(d) {
   var hasFile = d && d.dpeFileUrl;
@@ -1512,6 +1588,7 @@ function openLeaseWizard() {
   _wizardStep = 1;
   _wizardData = {};
   _wizardDpeFile = null;
+  _wizardEditId = null;
   renderWizardStep();
   document.getElementById('lease-wizard-overlay').classList.remove('hidden');
 }
@@ -1741,19 +1818,29 @@ async function createLease() {
     updated_at: new Date().toISOString(),
   };
 
-  const { error } = await db.from('leases').insert(payload);
+  var dbOp;
+  if (_wizardEditId) {
+    // Mise à jour
+    delete payload.id;
+    delete payload.bailleur_id;
+    dbOp = await db.from('leases').update(payload).eq('id', _wizardEditId);
+  } else {
+    // Création
+    dbOp = await db.from('leases').insert(payload);
+  }
 
-  if (error) {
-    console.error(error);
-    showToast('Erreur lors de la création : ' + error.message, 'error');
+  if (dbOp.error) {
+    console.error(dbOp.error);
+    showToast('Erreur : ' + dbOp.error.message, 'error');
     nextBtn.disabled = false;
-    nextBtn.textContent = 'Créer le bail';
+    nextBtn.textContent = _wizardEditId ? 'Enregistrer' : 'Creer le bail';
     return;
   }
 
   document.getElementById('lease-wizard-overlay').classList.add('hidden');
-  showToast('Bail créé avec succès !', 'success');
+  showToast(_wizardEditId ? 'Bail mis a jour !' : 'Bail cree avec succes !', 'success');
   _wizardData = {};
+  _wizardEditId = null;
 
   // Refresh
   loadLeases();
