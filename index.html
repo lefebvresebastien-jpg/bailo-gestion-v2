@@ -3790,12 +3790,21 @@ function closeQModal(event) {
   document.getElementById('qm-overlay').classList.add('hidden');
 }
 
-async function submitQModal() {
+function qmShowStep(n) {
+  document.getElementById('qm-step1').style.display = n === 1 ? '' : 'none';
+  document.getElementById('qm-step2').style.display = n === 2 ? '' : 'none';
+  document.getElementById('qm-back-btn').style.display = n === 2 ? '' : 'none';
+  document.getElementById('qm-title').textContent = n === 1 ? 'Envoyer une quittance' : 'Aperçu de la quittance';
+  document.getElementById('qm-submit').textContent = n === 1 ? 'Aperçu →' : '📤 Envoyer';
+  document.getElementById('qm-submit').onclick = n === 1 ? qmNextStep : submitQModal;
+}
+
+async function qmNextStep() {
+  // Valider le formulaire
   var leaseId = document.getElementById('qm-lease-select').value;
   var month = document.getElementById('qm-month').value;
   var rent = parseFloat(document.getElementById('qm-rent').value) || 0;
   var charges = parseFloat(document.getElementById('qm-charges').value) || 0;
-
   if (!leaseId) { showToast('Choisissez un bail.', 'error'); return; }
   if (!month) { showToast('Choisissez un mois.', 'error'); return; }
   if (!rent) { showToast('Le loyer est obligatoire.', 'error'); return; }
@@ -3804,15 +3813,44 @@ async function submitQModal() {
   if (!lease) return;
   var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
 
+  // Récupérer profil + signature
+  var sigRes = await db.from('settings').select('value').eq('key','landlord_profile').maybeSingle();
+  var profile = sigRes.data ? JSON.parse(sigRes.data.value) : {};
+  var sigBailleur = f.sig_bailleur || profile.sig_bailleur || '';
+
+  var moisLabel = month;
+  if (/^[0-9]{4}-[0-9]{2}$/.test(month)) {
+    var parts = month.split('-');
+    moisLabel = new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric'}).format(new Date(parts[0], parseInt(parts[1])-1, 1));
+  }
+  var total = rent + charges;
+  var html = genQuittanceHTML(f, moisLabel, rent, charges, total, sigBailleur, profile);
+
+  // Afficher dans l'iframe
+  var iframe = document.getElementById('qm-preview');
+  iframe.srcdoc = html;
+
+  qmShowStep(2);
+}
+
+async function submitQModal() {
+  var leaseId = document.getElementById('qm-lease-select').value;
+  var month = document.getElementById('qm-month').value;
+  var rent = parseFloat(document.getElementById('qm-rent').value) || 0;
+  var charges = parseFloat(document.getElementById('qm-charges').value) || 0;
+
+  var lease = _allLeases.find(function(l){ return l.id === leaseId; });
+  if (!lease) return;
+  var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
   var btn = document.getElementById('qm-submit');
   btn.disabled = true; btn.textContent = 'Envoi…';
-
   await _doQSend(lease, month, rent, charges);
-
-  btn.disabled = false; btn.textContent = 'Envoyer';
+  btn.disabled = false;
   document.getElementById('qm-overlay').classList.add('hidden');
+  qmShowStep(1);
   loadReceipts();
 }
+
 
 async function renvoyerQuittance(receiptId) {
   var receipt = (_allReceipts || []).find(function(r){ return r.id === receiptId; });
@@ -3853,7 +3891,7 @@ async function _doQSend(lease, month, rent, charges, isResend) {
 
   // Enregistrer dans messages
   if (!isResend) {
-    await db.from('messages').insert({
+    var insertRes = await db.from('messages').insert({
       lease_id: lease.id,
       bailleur_id: 'default',
       sender: 'Bailleur',
@@ -3862,13 +3900,14 @@ async function _doQSend(lease, month, rent, charges, isResend) {
       body: body,
       quittance_data: { mois: moisLabel, rent: rent, charges: charges, total: total }
     });
+    if (insertRes.error) console.error('Insert quittance:', insertRes.error.message);
   }
 
   // Envoyer via Edge Function
   if (f.tenantEmail && resendKey) {
-    await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
+    var sendRes = await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + resendKey },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0' },
       body: JSON.stringify({
         to: f.tenantEmail,
         subject: subject,
@@ -3876,7 +3915,11 @@ async function _doQSend(lease, month, rent, charges, isResend) {
         resend_api_key: resendKey
       })
     });
-    showToast('Quittance envoyée à ' + f.tenantEmail, 'success');
+    if (sendRes.ok) {
+      showToast('Quittance envoyée à ' + f.tenantEmail, 'success');
+    } else {
+      showToast('Enregistrée mais erreur envoi email (' + sendRes.status + ')', 'error');
+    }
   } else {
     showToast('Quittance enregistrée (email locataire manquant ou clé Resend non configurée).', 'info');
   }
@@ -3927,12 +3970,13 @@ document.addEventListener('DOMContentLoaded', () => {
   </script>
   <!-- MODAL QUITTANCE -->
   <div id="qm-overlay" class="modal-overlay hidden" onclick="closeQModal(event)">
-    <div class="modal-card" style="max-width:480px" onclick="event.stopPropagation()">
+    <div class="modal-card" style="max-width:640px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">
       <div class="wizard-header">
-        <h2>Envoyer une quittance</h2>
+        <h2 id="qm-title">Envoyer une quittance</h2>
         <button class="modal-close" onclick="closeQModal()">✕</button>
       </div>
-      <div style="padding:var(--space-xl);display:flex;flex-direction:column;gap:var(--space-md)">
+      <!-- Étape 1 : Formulaire -->
+      <div id="qm-step1" style="padding:var(--space-xl);display:flex;flex-direction:column;gap:var(--space-md)">
         <div class="form-group">
           <label>Bail / Locataire *</label>
           <select id="qm-lease-select" onchange="qmFillFromLease(this.value)">
@@ -3954,9 +3998,14 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
         </div>
       </div>
+      <!-- Étape 2 : Aperçu -->
+      <div id="qm-step2" style="display:none;padding:var(--space-md)">
+        <iframe id="qm-preview" style="width:100%;height:500px;border:1px solid var(--color-border);border-radius:var(--radius-md)"></iframe>
+      </div>
       <div class="wizard-footer">
+        <button class="btn-secondary" id="qm-back-btn" style="display:none" onclick="qmShowStep(1)">← Retour</button>
         <button class="btn-secondary" onclick="closeQModal()">Annuler</button>
-        <button class="btn-primary" id="qm-submit" onclick="submitQModal()">Envoyer</button>
+        <button class="btn-primary" id="qm-submit" onclick="qmNextStep()">Aperçu →</button>
       </div>
     </div>
   </div>
