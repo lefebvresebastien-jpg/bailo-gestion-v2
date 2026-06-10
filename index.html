@@ -2112,7 +2112,7 @@ async function deleteUnit(unitId) {
 // WIZARD LOT + BAIL
 // ============================================================
 var _lotWizardStep = 1;
-var _lotWizardData = _wizardData; // alias vers _wizardData
+var _lotWizardData = {}; // sera pointe sur _wizardData a l'ouverture du wizard
 var _lotWizardWithBail = false;
 var _lotWizardTotalSteps = 2; // 1=Lot, 2=Avec locataire?, puis bail si oui
 
