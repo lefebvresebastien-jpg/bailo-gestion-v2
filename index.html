@@ -2657,11 +2657,11 @@ function _selectTenant(idx) {
   if (t) selectExistingTenant(t);
 }
 function openLeaseWizard() {
-  _wizardStep = 2;  // Commencer directement au Bien
+  _wizardStep = 1;  // Commencer à l'étape Bailleur
   _wizardData = {};
   _wizardDpeFile = null;
   _wizardEditId = null;
-  // Pré-remplir profil bailleur automatiquement
+  // Pré-remplir profil bailleur depuis les Paramètres
   applyLandlordProfile(_wizardData);
   renderWizardStep();
   document.getElementById('lease-wizard-overlay').classList.remove('hidden');
@@ -2797,6 +2797,22 @@ async function wizardNext() {
   if (!validateStep()) return;
   collectStepData();
 
+  // Étape 1 (Bailleur) : sauvegarder le profil dans Supabase
+  if (_wizardStep === 1) {
+    var profile = {
+      landlordName: _wizardData.landlordName || '',
+      landlordRepresentative: _wizardData.landlordRepresentative || '',
+      landlordAddress: _wizardData.landlordAddress || '',
+      landlordEmail: _wizardData.landlordEmail || '',
+      signatureCity: _wizardData.signatureCity || ''
+    };
+    await db.from('settings').upsert({ key: 'landlord_profile', value: JSON.stringify(profile) }, { onConflict: 'key' });
+    _landlordProfile = profile;
+    // Mettre à jour les champs dans Paramètres si visibles
+    var fields = { landlordName: 's-landlordName', landlordRepresentative: 's-landlordRepresentative', landlordAddress: 's-landlordAddress', landlordEmail: 's-landlordEmail', signatureCity: 's-signatureCity' };
+    Object.keys(fields).forEach(function(f) { var el = document.getElementById(fields[f]); if (el) el.value = profile[f]; });
+  }
+
   if (_wizardStep < WIZARD_TOTAL_STEPS) {
     _wizardStep++;
     renderWizardStep();
@@ -2806,7 +2822,7 @@ async function wizardNext() {
 }
 
 function wizardBack() {
-  if (_wizardStep > 2) {  // Minimum step 2 (Bien) — step 1 Bailleur est caché
+  if (_wizardStep > 1) {
     _wizardStep--;
     renderWizardStep();
   }
