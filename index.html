@@ -2404,33 +2404,43 @@ const WIZARD_STEPS_CONTENT = {
   3: function() {
     var d = _wizardData;
 
-    // Si on vient de sélectionner un locataire existant, afficher directement le formulaire pré-rempli
-    // Sinon proposer le choix
-    var tenants = _allLeases
-      .filter(function(l){ return leaseTenantName(l) && leaseTenantName(l) !== '—'; })
-      .map(function(l){
-        var f = (l.data && l.data.formData) ? l.data.formData : {};
-        return { name: f.tenantName, email: f.tenantEmail, phone: f.tenantPhone, address: f.tenantAddress, dob: f.tenantDOB, idDoc: f.tenantIdDoc };
-      })
-      .filter(function(t, i, arr){ return t.name && arr.findIndex(function(x){ return x.name===t.name; })===i; });
+    // Récupérer les locataires existants depuis les baux
+    var seenNames = {};
+    var tenants = [];
+    _allLeases.forEach(function(l) {
+      var f = (l.data && l.data.formData) ? l.data.formData : {};
+      if (f.tenantName && !seenNames[f.tenantName]) {
+        seenNames[f.tenantName] = true;
+        tenants.push({ name: f.tenantName, email: f.tenantEmail||'', phone: f.tenantPhone||'', address: f.tenantAddress||'', dob: f.tenantDOB||'', idDoc: f.tenantIdDoc||'' });
+      }
+    });
 
-    var tenantCards = tenants.length > 0 ?
-      '<div style="margin-bottom:16px">' +
-      '<div style="font-size:12px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Locataires existants</div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
-      tenants.map(function(t){
-        return '<div onclick="selectExistingTenant(' + JSON.stringify(t).replace(/"/g,\'&quot;\') + ')" ' +
-          'style="padding:10px 12px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);cursor:pointer;transition:all 0.15s;' +
-          (d.tenantName===t.name ? 'border-color:var(--color-primary);background:var(--color-primary-light)' : 'background:var(--color-bg)') + '">' +
-          '<div style="font-size:13px;font-weight:600">' + t.name + '</div>' +
-          (t.email ? '<div style="font-size:11px;color:var(--color-text-secondary)">' + t.email + '</div>' : '') +
-          '</div>';
-      }).join('') +
-      '</div></div>' +
-      '<div style="font-size:12px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Ou nouveau locataire</div>'
-      : '';
+    // Stocker dans cache global
+    _tenantCache = {};
+    tenants.forEach(function(t, i){ _tenantCache[i] = t; });
+
+    var tenantCards = '';
+    if (tenants.length > 0) {
+      tenantCards = '<div style="margin-bottom:16px">' +
+        '<div style="font-size:11px;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Locataires existants — cliquez pour sélectionner</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+        tenants.map(function(t, i) {
+          var sel = d.tenantName === t.name;
+          return '<div onclick="_selectTenant(' + i + ')" style="padding:10px 12px;border:1.5px solid ' +
+            (sel ? 'var(--color-primary)' : 'var(--color-border)') +
+            ';border-radius:var(--radius-md);cursor:pointer;background:' +
+            (sel ? 'var(--color-primary-light)' : 'var(--color-bg)') + '">' +
+            '<div style="font-size:13px;font-weight:600">' + t.name + '</div>' +
+            (t.email ? '<div style="font-size:11px;color:var(--color-text-secondary)">' + t.email + '</div>' : '') +
+            '</div>';
+        }).join('') +
+        '</div></div>' +
+        '<div style="font-size:11px;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Ou nouveau locataire</div>';
+    }
 
     return '<div class="wizard-section-title">Le locataire</div>' +
+    tenantCards +
+    
     tenantCards +
       '<div class="form-row">' +
         '<div class="form-group"><label>Nom complet *</label>' +
