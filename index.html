@@ -1230,13 +1230,17 @@ async function loadDashboard() {
 }
 
 async function loadKPIs() {
-  const { data: leases } = await db.from('leases').select('id, data');
-  const all = leases || [];
+  const [leasesRes, propsRes] = await Promise.all([
+    db.from('leases').select('id, data'),
+    db.from('properties').select('id')
+  ]);
+  const all = leasesRes.data || [];
   const active = all.filter(l => leaseStatus(l) === 'active');
   const totalLoyer = active.reduce((sum, l) => sum + leaseRent(l), 0);
+  const nbProperties = (propsRes.data || []).length;
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  set('kpi-biens-val', all.length);
+  set('kpi-biens-val', nbProperties);
   set('kpi-baux-val', active.length);
   set('kpi-loyers-val', formatCurrency(totalLoyer));
 
