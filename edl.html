@@ -155,6 +155,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
     </div>
     <button class="btn btn-primary" onclick="saveEDL()">💾 Enregistrer</button>
     <button class="btn btn-secondary" onclick="validateEDL()">✅ Valider et signer</button>
+    <label class="btn btn-secondary" style="cursor:pointer" title="Importer un EDL depuis le fichier export Bailo v1">
+      ⬆ Import v1
+      <input type="file" accept=".json" style="display:none" onchange="importFromV1(this)">
+    </label>
   </div>
 
   <!-- Pièces -->
@@ -630,6 +634,77 @@ function showToast(msg) {
   t.style.display = 'block';
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.style.display = 'none', 3000);
+}
+
+// ============================================================
+// IMPORT DEPUIS V1
+// ============================================================
+async function importFromV1(input) {
+  const file = input.files[0];
+  if (!file) return;
+  showToast('Lecture du fichier...');
+
+  try {
+    const text = await file.text();
+    const backup = JSON.parse(text);
+
+    // Les EDL sont dans localStorage.library (leasesLibrary)
+    const library = backup.localStorage?.library || [];
+    if (!library.length) {
+      showToast('Aucun EDL trouvé dans ce fichier.');
+      return;
+    }
+
+    // Charger les baux Supabase pour faire le lien par ID
+    const { data: supaLeases } = await db.from('leases').select('id, data');
+    let imported = 0;
+
+    for (const localLease of library) {
+      if (!localLease.rooms || !localLease.rooms.length) continue;
+
+      // Trouver le bail correspondant dans Supabase par ID
+      const supaLease = supaLeases?.find(l => l.id === localLease.id);
+      if (!supaLease) continue;
+
+      // Construire les pièces pour edlEntry
+      const rooms = localLease.rooms.map(r => ({
+        id: r.id || ('r_' + Date.now() + '_' + Math.random().toString(36).slice(2)),
+        name: r.name || 'Pièce',
+        equipment: r.equipment || '',
+        floor: r.floor || '', walls: r.walls || '',
+        ceiling: r.ceiling || '', windows: r.windows || '',
+        observations: r.observations || '',
+        floorOut: r.floorOut || '', wallsOut: r.wallsOut || '',
+        ceilingOut: r.ceilingOut || '', windowsOut: r.windowsOut || '',
+        observationsOut: r.observationsOut || '',
+        photos: r.photos || [],
+        photosOut: r.photosOut || []
+      }));
+
+      // Sauvegarder dans leases.data.edlEntry
+      const currentData = supaLease.data || {};
+      const newData = {
+        ...currentData,
+        edlEntry: {
+          rooms: rooms,
+          savedAt: localLease.updatedAt || new Date().toISOString(),
+          importedFromV1: true
+        }
+      };
+
+      await db.from('leases').update({ data: newData }).eq('id', localLease.id);
+      imported++;
+    }
+
+    showToast(imported + ' EDL importé(s) depuis v1 ✅');
+    // Recharger si un bail est sélectionné
+    if (_currentLeaseId) loadEDL();
+
+  } catch(e) {
+    showToast('Erreur import: ' + e.message);
+    console.error(e);
+  }
+  input.value = '';
 }
 
 // Boot
