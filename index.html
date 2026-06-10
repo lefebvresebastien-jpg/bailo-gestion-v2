@@ -449,6 +449,10 @@
           <span class="nav-icon">📋</span>
           <span class="nav-label">Documents</span>
         </a>
+        <a href="edl.html" class="nav-item" target="_blank">
+          <span class="nav-icon">📋</span>
+          <span class="nav-label">EDL</span>
+        </a>
 
         <div class="nav-group-label">Mon compte</div>
 
@@ -597,6 +601,7 @@
             <button class="btn-secondary" onclick="modifierBail(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
               ✏️ Modifier
             </button>
+            <button class="btn-secondary" onclick="ouvrirEDL(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">📋 EDL</button>
             <button class="btn-primary" id="btn-voir-contrat" onclick="ouvrirContratV1(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
               📄 Voir le contrat
             </button>
@@ -1488,6 +1493,11 @@ function modifierBail(leaseId) {
   document.getElementById('wizard-next').textContent = _wizardStep === 6 ? 'Enregistrer' : 'Suivant →';
 
   document.getElementById('lease-wizard-overlay').classList.remove('hidden');
+}
+
+function ouvrirEDL(leaseId) {
+  if (!leaseId) return;
+  window.open('edl.html?lease=' + leaseId, '_blank');
 }
 
 function ouvrirContratV1(leaseId) {
