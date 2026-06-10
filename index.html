@@ -2453,6 +2453,9 @@ const WIZARD_STEPS_CONTENT = {
     tenants.forEach(function(t, i){ _tenantCache[i] = t; });
     var _currentTenantNames = tenants.map(function(t){return t.name;});
 
+    // Un locataire existant est-il sélectionné ?
+    var tenantSelected = tenants.some(function(t){ return t.name === d.tenantName; });
+
     var tenantCards = '';
     if (tenants.length > 0) {
       tenantCards = '<div style="margin-bottom:16px">' +
@@ -2463,17 +2466,19 @@ const WIZARD_STEPS_CONTENT = {
           return '<div onclick="_selectTenant(' + i + ')" style="padding:10px 12px;border:1.5px solid ' +
             (sel ? 'var(--color-primary)' : 'var(--color-border)') +
             ';border-radius:var(--radius-md);cursor:pointer;background:' +
-            (sel ? 'var(--color-primary-light)' : 'var(--color-bg)') + '">' +
+            (sel ? 'var(--color-primary-light)' : 'var(--color-bg)') + ';transition:all 0.15s">' +
             '<div style="font-size:13px;font-weight:600">' + t.name + '</div>' +
             (t.email ? '<div style="font-size:11px;color:var(--color-text-secondary)">' + t.email + '</div>' : '') +
+            (sel ? '<div style="font-size:11px;color:var(--color-primary);margin-top:4px;font-weight:600">✓ Sélectionné</div>' : '') +
             '</div>';
         }).join('') +
-        '</div></div>' +
-        '<div style="font-size:11px;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Ou nouveau locataire</div>';
+        '</div>' +
+        (tenantSelected ? '' : '<div style="font-size:11px;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.05em;margin:12px 0 8px">Ou nouveau locataire</div>') +
+        '</div>';
     }
 
-    return '<div class="wizard-section-title">Le locataire</div>' +
-    tenantCards +
+    // Si locataire existant sélectionné : masquer le formulaire manuel
+    var newTenantForm = tenantSelected ? '' :
       '<div class="form-row">' +
         '<div class="form-group"><label>Nom complet *</label>' +
         '<input type="text" id="w-tenantName" value="' + (d.tenantName||'') + '" placeholder="M. Jean Dupont" /></div>' +
@@ -2508,6 +2513,10 @@ const WIZARD_STEPS_CONTENT = {
         '<div class="form-group"><label>Revenus garant (€)</label>' +
         '<input type="number" id="w-guarantorIncome" value="' + (d.guarantorIncome||'') + '" placeholder="3000" /></div>' +
       '</div>';
+
+    return '<div class="wizard-section-title">Le locataire</div>' +
+      tenantCards +
+      newTenantForm;
   },
 
   4: function() {
