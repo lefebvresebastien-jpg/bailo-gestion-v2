@@ -478,20 +478,31 @@ async function handlePhotoUpload(files, roomId, side) {
       });
     }
   }
-  renderEDL();
-  await saveEDL(); // Sauvegarder automatiquement après upload
+  await saveEDL(); // Sauvegarder dans Supabase
+  renderEDL();     // Re-render avec les nouvelles photos
   showToast('Photos ajoutées et enregistrées ✅');
 }
 
 async function uploadPhoto(file, roomId, suffix) {
   try {
-    const ext = file.name.split('.').pop() || 'jpg';
-    const path = (_currentLeaseId || 'draft') + '/' + roomId + '/' + suffix + '_' + Date.now() + '.' + ext;
-    const { error } = await db.storage.from(EDL_BUCKET).upload(path, file, {upsert: true});
-    if (error) throw error;
-    const { data } = db.storage.from(EDL_BUCKET).getPublicUrl(path);
-    return {name: file.name, url: data.publicUrl};
-  } catch(e) { showToast('Erreur upload: ' + e.message); return null; }
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = (_currentLeaseId || 'draft') + '/' + roomId + '/' + suffix + '_' + Date.now() + '_' + safeName;
+    console.log('[EDL] Uploading to:', EDL_BUCKET, path);
+    const { data: upData, error } = await db.storage.from(EDL_BUCKET).upload(path, file, {upsert: true, cacheControl: '3600'});
+    if (error) {
+      console.error('[EDL] Upload error:', error);
+      showToast('Erreur upload: ' + error.message);
+      return null;
+    }
+    const { data: urlData } = db.storage.from(EDL_BUCKET).getPublicUrl(path);
+    console.log('[EDL] Upload OK, url:', urlData.publicUrl);
+    return {name: file.name, url: urlData.publicUrl};
+  } catch(e) {
+    console.error('[EDL] Upload exception:', e);
+    showToast('Erreur upload: ' + e.message);
+    return null;
+  }
 }
 
 async function removePhoto(roomId, idx, side) {
