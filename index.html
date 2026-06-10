@@ -2593,10 +2593,10 @@ function handleDpeFile(input) {
 }
 
 
+var _tenantCache = {};
+
 function selectExistingTenant(t) {
-  try {
-    var tenant = typeof t === 'string' ? JSON.parse(t.replace(/&quot;/g,'"')) : t;
-  } catch(e) { return; }
+  var tenant = t;
   _wizardData.tenantName = tenant.name || '';
   _wizardData.tenantEmail = tenant.email || '';
   _wizardData.tenantPhone = tenant.phone || '';
@@ -2604,6 +2604,11 @@ function selectExistingTenant(t) {
   _wizardData.tenantDOB = tenant.dob || '';
   _wizardData.tenantIdDoc = tenant.idDoc || '';
   renderWizardStep();
+}
+
+function _selectTenant(idx) {
+  var t = _tenantCache[idx];
+  if (t) selectExistingTenant(t);
 }
 function openLeaseWizard() {
   _wizardStep = 1;
