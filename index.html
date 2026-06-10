@@ -1526,7 +1526,7 @@ async function loadDetailQuittances(leaseId) {
   const el = document.getElementById('detail-quittances');
   if (!el) return;
   const { data, error } = await db.from('messages')
-    .select('id, kind, created_at, lease_id, quittance_data, subject, body')
+    .select('id, kind, created_at, lease_id, data, subject, body')
     .eq('lease_id', leaseId)
     .eq('kind', 'Quittance')
     .order('created_at', { ascending: false })
@@ -1535,7 +1535,7 @@ async function loadDetailQuittances(leaseId) {
   if (error || !data?.length) { el.innerHTML = emptyState('Aucune quittance.'); return; }
 
   el.innerHTML = data.map(m => {
-    const mois = m.quittance_data?.mois || m.subject || formatMonth(m.created_at);
+    const mois = m.data?.mois || m.subject || formatMonth(m.created_at);
     return `<div class="list-item">
       <div class="list-item-icon">🧾</div>
       <div class="list-item-body">
@@ -3628,7 +3628,7 @@ async function loadReceipts() {
   // Charger les quittances
   const { data: msgs, error } = await db
     .from('messages')
-    .select('id, kind, created_at, lease_id, quittance_data, subject, body')
+    .select('id, kind, created_at, lease_id, data, subject, body')
     .eq('kind', 'Quittance')
     .order('created_at', { ascending: false });
 
@@ -3686,8 +3686,8 @@ function renderReceiptsStats() {
   const thisMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
   const thisMo = _allReceipts.filter(r => r.created_at.startsWith(thisMonth));
   const total = _allReceipts.reduce((s, r) => {
-    const rent = parseFloat(r.quittance_data?.rent || 0);
-    const charges = parseFloat(r.quittance_data?.charges || 0);
+    const rent = parseFloat(r.data?.rent || 0);
+    const charges = parseFloat(r.data?.charges || 0);
     return s + rent + charges;
   }, 0);
 
@@ -3728,8 +3728,8 @@ function renderReceipts(receipts) {
     const address = lease ? leaseAddress(lease) : '';
     const mois = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' })
       .format(new Date(r.created_at));
-    const rent = parseFloat(r.quittance_data?.rent || 0);
-    const charges = parseFloat(r.quittance_data?.charges || 0);
+    const rent = parseFloat(r.data?.rent || 0);
+    const charges = parseFloat(r.data?.charges || 0);
     const total = rent + charges;
 
     return `<div class="list-item">
@@ -3858,9 +3858,9 @@ async function renvoyerQuittance(receiptId) {
   var lease = _receiptsLeases.find(function(l){ return l.id === receipt.lease_id; });
   if (!lease) { showToast('Bail introuvable.', 'error'); return; }
   var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
-  var month = receipt.quittance_data?.mois || new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric'}).format(new Date(receipt.created_at));
-  var rent = parseFloat(receipt.quittance_data?.rent || f.rent || 0);
-  var charges = parseFloat(receipt.quittance_data?.charges || f.charges || 0);
+  var month = receipt.data?.mois || new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric'}).format(new Date(receipt.created_at));
+  var rent = parseFloat(receipt.data?.rent || f.rent || 0);
+  var charges = parseFloat(receipt.data?.charges || f.charges || 0);
   await _doQSend(lease, month, rent, charges, true);
   showToast('Quittance renvoyée !', 'success');
 }
@@ -3891,15 +3891,16 @@ async function _doQSend(lease, month, rent, charges, isResend) {
 
   // Enregistrer dans messages
   if (!isResend) {
+    // Stocker dans data JSON car quittance_data peut ne pas exister
     var insertRes = await db.from('messages').insert({
       lease_id: lease.id,
       sender: 'Bailleur',
       kind: 'Quittance',
       subject: subject,
       body: body,
-      quittance_data: { mois: moisLabel, rent: rent, charges: charges, total: total }
+      data: { mois: moisLabel, rent: rent, charges: charges, total: total }
     });
-    if (insertRes.error) console.error('Insert quittance:', insertRes.error.message);
+    if (insertRes.error) { console.error('Insert quittance error:', JSON.stringify(insertRes.error)); showToast('Erreur enregistrement: ' + insertRes.error.message, 'error'); }
   }
 
   // Envoyer via Edge Function
