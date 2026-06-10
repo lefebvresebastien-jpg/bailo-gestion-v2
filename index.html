@@ -536,7 +536,10 @@
         <div id="properties-view-list">
           <div class="page-header">
             <div><h1>Biens</h1><p class="page-sub">Votre patrimoine immobilier</p></div>
-            <button class="btn-primary" onclick="openPropertyModal()">+ Ajouter un bien</button>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn-ghost" onclick="importFromLeases()" id="btn-import-leases" style="font-size:13px">⬆ Importer depuis mes baux</button>
+              <button class="btn-primary" onclick="openPropertyModal()">+ Ajouter un bien</button>
+            </div>
           </div>
           <div id="properties-list" class="properties-grid">
             <div class="list-loading">Chargement…</div>
@@ -1671,6 +1674,109 @@ const TYPE_BADGE = {
   'Indivision': 'badge-indivision',
   'SARL de famille': 'badge-sarl'
 };
+
+async function importFromLeases() {
+  var btn = document.getElementById('btn-import-leases');
+  btn.disabled = true;
+  btn.textContent = 'Import en cours...';
+
+  try {
+    // Récupérer les baux sans unit_id
+    var leasesRes = await db.from('leases').select('*').is('unit_id', null);
+    var leases = leasesRes.data || [];
+
+    if (leases.length === 0) {
+      showToast('Tous les baux sont déjà liés à un lot.', 'info');
+      btn.disabled = false; btn.textContent = '⬆ Importer depuis mes baux';
+      return;
+    }
+
+    // Regrouper par adresse → une propriété par adresse unique
+    var propMap = {}; // adresse → property_id
+    var created = { properties: 0, units: 0, linked: 0 };
+
+    for (var i = 0; i < leases.length; i++) {
+      var lease = leases[i];
+      var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+      var addr = (f.propertyAddress || '').trim();
+      if (!addr) addr = 'Adresse inconnue';
+
+      // Extraire ville si présente (ex: "12 rue X, 62620 Barlin" → ville = "Barlin")
+      var city = '';
+      var addrParts = addr.split(',');
+      if (addrParts.length > 1) {
+        var lastPart = addrParts[addrParts.length - 1].trim();
+        // Format "CP Ville" → extraire ville
+        var cityMatch = lastPart.match(/^\d{5}\s+(.+)$/);
+        city = cityMatch ? cityMatch[1] : lastPart;
+      }
+
+      // Créer la propriété si pas encore vue
+      if (!propMap[addr]) {
+        // Vérifier si une propriété avec cette adresse existe déjà
+        var existingProps = (_allProperties || []).filter(function(p) {
+          return (p.address || '') === addr || ((p.address||'') + (p.city ? ', ' + p.city : '')) === addr;
+        });
+
+        var propId;
+        if (existingProps.length > 0) {
+          propId = existingProps[0].id;
+        } else {
+          // Détecter le type depuis le nom bailleur (SCI → SCI, sinon Particulier)
+          var landlordName = f.landlordName || '';
+          var propType = landlordName.toUpperCase().includes('SCI') ? 'SCI' : 'Particulier';
+          var propRes = await db.from('properties').insert({
+            bailleur_id: 'default',
+            name: landlordName || addr,
+            type: propType,
+            address: addrParts[0].trim(),
+            city: city,
+            country: 'France'
+          }).select().single();
+          if (propRes.error) continue;
+          propId = propRes.data.id;
+          created.properties++;
+        }
+        propMap[addr] = propId;
+      }
+
+      // Créer le lot
+      var unitRes = await db.from('units').insert({
+        property_id: propMap[addr],
+        label: f.tenantName ? 'Lot - ' + f.tenantName : ('Lot ' + (i + 1)),
+        type: f.leaseType && f.leaseType.includes('meuble') ? 'Appartement meuble' : 'Appartement',
+        surface: f.surface || '',
+        floor: f.propertyFloor || '',
+        furnished: (f.leaseType || '').includes('meuble')
+      }).select().single();
+
+      if (unitRes.error) continue;
+      created.units++;
+
+      // Lier le bail au lot
+      await db.from('leases').update({ unit_id: unitRes.data.id }).eq('id', lease.id);
+      created.linked++;
+    }
+
+    // Recharger tout
+    var [propR, unitR, leaseR] = await Promise.all([
+      db.from('properties').select('*').eq('bailleur_id', 'default'),
+      db.from('units').select('*'),
+      db.from('leases').select('*')
+    ]);
+    _allProperties = propR.data || [];
+    _allUnits = unitR.data || [];
+    _allLeases = leaseR.data || [];
+
+    showToast(created.properties + ' bien(s) et ' + created.units + ' lot(s) créés, ' + created.linked + ' bail(x) liés !', 'success');
+    loadProperties();
+  } catch(e) {
+    showToast('Erreur import : ' + e.message, 'error');
+  }
+
+  btn.disabled = false;
+  btn.textContent = '⬆ Importer depuis mes baux';
+}
 
 async function loadProperties() {
   const el = document.getElementById('properties-list');
