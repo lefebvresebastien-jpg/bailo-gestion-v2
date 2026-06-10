@@ -924,17 +924,15 @@
         <button class="modal-close" onclick="closeLeaseWizard()">✕</button>
       </div>
       <div class="wizard-steps" id="wizard-steps">
-        <span class="step active" data-step="1">1 Bailleur</span>
+        <span class="step active" data-step="2">1 Bien</span>
         <span class="step-sep">›</span>
-        <span class="step" data-step="2">2 Bien</span>
+        <span class="step" data-step="3">2 Locataire</span>
         <span class="step-sep">›</span>
-        <span class="step" data-step="3">3 Locataire</span>
+        <span class="step" data-step="4">3 Conditions</span>
         <span class="step-sep">›</span>
-        <span class="step" data-step="4">4 Conditions</span>
+        <span class="step" data-step="5">4 Clauses</span>
         <span class="step-sep">›</span>
-        <span class="step" data-step="5">5 Clauses</span>
-        <span class="step-sep">›</span>
-        <span class="step" data-step="6">6 Confirmation</span>
+        <span class="step" data-step="6">5 Confirmation</span>
       </div>
       <div class="wizard-body" id="wizard-body"></div>
       <div class="wizard-footer">
@@ -1458,7 +1456,7 @@ function modifierBail(leaseId) {
 
   // Stocker l'ID pour la mise à jour
   _wizardEditId = leaseId;
-  _wizardStep = 1;
+  _wizardStep = 2;
   _wizardDpeFile = null;
   renderWizardStep();
 
@@ -2116,6 +2114,8 @@ function getLotWizardStepContent(step) {
   if (bailStep) {
     // Synchroniser _wizardData avec _lotWizardData
     _wizardData = _lotWizardData;
+    // Pré-remplir profil bailleur
+    applyLandlordProfile(_wizardData);
     // Pré-remplir adresse depuis la propriété courante
     if (!_wizardData.propertyAddress && _currentPropertyId) {
       var prop = _allProperties.find(function(p){ return p.id === _currentPropertyId; });
@@ -2653,11 +2653,11 @@ function _selectTenant(idx) {
   if (t) selectExistingTenant(t);
 }
 function openLeaseWizard() {
-  _wizardStep = 1;
+  _wizardStep = 2;  // Commencer directement au Bien
   _wizardData = {};
   _wizardDpeFile = null;
   _wizardEditId = null;
-  // Pré-remplir profil bailleur
+  // Pré-remplir profil bailleur automatiquement
   applyLandlordProfile(_wizardData);
   renderWizardStep();
   document.getElementById('lease-wizard-overlay').classList.remove('hidden');
@@ -2802,7 +2802,7 @@ async function wizardNext() {
 }
 
 function wizardBack() {
-  if (_wizardStep > 1) {
+  if (_wizardStep > 2) {  // Minimum step 2 (Bien) — step 1 Bailleur est caché
     _wizardStep--;
     renderWizardStep();
   }
