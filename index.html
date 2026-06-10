@@ -1752,8 +1752,8 @@ async function loadProperties() {
   _allProperties = propRes.data || [];
   _allUnits = unitRes.data || [];
 
-  // Enrichir les baux dans _allLeases si pas encore chargé
-  if (!_allLeases.length && leaseRes.data) _allLeases = leaseRes.data;
+  // Toujours recharger _allLeases pour avoir les unit_id a jour
+  if (leaseRes.data) _allLeases = leaseRes.data;
 
   if (!_allProperties.length) {
     el.innerHTML = '<div style="grid-column:1/-1;padding:48px;text-align:center;color:var(--color-text-secondary)">Aucun bien. <button class="btn-ghost" onclick="openPropertyModal()">Créer votre premier bien</button></div>';
