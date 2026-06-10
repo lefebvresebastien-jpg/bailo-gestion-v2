@@ -509,6 +509,9 @@
             <button class="btn-primary" id="btn-voir-contrat" onclick="ouvrirContratV1(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
               📄 Voir le contrat
             </button>
+            <button class="btn-secondary" onclick="supprimerBail(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px;color:var(--color-danger);border-color:var(--color-danger)">
+              🗑️ Supprimer
+            </button>
           </div>
         </div>
 
@@ -1097,6 +1100,27 @@ function openLeaseDetail(id) {
 }
 
 var currentDetailLeaseId = null;
+
+
+function supprimerBail(leaseId) {
+  if (!leaseId) return;
+  var lease = _allLeases.find(function(l){ return l.id === leaseId; });
+  var nom = lease ? leaseTenantName(lease) : 'ce bail';
+
+  if (!confirm('Supprimer le bail de ' + nom + ' ? Cette action est irreversible.')) return;
+
+  db.from('leases').delete().eq('id', leaseId).then(function(res) {
+    if (res.error) {
+      showToast('Erreur : ' + res.error.message, 'error');
+      return;
+    }
+    showToast('Bail supprime.', 'success');
+    // Revenir a la liste des baux
+    navigate('leases');
+    loadLeases();
+    loadDashboard();
+  });
+}
 
 function modifierBail(leaseId) {
   if (!leaseId) return;
