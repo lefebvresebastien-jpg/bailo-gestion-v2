@@ -854,6 +854,36 @@
       </div>
     </div>
   </div>
+
+  <!-- MODAL LIER BAIL -->
+  <div id="lier-bail-overlay" class="modal-overlay hidden" onclick="closeLierBail(event)">
+    <div class="modal-card" style="max-width:480px" onclick="event.stopPropagation()">
+      <div class="wizard-header">
+        <h2>Lier un bail existant</h2>
+        <button class="modal-close" onclick="closeLierBail()">✕</button>
+      </div>
+      <div style="padding:var(--space-xl)">
+        <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:var(--space-lg)">
+          Sélectionnez le bail existant à associer à ce lot. Le bail sera lié sans créer de doublon.
+        </p>
+        <div class="form-group">
+          <label>Lot</label>
+          <input type="text" id="lier-unit-name" disabled style="background:var(--color-bg)" />
+        </div>
+        <div class="form-group">
+          <label>Bail à lier *</label>
+          <select id="lier-bail-select" style="width:100%">
+            <option value="">— Choisir un bail —</option>
+          </select>
+        </div>
+        <div id="lier-bail-preview" style="display:none;margin-top:12px;padding:12px;background:var(--color-bg);border-radius:var(--radius-md);border:1px solid var(--color-border);font-size:13px"></div>
+      </div>
+      <div class="wizard-footer">
+        <button class="btn-secondary" onclick="closeLierBail()">Annuler</button>
+        <button class="btn-primary" onclick="submitLierBail()">Lier ce bail</button>
+      </div>
+    </div>
+  </div>
   <!-- LEASE WIZARD MODAL -->
   <div id="lease-wizard-overlay" class="modal-overlay hidden" onclick="closeLeaseWizard(event)">
     <div class="modal-card wizard-card" onclick="event.stopPropagation()">
@@ -1673,7 +1703,10 @@ function renderUnitsGrid(units) {
         <span>${occupied ? 'Actif' : 'Sans locataire'}</span>
         ${occupied
           ? '<button class="btn-ghost" style="font-size:11px" onclick="event.stopPropagation();openLeaseDetail(\'' + (_allLeases.find(l=>l.unit_id===u.id)||{}).id + '\')" >Voir le bail →</button>'
-          : '<button class="btn-ghost" style="font-size:11px" onclick="event.stopPropagation();openLeaseWizardForUnit(\'' + u.id + '\')">+ Créer un bail</button>'
+          : '<div style=\"display:flex;gap:6px\">' +
+            '<button class=\"btn-ghost\" style=\"font-size:11px\" onclick=\"event.stopPropagation();openLeaseWizardForUnit(\\'' + u.id + '\\')\">+ Nouveau bail</button>' +
+            '<button class=\"btn-ghost\" style=\"font-size:11px;color:var(--color-primary)\" onclick=\"event.stopPropagation();openLierBail(\\'' + u.id + '\\')\">🔗 Lier bail existant</button>' +
+            '</div>'
         }
       </div>
     </div>`;
@@ -2136,6 +2169,70 @@ async function submitLotWizard() {
   _allLeases = leaseR.data || [];
 
   if (_currentPropertyId) openPropertyDetail(_currentPropertyId);
+}
+
+
+// ============================================================
+// LIER BAIL EXISTANT À UN LOT
+// ============================================================
+var _lierUnitId = null;
+
+function openLierBail(unitId) {
+  _lierUnitId = unitId;
+  var unit = _allUnits.find(function(u){ return u.id === unitId; });
+  if (!unit) return;
+
+  document.getElementById('lier-unit-name').value = unit.label + ' — ' + (unit.type||'') + (unit.surface ? ' · ' + unit.surface : '');
+
+  // Remplir le select avec les baux sans unit_id
+  var unlinkedLeases = _allLeases.filter(function(l){ return !l.unit_id; });
+  var select = document.getElementById('lier-bail-select');
+  select.innerHTML = '<option value="">— Choisir un bail —</option>' +
+    unlinkedLeases.map(function(l) {
+      var tenant = leaseTenantName(l);
+      var addr = leaseAddress(l);
+      var loyer = formatCurrency(leaseRent(l));
+      return '<option value="' + l.id + '">' + tenant + ' — ' + addr + ' — ' + loyer + '/mois</option>';
+    }).join('');
+
+  select.onchange = function() {
+    var preview = document.getElementById('lier-bail-preview');
+    var leaseId = select.value;
+    if (!leaseId) { preview.style.display = 'none'; return; }
+    var lease = _allLeases.find(function(l){ return l.id === leaseId; });
+    if (!lease) return;
+    var f = fd(lease);
+    preview.style.display = 'block';
+    preview.innerHTML =
+      '<strong>' + leaseTenantName(lease) + '</strong><br>' +
+      '<span style="color:var(--color-text-secondary)">' + leaseAddress(lease) + '</span><br>' +
+      '<span>Loyer : ' + formatCurrency(leaseRent(lease)) + '/mois</span>' +
+      (f.effectiveDate ? ' · Depuis ' + formatDate(f.effectiveDate) : '');
+  };
+
+  document.getElementById('lier-bail-preview').style.display = 'none';
+  document.getElementById('lier-bail-overlay').classList.remove('hidden');
+}
+
+function closeLierBail(event) {
+  if (event && event.target !== document.getElementById('lier-bail-overlay')) return;
+  document.getElementById('lier-bail-overlay').classList.add('hidden');
+}
+
+async function submitLierBail() {
+  var leaseId = document.getElementById('lier-bail-select').value;
+  if (!leaseId) { showToast('Sélectionnez un bail.', 'error'); return; }
+
+  var res = await db.from('leases').update({ unit_id: _lierUnitId }).eq('id', leaseId);
+  if (res.error) { showToast('Erreur : ' + res.error.message, 'error'); return; }
+
+  showToast('Bail lié au lot !', 'success');
+  document.getElementById('lier-bail-overlay').classList.add('hidden');
+
+  // Recharger
+  var leaseR = await db.from('leases').select('*');
+  _allLeases = leaseR.data || [];
+  openPropertyDetail(_currentPropertyId);
 }
 
 // ============================================================
