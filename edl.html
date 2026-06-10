@@ -375,14 +375,14 @@ function renderRoom(room, idx, isExit) {
     </div>
   `).join('');
 
-  const photosEntry = room.photos.map((p, pi) => `
+  const photosEntry = (room.photos || []).filter(p => p && p.url && p.url.startsWith('http')).map((p, pi) => `
     <figure class="photo-thumb">
       <img src="${p.url}" alt="${p.name || 'Photo'}" onclick="openLightbox('${p.url}', '${p.name || ''}')">
       <span>${p.name || 'Entrée ' + (pi+1)}</span>
       <button class="photo-remove" onclick="removePhoto('${room.id}', ${pi}, 'entry')">✕</button>
     </figure>`).join('') || '<p style="font-size:.75rem;color:var(--ink-3)">Aucune photo</p>';
 
-  const photosExit = (room.photosOut || []).map((p, pi) => `
+  const photosExit = (room.photosOut || []).filter(p => p && p.url && p.url.startsWith('http')).map((p, pi) => `
     <figure class="photo-thumb">
       <img src="${p.url}" alt="${p.name || 'Photo'}" onclick="openLightbox('${p.url}', '${p.name || ''}')">
       <span>${p.name || 'Sortie ' + (pi+1)}</span>
