@@ -3893,7 +3893,6 @@ async function _doQSend(lease, month, rent, charges, isResend) {
   if (!isResend) {
     var insertRes = await db.from('messages').insert({
       lease_id: lease.id,
-      bailleur_id: 'default',
       sender: 'Bailleur',
       kind: 'Quittance',
       subject: subject,
