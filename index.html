@@ -700,9 +700,14 @@
             </div>
             <div class="messages-kind-filters">
               <button class="kind-filter active" data-kind="" onclick="setKindFilter('', this)">Tous</button>
-              <button class="kind-filter" data-kind="Renseignement" onclick="setKindFilter('Renseignement', this)">Renseignements</button>
-              <button class="kind-filter" data-kind="Incident" onclick="setKindFilter('Incident', this)">Incidents</button>
-              <button class="kind-filter" data-kind="Document" onclick="setKindFilter('Document', this)">Documents</button>
+              <button class="kind-filter" data-kind="Renseignement" onclick="setKindFilter('Renseignement', this)">💬 Chat</button>
+              <button class="kind-filter" data-kind="Incident" onclick="setKindFilter('Incident', this)">🚨 Incidents</button>
+              <button class="kind-filter" data-kind="Document" onclick="setKindFilter('Document', this)">📎 Docs</button>
+            </div>
+            <div style="padding:0 12px 8px">
+              <select id="msg-tenant-filter" onchange="filterMessages()" style="width:100%;padding:7px 10px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);font-size:12px;background:var(--color-bg);color:var(--color-text)">
+                <option value="">Tous les locataires</option>
+              </select>
             </div>
             <div id="messages-list" class="messages-conv-list">
               <div class="list-loading">Chargement…</div>
@@ -955,6 +960,13 @@
         </div>
         <div class="form-group">
           <label>Sujet</label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+            <button type="button" class="btn-ghost" style="font-size:11px;padding:3px 8px" onclick="document.getElementById('nm-subject').value='Assurance habitation — renouvellement'">🛡 Assurance</button>
+            <button type="button" class="btn-ghost" style="font-size:11px;padding:3px 8px" onclick="document.getElementById('nm-subject').value='Visite du logement'">🏠 Visite</button>
+            <button type="button" class="btn-ghost" style="font-size:11px;padding:3px 8px" onclick="document.getElementById('nm-subject').value='Travaux à prévoir'">🔧 Travaux</button>
+            <button type="button" class="btn-ghost" style="font-size:11px;padding:3px 8px" onclick="document.getElementById('nm-subject').value='Document à fournir'">📄 Document</button>
+            <button type="button" class="btn-ghost" style="font-size:11px;padding:3px 8px" onclick="document.getElementById('nm-subject').value='Congé — préavis'">📬 Congé</button>
+          </div>
           <input type="text" id="nm-subject" placeholder="Objet du message…" />
         </div>
         <div class="form-group">
@@ -3395,6 +3407,29 @@ async function submitNewMessage() {
   document.getElementById('new-message-overlay').classList.add('hidden');
   if (btn) { btn.disabled = false; btn.textContent = 'Envoyer'; }
 
+  // Envoyer email au locataire
+  const lse = _allLeases.find(l => l.id === leaseId);
+  const fd2 = (lse?.data?.formData) || {};
+  if (fd2.tenantEmail) {
+    const kRes = await db.from('settings').select('value').eq('key','resend_api_key').maybeSingle();
+    const rKey = kRes.data ? kRes.data.value : '';
+    if (rKey) {
+      const eHtml = '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">' +
+        '<div style="background:#1a2e1a;color:white;padding:16px 20px;border-radius:10px 10px 0 0">' +
+        '<h2 style="margin:0;font-size:1rem">🏠 ' + (kind === 'Incident' ? '🚨 ' : '') + 'Message de votre bailleur</h2></div>' +
+        '<div style="border:1px solid #e8e0d0;border-top:none;padding:20px;border-radius:0 0 10px 10px">' +
+        '<p><strong>Objet :</strong> ' + subject + '</p>' +
+        '<p>' + body.split('\n').join('<br>') + '</p>' +
+        '<p style="color:#666;font-size:.85rem;margin-top:16px">Cordialement,<br><strong>' + (fd2.landlordName || 'Votre bailleur') + '</strong></p>' +
+        '</div></div>';
+      await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0' },
+        body: JSON.stringify({ to: [fd2.tenantEmail], subject: subject, html: eHtml, resend_key: rKey })
+      });
+    }
+  }
+
   // Recharger et ouvrir le message
   await loadMessages();
   if (data) openMessage(data.id);
@@ -3489,6 +3524,7 @@ async function loadMessages() {
   }
 
   renderMessagesList(_allMessages);
+  populateTenantFilter();
 
   // Badge sur nav
   const unread = _allMessages.filter(m => m.status === 'en-attente' && m.sender === 'Locataire').length;
@@ -3508,15 +3544,33 @@ function setKindFilter(kind, btn) {
 
 function filterMessages() {
   const search = (document.getElementById('messages-search')?.value || '').toLowerCase();
+  const tenantFilter = document.getElementById('msg-tenant-filter')?.value || '';
   const filtered = _allMessages.filter(m => {
     const lease = _allLeases.find(l => l.id === m.lease_id);
     const tenant = lease ? leaseTenantName(lease).toLowerCase() : '';
     const subject = (m.subject || '').toLowerCase();
     const matchSearch = !search || tenant.includes(search) || subject.includes(search);
     const matchKind = !_currentKindFilter || m.kind === _currentKindFilter;
-    return matchSearch && matchKind;
+    const matchTenant = !tenantFilter || m.lease_id === tenantFilter;
+    return matchSearch && matchKind && matchTenant;
   });
   renderMessagesList(filtered);
+}
+
+function populateTenantFilter() {
+  var sel = document.getElementById('msg-tenant-filter');
+  if (!sel) return;
+  var seen = {};
+  var opts = '<option value="">Tous les locataires</option>';
+  _allMessages.forEach(function(m) {
+    if (!seen[m.lease_id]) {
+      seen[m.lease_id] = true;
+      var lease = _allLeases.find(function(l){ return l.id === m.lease_id; });
+      var name = lease ? leaseTenantName(lease) + ' — ' + leaseAddress(lease) : 'Inconnu';
+      opts += '<option value="' + m.lease_id + '">' + name + '</option>';
+    }
+  });
+  sel.innerHTML = opts;
 }
 
 function renderMessagesList(messages) {
@@ -3530,11 +3584,14 @@ function renderMessagesList(messages) {
     const icon = KIND_ICONS[m.kind] || '📌';
     const isUnread = m.status === 'en-attente' && m.sender === 'Locataire';
 
-    return `<div class="conv-item${_currentMessage?.id === m.id ? ' active' : ''}" onclick="openMessage('${m.id}')">
+    const address = lease ? leaseAddress(lease) : '';
+    const isIncident = m.kind === 'Incident';
+    return `<div class="conv-item${_currentMessage?.id === m.id ? ' active' : ''}" onclick="openMessage('${m.id}')" style="${isIncident && isUnread ? 'border-left:3px solid var(--color-danger)' : ''}">
       <div class="conv-icon kind-${m.kind}">${icon}</div>
       <div class="conv-body">
-        <div class="conv-tenant">${tenant}${isUnread ? ' <span style="width:7px;height:7px;background:var(--color-danger);border-radius:50%;display:inline-block;margin-left:4px"></span>' : ''}</div>
-        <div class="conv-subject">${m.subject || m.kind}</div>
+        <div class="conv-tenant" style="font-weight:${isUnread?'700':'500'}">${tenant}${isUnread ? ' <span style="width:7px;height:7px;background:var(--color-danger);border-radius:50%;display:inline-block;margin-left:4px"></span>' : ''}</div>
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:2px">${address}</div>
+        <div class="conv-subject" style="color:${isIncident?'var(--color-danger)':'inherit'}">${m.subject || m.kind}</div>
       </div>
       <div class="conv-meta">
         <div class="conv-date">${formatRelative(m.created_at)}</div>
@@ -3617,6 +3674,29 @@ async function sendReply(messageId) {
     .from('messages')
     .update({ replies: replies, status: 'traité' })
     .eq('id', messageId);
+
+  // Envoyer email au locataire
+  const lease = _allLeases.find(l => l.id === msg.lease_id);
+  const f = (lease?.data?.formData) || {};
+  if (f.tenantEmail) {
+    const sigRes = await db.from('settings').select('value').eq('key','resend_api_key').maybeSingle();
+    const resendKey = sigRes.data ? sigRes.data.value : '';
+    if (resendKey) {
+      const emailHtml = '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">' +
+        '<div style="background:#1a2e1a;color:white;padding:16px 20px;border-radius:10px 10px 0 0">' +
+        '<h2 style="margin:0;font-size:1rem">🏠 Message de votre bailleur</h2></div>' +
+        '<div style="border:1px solid #e8e0d0;border-top:none;padding:20px;border-radius:0 0 10px 10px">' +
+        '<p><strong>Objet :</strong> ' + (msg.subject || '') + '</p>' +
+        '<p>' + body.split('\n').join('<br>') + '</p>' +
+        '<p style="color:#666;font-size:.85rem;margin-top:16px">Cordialement,<br><strong>' + (f.landlordName || 'Votre bailleur') + '</strong></p>' +
+        '</div></div>';
+      await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0' },
+        body: JSON.stringify({ to: [f.tenantEmail], subject: 'Message de votre bailleur : ' + (msg.subject||''), html: emailHtml, resend_key: resendKey })
+      });
+    }
+  }
 
   if (error) {
     showToast('Erreur : ' + error.message, 'error');
