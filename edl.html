@@ -478,8 +478,9 @@ async function handlePhotoUpload(files, roomId, side) {
       });
     }
   }
-  showToast('Photos ajoutées !');
   renderEDL();
+  await saveEDL(); // Sauvegarder automatiquement après upload
+  showToast('Photos ajoutées et enregistrées ✅');
 }
 
 async function uploadPhoto(file, roomId, suffix) {
@@ -493,13 +494,15 @@ async function uploadPhoto(file, roomId, suffix) {
   } catch(e) { showToast('Erreur upload: ' + e.message); return null; }
 }
 
-function removePhoto(roomId, idx, side) {
+async function removePhoto(roomId, idx, side) {
   _rooms = _rooms.map(r => {
     if (r.id !== roomId) return r;
     if (side === 'entry') return {...r, photos: r.photos.filter((_,i) => i !== idx)};
     return {...r, photosOut: (r.photosOut||[]).filter((_,i) => i !== idx)};
   });
   renderEDL();
+  await saveEDL();
+  showToast('Photo supprimée ✅');
 }
 
 async function saveEDL() {
