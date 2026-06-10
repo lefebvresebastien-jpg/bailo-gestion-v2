@@ -2391,12 +2391,8 @@ const WIZARD_STEPS_CONTENT = {
         '<div class="form-group"><label>Ville de signature</label>' +
         '<input type="text" id="w-signatureCity" value="' + (d.signatureCity||'') + '" placeholder="Paris" /></div>' +
       '</div>' +
-      '<div class="form-row">' +
-        '<div class="form-group"><label>Date de signature</label>' +
-        '<input type="date" id="w-signatureDate" value="' + (d.signatureDate||'') + '" /></div>' +
-        '<div class="form-group"><label>Date de prise d\'effet *</label>' +
-        '<input type="date" id="w-effectiveDate" value="' + (d.effectiveDate||'') + '" /></div>' +
-      '</div>';
+      '<div class="form-group"><label>Date de prise d\'effet *</label>' +
+      '<input type="date" id="w-effectiveDate" value="' + (d.effectiveDate||'') + '" /></div>';
   },
 
   2: function() {
@@ -2549,7 +2545,9 @@ const WIZARD_STEPS_CONTENT = {
       '<select id="w-chargesRegime">' +
       '<option value="Provision sur charges avec regularisation annuelle"' + (!d.chargesRegime||d.chargesRegime.includes('Provision')?' selected':'') + '>Provision avec regularisation</option>' +
       '<option value="Forfait charges sans regularisation"' + (d.chargesRegime&&d.chargesRegime.includes('Forfait')?' selected':'') + '>Forfait sans regularisation</option>' +
-      '</select></div>';
+      '</select></div>' +
+      '<div class="form-group"><label>Date de signature du bail</label>' +
+      '<input type="date" id="w-signatureDate" value="' + (d.signatureDate||'') + '" /></div>';
   },
 
   5: function() {
