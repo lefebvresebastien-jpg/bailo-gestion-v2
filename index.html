@@ -2006,16 +2006,26 @@ async function deleteUnit(unitId) {
 // WIZARD LOT + BAIL
 // ============================================================
 var _lotWizardStep = 1;
-var _lotWizardData = {};
+var _lotWizardData = _wizardData; // alias vers _wizardData
 var _lotWizardWithBail = false;
 var _lotWizardTotalSteps = 2; // 1=Lot, 2=Avec locataire?, puis bail si oui
 
 function openLotWizard(propertyId) {
   _currentPropertyId = propertyId || _currentPropertyId;
   _lotWizardStep = 1;
-  _lotWizardData = {};
+  _wizardData = {};
+  _lotWizardData = _wizardData; // alias - meme objet
+  _wizardDpeFile = null;
+  _wizardEditId = null;
   _lotWizardWithBail = false;
   _lotWizardTotalSteps = 2;
+  // Pre-remplir bailleur depuis les Parametres
+  applyLandlordProfile(_wizardData);
+  // Pre-remplir adresse depuis la propriete
+  if (_currentPropertyId) {
+    var prop = _allProperties.find(function(p){ return p.id === _currentPropertyId; });
+    if (prop) _wizardData.propertyAddress = (prop.address||'') + (prop.city ? ', ' + prop.city : '');
+  }
   renderLotWizardStep();
   document.getElementById('lot-wizard-overlay').classList.remove('hidden');
 }
@@ -2117,8 +2127,7 @@ function getLotWizardStepContent(step) {
   var bailStepMap = {3: 1, 4: 3, 5: 4, 6: 5, 7: 6};
   var bailStep = bailStepMap[step];
   if (bailStep) {
-    // Synchroniser _wizardData avec _lotWizardData
-    _wizardData = _lotWizardData;
+    // _wizardData et _lotWizardData sont le meme objet
     // Pré-remplir profil bailleur
     applyLandlordProfile(_wizardData);
     // Pré-remplir adresse depuis la propriété courante
@@ -2128,9 +2137,9 @@ function getLotWizardStepContent(step) {
         _wizardData.propertyAddress = (prop.address||'') + (prop.city ? ', ' + prop.city : '');
       }
     }
-    if (!_wizardData.surface) _wizardData.surface = _lotWizardData.unitSurface || '';
-    if (!_wizardData.propertyFloor) _wizardData.propertyFloor = _lotWizardData.unitFloor || '';
-    if (!_wizardData.leaseType) _wizardData.leaseType = _lotWizardData.unitFurnished ? 'Location meublee' : 'Location vide';
+    if (!_wizardData.surface) _wizardData.surface = _wizardData.unitSurface || '';
+    if (!_wizardData.propertyFloor) _wizardData.propertyFloor = _wizardData.unitFloor || '';
+    if (!_wizardData.leaseType) _wizardData.leaseType = _wizardData.unitFurnished ? 'Location meublee' : 'Location vide';
     _wizardStep = bailStep;
     return WIZARD_STEPS_CONTENT[bailStep]();
   }
@@ -2161,8 +2170,7 @@ function collectLotWizardStep() {
     if (bailStep) {
       _wizardStep = bailStep;
       collectStepData(bailStep);
-      // Copier dans _lotWizardData
-      Object.assign(_lotWizardData, _wizardData);
+      // _wizardData et _lotWizardData sont le meme objet, rien a copier
     }
   }
   return true;
@@ -2195,12 +2203,12 @@ async function submitLotWizard() {
   // 1. Créer le lot
   var unitPayload = {
     property_id: _currentPropertyId,
-    label: _lotWizardData.unitLabel,
-    type: _lotWizardData.unitType || 'Appartement',
-    surface: _lotWizardData.unitSurface || '',
-    floor: _lotWizardData.unitFloor || '',
-    furnished: _lotWizardData.unitFurnished || false,
-    description: _lotWizardData.unitDescription || ''
+    label: _wizardData.unitLabel,
+    type: _wizardData.unitType || 'Appartement',
+    surface: _wizardData.unitSurface || '',
+    floor: _wizardData.unitFloor || '',
+    furnished: _wizardData.unitFurnished || false,
+    description: _wizardData.unitDescription || ''
   };
 
   var unitRes = await db.from('units').insert(unitPayload).select().single();
@@ -2686,7 +2694,7 @@ function selectExistingTenant(t) {
   // Synchroniser aussi _lotWizardData si on est dans le wizard lot
   var lotOverlay = document.getElementById('lot-wizard-overlay');
   if (lotOverlay && !lotOverlay.classList.contains('hidden')) {
-    fields.forEach(function(f){ _lotWizardData[f] = map[f]; });
+    // _lotWizardData === _wizardData, deja mis a jour
     renderLotWizardStep();
   } else {
     renderWizardStep();
