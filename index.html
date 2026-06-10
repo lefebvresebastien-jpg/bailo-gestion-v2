@@ -760,6 +760,14 @@
                   <input type="text" id="s-signatureCity" placeholder="Barlin" />
                 </div>
               </div>
+              <div class="form-group">
+                <label>Signature (dessinez votre signature)</label>
+                <canvas id="canvas-sig-bailleur" width="400" height="100" style="border:1.5px solid var(--color-border);border-radius:var(--radius-md);cursor:crosshair;background:#fff;width:100%;touch-action:none"></canvas>
+                <div style="display:flex;gap:8px;margin-top:6px">
+                  <button class="btn-ghost" onclick="clearSigCanvas()" style="font-size:12px">🗑 Effacer</button>
+                  <span id="sig-saved-indicator" style="font-size:12px;color:var(--color-success);display:none">✓ Signature enregistrée</span>
+                </div>
+              </div>
               <button class="btn-primary" onclick="saveSettings()" id="btn-save-settings" style="align-self:flex-start">💾 Enregistrer le profil</button>
               <div id="settings-saved-msg" style="display:none;padding:10px 14px;background:var(--color-success-light);border:1px solid var(--color-success);border-radius:var(--radius-md);font-size:13px;color:var(--color-success)">
                 ✅ Profil enregistré — pré-rempli dans tous les nouveaux baux.
@@ -1099,6 +1107,7 @@ function navigate(page, linkEl) {
   if (page === 'properties') loadProperties();
   if (page === 'tenants')    loadTenants();
   if (page === 'receipts')   loadReceipts();
+  if (page === 'settings')   { loadSettings(); setTimeout(initSigCanvas, 100); }
   if (page === 'messages')   loadMessages();
 }
 
@@ -1563,7 +1572,47 @@ async function loadSettings() {
         if (el && _landlordProfile[f]) el.value = _landlordProfile[f];
       });
     }
+    // Charger signature bailleur sur le canvas
+    if (_landlordProfile.sig_bailleur) {
+      var canvas = document.getElementById('canvas-sig-bailleur');
+      if (canvas) {
+        var img = new Image();
+        img.onload = function(){ var ctx = canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0); };
+        img.src = _landlordProfile.sig_bailleur;
+        document.getElementById('sig-saved-indicator').style.display = '';
+      }
+    }
   } catch(e) {}
+  // Init canvas dessin signature
+  initSigCanvas();
+}
+
+function initSigCanvas() {
+  var canvas = document.getElementById('canvas-sig-bailleur');
+  if (!canvas || canvas._sigInited) return;
+  canvas._sigInited = true;
+  var ctx = canvas.getContext('2d');
+  var drawing = false;
+  function getPos(e) {
+    var rect = canvas.getBoundingClientRect();
+    var scaleX = canvas.width / rect.width;
+    var scaleY = canvas.height / rect.height;
+    var src = e.touches ? e.touches[0] : e;
+    return { x: (src.clientX - rect.left) * scaleX, y: (src.clientY - rect.top) * scaleY };
+  }
+  canvas.addEventListener('mousedown', function(e){ drawing=true; var p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); });
+  canvas.addEventListener('mousemove', function(e){ if(!drawing) return; var p=getPos(e); ctx.lineTo(p.x,p.y); ctx.strokeStyle='#1a1a2e'; ctx.lineWidth=2; ctx.lineCap='round'; ctx.stroke(); });
+  canvas.addEventListener('mouseup', function(){ drawing=false; });
+  canvas.addEventListener('mouseleave', function(){ drawing=false; });
+  canvas.addEventListener('touchstart', function(e){ e.preventDefault(); drawing=true; var p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); });
+  canvas.addEventListener('touchmove', function(e){ e.preventDefault(); if(!drawing) return; var p=getPos(e); ctx.lineTo(p.x,p.y); ctx.strokeStyle='#1a1a2e'; ctx.lineWidth=2; ctx.lineCap='round'; ctx.stroke(); });
+  canvas.addEventListener('touchend', function(){ drawing=false; });
+}
+
+function clearSigCanvas() {
+  var canvas = document.getElementById('canvas-sig-bailleur');
+  if (canvas) canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
+  document.getElementById('sig-saved-indicator').style.display = 'none';
 }
 
 async function saveSettings() {
@@ -1575,6 +1624,16 @@ async function saveSettings() {
     signatureCity: (document.getElementById('s-signatureCity')||{}).value || '',
     landlordSiret: (document.getElementById('s-landlordSiret')||{}).value || ''
   };
+  // Capturer la signature du canvas
+  var canvas = document.getElementById('canvas-sig-bailleur');
+  if (canvas) {
+    var blank = document.createElement('canvas'); blank.width=canvas.width; blank.height=canvas.height;
+    var isBlank = canvas.toDataURL() === blank.toDataURL();
+    if (!isBlank) {
+      profile.sig_bailleur = canvas.toDataURL('image/png');
+      document.getElementById('sig-saved-indicator').style.display = '';
+    }
+  }
 
   if (!profile.landlordName) { showToast('Le nom est obligatoire.', 'error'); return; }
 
@@ -3775,7 +3834,8 @@ async function _doQSend(lease, month, rent, charges, isResend) {
   // Récupérer signature bailleur
   var sigRes = await db.from('settings').select('value').eq('key','landlord_profile').maybeSingle();
   var profile = sigRes.data ? JSON.parse(sigRes.data.value) : {};
-  var sigBailleur = profile.sig_bailleur || '';
+  // Priorité : sig_bailleur dans le bail > dans le profil settings
+  var sigBailleur = f.sig_bailleur || profile.sig_bailleur || '';
 
   // Récupérer clé Resend
   var keyRes = await db.from('settings').select('value').eq('key','resend_api_key').maybeSingle();
