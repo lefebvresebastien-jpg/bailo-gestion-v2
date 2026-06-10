@@ -726,9 +726,26 @@
       <!-- DOCUMENTS -->
       <section id="page-documents" class="page hidden">
         <div class="page-header">
-          <div><h1>Documents</h1><p class="page-sub">Contrats, EDL, annexes</p></div>
+          <div><h1>Documents</h1><p class="page-sub">Pièces par locataire</p></div>
+          <button class="btn-primary" onclick="openUploadDoc()">+ Ajouter un document</button>
         </div>
-        <p class="coming-soon">Gestionnaire de documents — bientôt disponible.</p>
+        <div class="filter-bar">
+          <select id="docs-lease-filter" onchange="filterDocs()" style="min-width:200px">
+            <option value="">Tous les locataires</option>
+          </select>
+          <select id="docs-type-filter" onchange="filterDocs()">
+            <option value="">Tous les types</option>
+            <option value="Assurance">🛡 Assurance</option>
+            <option value="Caution">🤝 Caution</option>
+            <option value="Facture">🧾 Facture</option>
+            <option value="Contrat">📋 Contrat</option>
+            <option value="EDL">🔑 État des lieux</option>
+            <option value="Autre">📎 Autre</option>
+          </select>
+        </div>
+        <div id="docs-grid" style="display:flex;flex-direction:column;gap:12px;margin-top:8px">
+          <div class="list-loading">Chargement…</div>
+        </div>
       </section>
 
       <!-- PARAMÈTRES -->
@@ -1137,6 +1154,7 @@ function navigate(page, linkEl) {
   if (page === 'tenants')    loadTenants();
   if (page === 'receipts')   loadReceipts();
   if (page === 'payments')   loadBanks();
+  if (page === 'documents')  loadDocuments();
   if (page === 'settings')   { loadSettings(); setTimeout(initSigCanvas, 100); loadBanks(); }
   if (page === 'messages')   loadMessages();
 }
@@ -4124,6 +4142,201 @@ function genQuittanceHTML(f, mois, rent, charges, total, sigBailleur, profile) {
 }
 
 // ============================================================
+// DOCUMENTS
+// ============================================================
+var _allDocs = [];
+var _udocFile = null;
+
+const DOC_ICONS = {
+  'Assurance': '🛡',
+  'Caution': '🤝',
+  'Facture': '🧾',
+  'Contrat': '📋',
+  'EDL': '🔑',
+  'Autre': '📎'
+};
+
+async function loadDocuments() {
+  var el = document.getElementById('docs-grid');
+  if (!el) return;
+  el.innerHTML = '<div class="list-loading">Chargement…</div>';
+
+  // Charger les docs depuis messages kind=Document
+  var res = await db.from('messages')
+    .select('id, lease_id, subject, kind, file_name, file_type, file_data, created_at, sender, body')
+    .eq('kind', 'Document')
+    .order('created_at', { ascending: false });
+
+  _allDocs = res.data || [];
+
+  // Charger les baux si besoin
+  if (!_allLeases.length) {
+    var lr = await db.from('leases').select('id, data');
+    _allLeases = lr.data || [];
+  }
+
+  // Remplir le filtre locataire
+  var sel = document.getElementById('docs-lease-filter');
+  if (sel) {
+    var seen = {};
+    var opts = '<option value="">Tous les locataires</option>';
+    _allDocs.forEach(function(d) {
+      if (!seen[d.lease_id]) {
+        seen[d.lease_id] = true;
+        var lease = _allLeases.find(function(l){ return l.id === d.lease_id; });
+        var name = lease ? leaseTenantName(lease) + ' — ' + leaseAddress(lease) : 'Inconnu';
+        opts += '<option value="' + d.lease_id + '">' + name + '</option>';
+      }
+    });
+    sel.innerHTML = opts;
+  }
+
+  renderDocs(_allDocs);
+}
+
+function filterDocs() {
+  var leaseFilter = (document.getElementById('docs-lease-filter')||{}).value || '';
+  var typeFilter = (document.getElementById('docs-type-filter')||{}).value || '';
+  var filtered = _allDocs.filter(function(d) {
+    var matchLease = !leaseFilter || d.lease_id === leaseFilter;
+    var matchType = !typeFilter || d.subject === typeFilter || (d.body && d.body.includes(typeFilter));
+    return matchLease && matchType;
+  });
+  renderDocs(filtered);
+}
+
+function renderDocs(docs) {
+  var el = document.getElementById('docs-grid');
+  if (!el) return;
+  if (!docs.length) {
+    el.innerHTML = '<div style="padding:48px;text-align:center;color:var(--color-text-secondary)">Aucun document. Ajoutez ou recevez des documents via la messagerie.</div>';
+    return;
+  }
+
+  // Grouper par locataire
+  var groups = {};
+  docs.forEach(function(d) {
+    var lease = _allLeases.find(function(l){ return l.id === d.lease_id; });
+    var key = d.lease_id;
+    if (!groups[key]) groups[key] = { lease: lease, docs: [] };
+    groups[key].docs.push(d);
+  });
+
+  el.innerHTML = Object.keys(groups).map(function(key) {
+    var g = groups[key];
+    var tenant = g.lease ? leaseTenantName(g.lease) : 'Inconnu';
+    var address = g.lease ? leaseAddress(g.lease) : '';
+    var docsHtml = g.docs.map(function(d) {
+      var icon = DOC_ICONS[d.subject] || '📎';
+      var ext = d.file_name ? d.file_name.split('.').pop().toUpperCase() : '';
+      var isImg = ['JPG','JPEG','PNG','GIF'].includes(ext);
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--color-bg-secondary);border-radius:var(--radius-md);margin-bottom:6px">' +
+        '<div style="display:flex;align-items:center;gap:10px">' +
+        '<span style="font-size:20px">' + icon + '</span>' +
+        '<div>' +
+        '<div style="font-size:13px;font-weight:600">' + (d.file_name || d.subject || 'Document') + '</div>' +
+        '<div style="font-size:11px;color:var(--color-text-secondary)">' + d.subject + ' · ' + (d.sender||'') + ' · ' + formatRelative(d.created_at) + '</div>' +
+        '</div></div>' +
+        '<div style="display:flex;gap:6px;align-items:center">' +
+        (ext ? '<span style="font-size:10px;font-weight:700;padding:2px 6px;background:var(--color-primary-light);color:var(--color-primary);border-radius:4px">' + ext + '</span>' : '') +
+        (d.file_data ? '<a href="' + d.file_data + '" target="_blank" class="btn-ghost" style="font-size:12px;text-decoration:none">⬇ Télécharger</a>' : '') +
+        '<button onclick="deleteDoc(&#39;' + d.id + '&#39;)" class="btn-ghost" style="font-size:12px;color:var(--color-danger)">&#10005;</button>' +
+        '</div></div>';
+    }).join('');
+
+    return '<div class="card" style="padding:var(--space-lg)">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">' +
+      '<div>' +
+      '<div style="font-size:14px;font-weight:700">👤 ' + tenant + '</div>' +
+      '<div style="font-size:12px;color:var(--color-text-secondary)">' + address + '</div>' +
+      '</div>' +
+      '<span style="font-size:12px;color:var(--color-text-secondary)">' + g.docs.length + ' document(s)</span>' +
+      '</div>' +
+      docsHtml +
+      '</div>';
+  }).join('');
+}
+
+async function deleteDoc(id) {
+  if (!confirm('Supprimer ce document ?')) return;
+  await db.from('messages').delete().eq('id', id);
+  _allDocs = _allDocs.filter(function(d){ return d.id !== id; });
+  filterDocs();
+  showToast('Document supprimé.', 'success');
+}
+
+function openUploadDoc() {
+  _udocFile = null;
+  var sel = document.getElementById('udoc-lease');
+  if (sel) {
+    var leases = _allLeases.filter(function(l){
+      var f = (l.data && l.data.formData) ? l.data.formData : {};
+      return f.tenantName;
+    });
+    sel.innerHTML = '<option value="">Choisir un locataire…</option>' +
+      leases.map(function(l){
+        return '<option value="' + l.id + '">' + leaseTenantName(l) + ' — ' + leaseAddress(l) + '</option>';
+      }).join('');
+  }
+  document.getElementById('udoc-name').value = '';
+  document.getElementById('udoc-file-preview').innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:20px"><span style="font-size:28px">📎</span><span style="font-size:13px;color:var(--color-text-secondary)">Cliquer pour choisir</span></div>';
+  document.getElementById('upload-doc-overlay').classList.remove('hidden');
+}
+
+function closeUploadDoc(event) {
+  if (event && event.target !== document.getElementById('upload-doc-overlay')) return;
+  document.getElementById('upload-doc-overlay').classList.add('hidden');
+  _udocFile = null;
+}
+
+function udocFileSelect(input) {
+  _udocFile = input.files[0];
+  if (!_udocFile) return;
+  var preview = document.getElementById('udoc-file-preview');
+  preview.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:12px"><span style="font-size:24px">📄</span><div><div style="font-size:13px;font-weight:600">' + _udocFile.name + '</div><div style="font-size:11px;color:var(--color-text-secondary)">' + (_udocFile.size/1024).toFixed(0) + ' Ko</div></div></div>';
+  // Auto-remplir le nom
+  var nameEl = document.getElementById('udoc-name');
+  if (nameEl && !nameEl.value) nameEl.value = _udocFile.name.replace(/\.[^.]+$/, '');
+}
+
+async function submitUploadDoc() {
+  var leaseId = (document.getElementById('udoc-lease')||{}).value;
+  var type = (document.getElementById('udoc-type')||{}).value;
+  var name = (document.getElementById('udoc-name')||{}).value.trim();
+
+  if (!leaseId) { showToast('Choisissez un locataire.', 'error'); return; }
+  if (!_udocFile) { showToast('Choisissez un fichier.', 'error'); return; }
+
+  var btn = document.getElementById('udoc-submit');
+  btn.disabled = true; btn.textContent = 'Upload…';
+
+  try {
+    var fileData = await uploadFileToSupabase(_udocFile, leaseId);
+    var res = await db.from('messages').insert({
+      lease_id: leaseId,
+      sender: 'Bailleur',
+      kind: 'Document',
+      subject: type,
+      body: name || _udocFile.name,
+      file_name: fileData.name,
+      file_type: fileData.type,
+      file_data: fileData.url,
+      status: 'traité',
+      replies: []
+    });
+    if (res.error) throw new Error(res.error.message);
+    showToast('Document enregistré !', 'success');
+    document.getElementById('upload-doc-overlay').classList.add('hidden');
+    await loadDocuments();
+  } catch(e) {
+    showToast('Erreur : ' + e.message, 'error');
+  }
+
+  btn.disabled = false; btn.textContent = 'Enregistrer';
+  _udocFile = null;
+}
+
+// ============================================================
 // MES BANQUES
 // ============================================================
 var _banks = [];
@@ -4216,6 +4429,54 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
   </script>
+  <!-- MODAL UPLOAD DOCUMENT -->
+  <div id="upload-doc-overlay" class="modal-overlay hidden" onclick="closeUploadDoc(event)">
+    <div class="modal-card" style="max-width:480px" onclick="event.stopPropagation()">
+      <div class="wizard-header">
+        <h2>Ajouter un document</h2>
+        <button class="modal-close" onclick="closeUploadDoc()">✕</button>
+      </div>
+      <div style="padding:var(--space-xl);display:flex;flex-direction:column;gap:var(--space-md)">
+        <div class="form-group">
+          <label>Locataire / Bail *</label>
+          <select id="udoc-lease">
+            <option value="">Choisir un locataire…</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Type de document *</label>
+          <select id="udoc-type">
+            <option value="Assurance">🛡 Assurance habitation</option>
+            <option value="Caution">🤝 Caution / Garant</option>
+            <option value="Facture">🧾 Facture travaux</option>
+            <option value="Contrat">📋 Contrat / Bail</option>
+            <option value="EDL">🔑 État des lieux</option>
+            <option value="Autre">📎 Autre</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Nom du document</label>
+          <input type="text" id="udoc-name" placeholder="Assurance 2025, Caution Dupont..." />
+        </div>
+        <div class="form-group">
+          <label>Fichier *</label>
+          <div class="file-upload-zone" id="udoc-file-zone" onclick="document.getElementById('udoc-file-input').click()" style="cursor:pointer">
+            <input type="file" id="udoc-file-input" style="display:none" onchange="udocFileSelect(this)" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx" />
+            <div id="udoc-file-preview" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:20px">
+              <span style="font-size:28px">📎</span>
+              <span style="font-size:13px;color:var(--color-text-secondary)">Cliquer pour choisir</span>
+              <span style="font-size:11px;color:var(--color-text-tertiary)">PDF, Word, Excel, Image</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="wizard-footer">
+        <button class="btn-secondary" onclick="closeUploadDoc()">Annuler</button>
+        <button class="btn-primary" id="udoc-submit" onclick="submitUploadDoc()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL QUITTANCE -->
   <div id="qm-overlay" class="modal-overlay hidden" onclick="closeQModal(event)">
     <div class="modal-card" style="max-width:640px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">
