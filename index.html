@@ -661,6 +661,7 @@
       <section id="page-receipts" class="page hidden">
         <div class="page-header">
           <div><h1>Quittances</h1><p class="page-sub">Historique des quittances émises</p></div>
+          <button class="btn-primary" onclick="openQModal()">+ Envoyer une quittance</button>
         </div>
         <div class="filter-bar">
           <select id="receipts-lease-filter" onchange="filterReceipts()">
@@ -3681,9 +3682,170 @@ function renderReceipts(receipts) {
       <div class="list-item-right">
         ${total > 0 ? `<div class="list-item-amount">${formatCurrency(total)}</div>` : ''}
         <div class="list-item-date">${formatRelative(r.created_at)}</div>
+        <button class="btn-ghost" style="font-size:11px;margin-top:4px" onclick="event.stopPropagation();renvoyerQuittance('${r.id}')">↩ Renvoyer</button>
       </div>
     </div>`;
   }).join('');
+}
+
+// ============================================================
+// QUITTANCES — Envoi
+// ============================================================
+var _qModalLeaseId = null;
+
+function openQModal(leaseId) {
+  _qModalLeaseId = leaseId || null;
+  // Remplir le select baux
+  var select = document.getElementById('qm-lease-select');
+  if (!select) return;
+  var leases = _allLeases.filter(function(l){
+    var f = (l.data && l.data.formData) ? l.data.formData : {};
+    return f.tenantName && f.tenantEmail;
+  });
+  select.innerHTML = '<option value="">-- Choisir un bail --</option>' +
+    leases.map(function(l){
+      var f = l.data.formData;
+      return '<option value="' + l.id + '"' + (l.id === leaseId ? ' selected' : '') + '>' +
+        f.tenantName + ' — ' + (f.propertyAddress || '') + '</option>';
+    }).join('');
+  // Pre-remplir mois courant
+  var now = new Date();
+  document.getElementById('qm-month').value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2,'0');
+  // Si bail fourni, auto-remplir loyer/charges
+  if (leaseId) qmFillFromLease(leaseId);
+  document.getElementById('qm-overlay').classList.remove('hidden');
+}
+
+function qmFillFromLease(leaseId) {
+  var lease = _allLeases.find(function(l){ return l.id === leaseId; });
+  if (!lease) return;
+  var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+  var rentEl = document.getElementById('qm-rent');
+  var chargesEl = document.getElementById('qm-charges');
+  if (rentEl && f.rent) rentEl.value = f.rent;
+  if (chargesEl) chargesEl.value = f.charges || '0';
+}
+
+function closeQModal(event) {
+  if (event && event.target !== document.getElementById('qm-overlay')) return;
+  document.getElementById('qm-overlay').classList.add('hidden');
+}
+
+async function submitQModal() {
+  var leaseId = document.getElementById('qm-lease-select').value;
+  var month = document.getElementById('qm-month').value;
+  var rent = parseFloat(document.getElementById('qm-rent').value) || 0;
+  var charges = parseFloat(document.getElementById('qm-charges').value) || 0;
+
+  if (!leaseId) { showToast('Choisissez un bail.', 'error'); return; }
+  if (!month) { showToast('Choisissez un mois.', 'error'); return; }
+  if (!rent) { showToast('Le loyer est obligatoire.', 'error'); return; }
+
+  var lease = _allLeases.find(function(l){ return l.id === leaseId; });
+  if (!lease) return;
+  var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+
+  var btn = document.getElementById('qm-submit');
+  btn.disabled = true; btn.textContent = 'Envoi…';
+
+  await _doQSend(lease, month, rent, charges);
+
+  btn.disabled = false; btn.textContent = 'Envoyer';
+  document.getElementById('qm-overlay').classList.add('hidden');
+  loadReceipts();
+}
+
+async function renvoyerQuittance(receiptId) {
+  var receipt = (_allReceipts || []).find(function(r){ return r.id === receiptId; });
+  if (!receipt) { showToast('Quittance introuvable.', 'error'); return; }
+  var lease = _receiptsLeases.find(function(l){ return l.id === receipt.lease_id; });
+  if (!lease) { showToast('Bail introuvable.', 'error'); return; }
+  var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+  var month = receipt.quittance_data?.mois || new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric'}).format(new Date(receipt.created_at));
+  var rent = parseFloat(receipt.quittance_data?.rent || f.rent || 0);
+  var charges = parseFloat(receipt.quittance_data?.charges || f.charges || 0);
+  await _doQSend(lease, month, rent, charges, true);
+  showToast('Quittance renvoyée !', 'success');
+}
+
+async function _doQSend(lease, month, rent, charges, isResend) {
+  var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+  var total = rent + charges;
+
+  // Récupérer signature bailleur
+  var sigRes = await db.from('settings').select('value').eq('key','landlord_profile').maybeSingle();
+  var profile = sigRes.data ? JSON.parse(sigRes.data.value) : {};
+  var sigBailleur = profile.sig_bailleur || '';
+
+  // Récupérer clé Resend
+  var keyRes = await db.from('settings').select('value').eq('key','resend_api_key').maybeSingle();
+  var resendKey = keyRes.data ? keyRes.data.value : '';
+
+  var moisLabel = month;
+  // Si format YYYY-MM, convertir en "janvier 2025"
+  if (/^\d{4}-\d{2}$/.test(month)) {
+    var parts = month.split('-');
+    moisLabel = new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric'}).format(new Date(parts[0], parseInt(parts[1])-1, 1));
+  }
+
+  var subject = 'Quittance de loyer — ' + moisLabel;
+  var body = genQuittanceHTML(f, moisLabel, rent, charges, total, sigBailleur, profile);
+
+  // Enregistrer dans messages
+  if (!isResend) {
+    await db.from('messages').insert({
+      lease_id: lease.id,
+      bailleur_id: 'default',
+      sender: 'Bailleur',
+      kind: 'Quittance',
+      subject: subject,
+      body: body,
+      quittance_data: { mois: moisLabel, rent: rent, charges: charges, total: total }
+    });
+  }
+
+  // Envoyer via Edge Function
+  if (f.tenantEmail && resendKey) {
+    await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + resendKey },
+      body: JSON.stringify({
+        to: f.tenantEmail,
+        subject: subject,
+        html: body,
+        resend_api_key: resendKey
+      })
+    });
+    showToast('Quittance envoyée à ' + f.tenantEmail, 'success');
+  } else {
+    showToast('Quittance enregistrée (email locataire manquant ou clé Resend non configurée).', 'info');
+  }
+}
+
+function genQuittanceHTML(f, mois, rent, charges, total, sigBailleur, profile) {
+  var bailleur = profile.landlordName || f.landlordName || '';
+  var adresseBailleur = profile.landlordAddress || f.landlordAddress || '';
+  var today = new Intl.DateTimeFormat('fr-FR').format(new Date());
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' +
+    'body{font-family:Arial,sans-serif;font-size:14px;color:#333;max-width:600px;margin:40px auto;padding:0 20px}' +
+    'h1{font-size:18px;text-align:center;margin-bottom:24px}' +
+    '.bloc{border:1px solid #ddd;border-radius:6px;padding:16px;margin-bottom:16px}' +
+    '.row{display:flex;justify-content:space-between;margin-bottom:6px}' +
+    '.total{font-weight:bold;font-size:16px;border-top:2px solid #333;padding-top:8px;margin-top:8px}' +
+    '.sig{margin-top:32px;text-align:right;font-size:12px;color:#666}' +
+    '</style></head><body>' +
+    '<h1>QUITTANCE DE LOYER — ' + mois.toUpperCase() + '</h1>' +
+    '<div class="bloc"><strong>Bailleur :</strong> ' + bailleur + '<br>' + adresseBailleur + '</div>' +
+    '<div class="bloc"><strong>Locataire :</strong> ' + (f.tenantName||'') + '<br>' + (f.propertyAddress||'') + '</div>' +
+    '<div class="bloc">' +
+    '<div class="row"><span>Loyer hors charges</span><span>' + rent.toFixed(2) + ' €</span></div>' +
+    (charges > 0 ? '<div class="row"><span>Charges</span><span>' + charges.toFixed(2) + ' €</span></div>' : '') +
+    '<div class="row total"><span>Total réglé</span><span>' + total.toFixed(2) + ' €</span></div>' +
+    '</div>' +
+    '<p style="font-size:12px;margin-top:16px">Je soussigné(e) <strong>' + bailleur + '</strong>, bailleur du logement désigné ci-dessus, déclare avoir reçu de <strong>' + (f.tenantName||'') + '</strong> la somme de <strong>' + total.toFixed(2) + ' €</strong> au titre du loyer et des charges du mois de <strong>' + mois + '</strong>, et lui en donne quittance.</p>' +
+    '<div class="sig">Fait le ' + today + (profile.signatureCity ? ', à ' + profile.signatureCity : '') + '<br>' +
+    (sigBailleur ? '<img src="' + sigBailleur + '" style="max-height:60px;margin-top:8px" />' : 'Signature bailleur') +
+    '</div></body></html>';
 }
 
 // ============================================================
@@ -3703,5 +3865,41 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
   </script>
+  <!-- MODAL QUITTANCE -->
+  <div id="qm-overlay" class="modal-overlay hidden" onclick="closeQModal(event)">
+    <div class="modal-card" style="max-width:480px" onclick="event.stopPropagation()">
+      <div class="wizard-header">
+        <h2>Envoyer une quittance</h2>
+        <button class="modal-close" onclick="closeQModal()">✕</button>
+      </div>
+      <div style="padding:var(--space-xl);display:flex;flex-direction:column;gap:var(--space-md)">
+        <div class="form-group">
+          <label>Bail / Locataire *</label>
+          <select id="qm-lease-select" onchange="qmFillFromLease(this.value)">
+            <option value="">-- Choisir un bail --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Mois concerné *</label>
+          <input type="month" id="qm-month" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Loyer HC (€) *</label>
+            <input type="number" id="qm-rent" placeholder="700" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label>Charges (€)</label>
+            <input type="number" id="qm-charges" value="0" step="0.01" />
+          </div>
+        </div>
+      </div>
+      <div class="wizard-footer">
+        <button class="btn-secondary" onclick="closeQModal()">Annuler</button>
+        <button class="btn-primary" id="qm-submit" onclick="submitQModal()">Envoyer</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>
