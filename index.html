@@ -435,7 +435,7 @@
         </a>
         <a href="#" class="nav-item" data-page="payments" onclick="navigate('payments',this)">
           <span class="nav-icon">💶</span>
-          <span class="nav-label">Paiements</span>
+          <span class="nav-label">Banques</span>
         </a>
 
         <div class="nav-group-label">Communication</div>
@@ -680,9 +680,10 @@
       <!-- PAIEMENTS -->
       <section id="page-payments" class="page hidden">
         <div class="page-header">
-          <div><h1>Paiements</h1><p class="page-sub">Suivi des encaissements</p></div>
+          <div><h1>Mes banques</h1><p class="page-sub">Accès rapide à vos espaces bancaires</p></div>
         </div>
-        <p class="coming-soon">Module paiements — bientôt disponible.</p>
+        <div id="banks-shortcuts" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:8px"></div>
+        <p style="font-size:12px;color:var(--color-text-secondary);margin-top:16px">Gérez vos banques dans <a href="#" onclick="navigate('settings')" style="color:var(--color-primary)">Paramètres</a>.</p>
       </section>
 
       <!-- MESSAGES -->
@@ -772,6 +773,22 @@
               <div id="settings-saved-msg" style="display:none;padding:10px 14px;background:var(--color-success-light);border:1px solid var(--color-success);border-radius:var(--radius-md);font-size:13px;color:var(--color-success)">
                 ✅ Profil enregistré — pré-rempli dans tous les nouveaux baux.
               </div>
+            </div>
+          </div>
+          <!-- Mes banques -->
+          <div class="card" style="padding:var(--space-xl);margin-bottom:var(--space-lg)">
+            <h3 style="font-size:14px;font-weight:700;margin-bottom:var(--space-lg);padding-bottom:8px;border-bottom:1px solid var(--color-border)">🏦 Mes banques</h3>
+            <div id="banks-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
+            <div style="display:flex;gap:8px;align-items:flex-end">
+              <div class="form-group" style="flex:1;margin:0">
+                <label>Nom de la banque</label>
+                <input type="text" id="bank-name-input" placeholder="Crédit Agricole, Boursorama..." />
+              </div>
+              <div class="form-group" style="flex:2;margin:0">
+                <label>URL de connexion</label>
+                <input type="url" id="bank-url-input" placeholder="https://www.credit-agricole.fr/..." />
+              </div>
+              <button class="btn-primary" onclick="addBank()" style="white-space:nowrap;flex-shrink:0">+ Ajouter</button>
             </div>
           </div>
         </div>
@@ -1078,7 +1095,7 @@ const PAGE_TITLES = {
   leases:     'Baux',
   tenants:    'Locataires',
   receipts:   'Quittances',
-  payments:   'Paiements',
+  payments:   'Mes banques',
   messages:   'Messages',
   documents:  'Documents',
   settings:   'Paramètres'
@@ -1107,7 +1124,8 @@ function navigate(page, linkEl) {
   if (page === 'properties') loadProperties();
   if (page === 'tenants')    loadTenants();
   if (page === 'receipts')   loadReceipts();
-  if (page === 'settings')   { loadSettings(); setTimeout(initSigCanvas, 100); }
+  if (page === 'payments')   loadBanks();
+  if (page === 'settings')   { loadSettings(); setTimeout(initSigCanvas, 100); loadBanks(); }
   if (page === 'messages')   loadMessages();
 }
 
@@ -4026,6 +4044,81 @@ function genQuittanceHTML(f, mois, rent, charges, total, sigBailleur, profile) {
 }
 
 // ============================================================
+// MES BANQUES
+// ============================================================
+var _banks = [];
+
+async function loadBanks() {
+  var res = await db.from('settings').select('value').eq('key','banks').maybeSingle();
+  _banks = res.data ? JSON.parse(res.data.value) : [];
+  renderBanksList();
+  renderBanksShortcuts();
+}
+
+function renderBanksList() {
+  var el = document.getElementById('banks-list');
+  if (!el) return;
+  if (!_banks.length) {
+    el.innerHTML = '<p style="font-size:12px;color:var(--color-text-secondary)">Aucune banque ajoutée.</p>';
+    return;
+  }
+  el.innerHTML = _banks.map(function(b, i) {
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--color-bg-secondary);border-radius:var(--radius-md)">' +
+      '<div style="display:flex;align-items:center;gap:10px">' +
+      '<span style="font-size:20px">🏦</span>' +
+      '<div><div style="font-size:13px;font-weight:600">' + b.name + '</div>' +
+      '<div style="font-size:11px;color:var(--color-text-secondary)">' + b.url + '</div></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px">' +
+      '<a href="' + b.url + '" target="_blank" class="btn-ghost" style="font-size:12px;text-decoration:none">Ouvrir ↗</a>' +
+      '<button onclick="removeBank(' + i + ')" class="btn-ghost" style="font-size:12px;color:var(--color-danger)">✕</button>' +
+      '</div></div>';
+  }).join('');
+}
+
+function renderBanksShortcuts() {
+  var el = document.getElementById('banks-shortcuts');
+  if (!el) return;
+  if (!_banks.length) {
+    el.innerHTML = '<div style="grid-column:1/-1;padding:48px;text-align:center;color:var(--color-text-secondary)">Aucune banque configur&#233;e. Ajoutez vos banques dans Param&#232;tres.</div>';
+    return;
+  }
+  el.innerHTML = _banks.map(function(b) {
+    return '<a href="' + b.url + '" target="_blank" style="text-decoration:none">' +
+      '<div class="card" style="padding:20px;text-align:center;cursor:pointer;transition:all 0.15s;border:1.5px solid var(--color-border)">' +
+      '<div style="font-size:28px;margin-bottom:8px">🏦</div>' +
+      '<div style="font-size:13px;font-weight:700;color:var(--color-text)">' + b.name + '</div>' +
+      '<div style="font-size:11px;color:var(--color-primary);margin-top:4px">Accéder ↗</div>' +
+      '</div></a>';
+  }).join('');
+}
+
+async function addBank() {
+  var name = (document.getElementById('bank-name-input')||{}).value.trim();
+  var url = (document.getElementById('bank-url-input')||{}).value.trim();
+  if (!name) { showToast('Nom de la banque obligatoire.', 'error'); return; }
+  if (!url) { showToast('URL obligatoire.', 'error'); return; }
+  if (!url.startsWith('http')) url = 'https://' + url;
+  _banks.push({ name: name, url: url });
+  await saveBanks();
+  document.getElementById('bank-name-input').value = '';
+  document.getElementById('bank-url-input').value = '';
+  showToast('Banque ajoutée !', 'success');
+}
+
+async function removeBank(i) {
+  _banks.splice(i, 1);
+  await saveBanks();
+  showToast('Banque supprimée.', 'success');
+}
+
+async function saveBanks() {
+  await db.from('settings').upsert({ key: 'banks', value: JSON.stringify(_banks) }, { onConflict: 'key' });
+  renderBanksList();
+  renderBanksShortcuts();
+}
+
+// ============================================================
 // BAILO GESTION v2 — App Entry
 // ============================================================
 
@@ -4034,6 +4127,7 @@ function initApp() {
   loadDashboard();
   // Charger le profil bailleur des le demarrage
   loadSettings();
+  loadBanks();
 }
 
 // Boot on DOM ready
