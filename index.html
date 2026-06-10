@@ -1590,7 +1590,8 @@ var _landlordProfile = {};
 
 async function loadSettings() {
   try {
-    var res = await db.from('settings').select('value').eq('key', 'landlord_profile').single();
+    // Pas de .single() pour eviter 406 si la cle n'existe pas encore
+    var res = await db.from('settings').select('value').eq('key', 'landlord_profile').maybeSingle();
     if (res.data && res.data.value) {
       _landlordProfile = JSON.parse(res.data.value);
       // Remplir les champs
