@@ -1548,6 +1548,70 @@ async function loadDetailQuittances(leaseId) {
 // BIENS
 // ============================================================
 
+
+// ============================================================
+// PARAMÈTRES — Profil bailleur
+// ============================================================
+var _landlordProfile = {};
+
+async function loadSettings() {
+  try {
+    var res = await db.from('settings').select('value').eq('key', 'landlord_profile').single();
+    if (res.data && res.data.value) {
+      _landlordProfile = JSON.parse(res.data.value);
+      // Remplir les champs
+      var fields = ['landlordName','landlordRepresentative','landlordAddress','landlordEmail','signatureCity'];
+      fields.forEach(function(f) {
+        var el = document.getElementById('s-' + f);
+        if (el && _landlordProfile[f]) el.value = _landlordProfile[f];
+      });
+    }
+  } catch(e) {}
+}
+
+async function saveSettings() {
+  var profile = {
+    landlordName: (document.getElementById('s-landlordName')||{}).value || '',
+    landlordRepresentative: (document.getElementById('s-landlordRepresentative')||{}).value || '',
+    landlordAddress: (document.getElementById('s-landlordAddress')||{}).value || '',
+    landlordEmail: (document.getElementById('s-landlordEmail')||{}).value || '',
+    signatureCity: (document.getElementById('s-signatureCity')||{}).value || ''
+  };
+
+  if (!profile.landlordName) { showToast('Le nom est obligatoire.', 'error'); return; }
+
+  var btn = document.getElementById('btn-save-settings');
+  btn.disabled = true; btn.textContent = 'Enregistrement…';
+
+  // Upsert dans settings
+  var res = await db.from('settings').upsert({
+    key: 'landlord_profile',
+    value: JSON.stringify(profile)
+  }, { onConflict: 'key' });
+
+  if (res.error) {
+    showToast('Erreur : ' + res.error.message, 'error');
+    btn.disabled = false; btn.textContent = '💾 Enregistrer';
+    return;
+  }
+
+  _landlordProfile = profile;
+  btn.disabled = false; btn.textContent = '💾 Enregistrer';
+  var msg = document.getElementById('settings-saved-msg');
+  if (msg) { msg.style.display = 'block'; setTimeout(function(){ msg.style.display='none'; }, 4000); }
+  showToast('Profil bailleur enregistré !', 'success');
+}
+
+function applyLandlordProfile(data) {
+  // Pré-remplir les champs bailleur depuis le profil sauvegardé
+  if (!_landlordProfile.landlordName) return;
+  if (!data.landlordName) data.landlordName = _landlordProfile.landlordName;
+  if (!data.landlordRepresentative) data.landlordRepresentative = _landlordProfile.landlordRepresentative;
+  if (!data.landlordAddress) data.landlordAddress = _landlordProfile.landlordAddress;
+  if (!data.landlordEmail) data.landlordEmail = _landlordProfile.landlordEmail;
+  if (!data.signatureCity) data.signatureCity = _landlordProfile.signatureCity;
+}
+
 // ============================================================
 // BIENS — Properties & Units
 // ============================================================
@@ -2339,7 +2403,35 @@ const WIZARD_STEPS_CONTENT = {
 
   3: function() {
     var d = _wizardData;
+
+    // Si on vient de sélectionner un locataire existant, afficher directement le formulaire pré-rempli
+    // Sinon proposer le choix
+    var tenants = _allLeases
+      .filter(function(l){ return leaseTenantName(l) && leaseTenantName(l) !== '—'; })
+      .map(function(l){
+        var f = (l.data && l.data.formData) ? l.data.formData : {};
+        return { name: f.tenantName, email: f.tenantEmail, phone: f.tenantPhone, address: f.tenantAddress, dob: f.tenantDOB, idDoc: f.tenantIdDoc };
+      })
+      .filter(function(t, i, arr){ return t.name && arr.findIndex(function(x){ return x.name===t.name; })===i; });
+
+    var tenantCards = tenants.length > 0 ?
+      '<div style="margin-bottom:16px">' +
+      '<div style="font-size:12px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Locataires existants</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+      tenants.map(function(t){
+        return '<div onclick="selectExistingTenant(' + JSON.stringify(t).replace(/"/g,\'&quot;\') + ')" ' +
+          'style="padding:10px 12px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);cursor:pointer;transition:all 0.15s;' +
+          (d.tenantName===t.name ? 'border-color:var(--color-primary);background:var(--color-primary-light)' : 'background:var(--color-bg)') + '">' +
+          '<div style="font-size:13px;font-weight:600">' + t.name + '</div>' +
+          (t.email ? '<div style="font-size:11px;color:var(--color-text-secondary)">' + t.email + '</div>' : '') +
+          '</div>';
+      }).join('') +
+      '</div></div>' +
+      '<div style="font-size:12px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Ou nouveau locataire</div>'
+      : '';
+
     return '<div class="wizard-section-title">Le locataire</div>' +
+    tenantCards +
       '<div class="form-row">' +
         '<div class="form-group"><label>Nom complet *</label>' +
         '<input type="text" id="w-tenantName" value="' + (d.tenantName||'') + '" placeholder="M. Jean Dupont" /></div>' +
@@ -2500,11 +2592,26 @@ function handleDpeFile(input) {
   if (preview) preview.innerHTML = '<span style="font-size:20px">📄</span><span style="font-size:13px;font-weight:600">' + file.name + '</span><span style="font-size:11px;color:var(--color-text-secondary)">' + (file.size/1024).toFixed(0) + ' Ko</span>';
 }
 
+
+function selectExistingTenant(t) {
+  try {
+    var tenant = typeof t === 'string' ? JSON.parse(t.replace(/&quot;/g,'"')) : t;
+  } catch(e) { return; }
+  _wizardData.tenantName = tenant.name || '';
+  _wizardData.tenantEmail = tenant.email || '';
+  _wizardData.tenantPhone = tenant.phone || '';
+  _wizardData.tenantAddress = tenant.address || '';
+  _wizardData.tenantDOB = tenant.dob || '';
+  _wizardData.tenantIdDoc = tenant.idDoc || '';
+  renderWizardStep();
+}
 function openLeaseWizard() {
   _wizardStep = 1;
   _wizardData = {};
   _wizardDpeFile = null;
   _wizardEditId = null;
+  // Pré-remplir profil bailleur
+  applyLandlordProfile(_wizardData);
   renderWizardStep();
   document.getElementById('lease-wizard-overlay').classList.remove('hidden');
 }
