@@ -553,7 +553,7 @@
             </div>
             <div style="display:flex;gap:8px">
               <button class="btn-secondary" onclick="editProperty()" style="font-size:12px">✏️ Modifier</button>
-              <button class="btn-primary" onclick="openUnitModal()" style="font-size:12px">+ Ajouter un lot</button>
+              <button class="btn-primary" onclick="openLotWizard(_currentPropertyId)" style="font-size:12px">+ Ajouter un lot</button>
               <button class="btn-secondary" onclick="deleteProperty()" style="font-size:12px;color:var(--color-danger);border-color:var(--color-danger)">🗑️</button>
             </div>
           </div>
@@ -834,6 +834,26 @@
     </div>
   </div>
 
+
+  <!-- WIZARD LOT + BAIL -->
+  <div id="lot-wizard-overlay" class="modal-overlay hidden" onclick="closeLotWizard(event)">
+    <div class="modal-card" style="max-width:560px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">
+      <div class="wizard-header">
+        <h2 id="lot-wizard-title">Nouveau lot</h2>
+        <button class="modal-close" onclick="closeLotWizard()">✕</button>
+      </div>
+      <!-- Steps indicator -->
+      <div id="lot-wizard-steps" style="display:flex;gap:0;border-bottom:1px solid var(--color-border)">
+      </div>
+      <!-- Body -->
+      <div id="lot-wizard-body" style="padding:var(--space-xl)"></div>
+      <!-- Footer -->
+      <div class="wizard-footer">
+        <button class="btn-secondary" id="lot-wizard-back" onclick="lotWizardBack()">← Retour</button>
+        <button class="btn-primary" id="lot-wizard-next" onclick="lotWizardNext()">Suivant →</button>
+      </div>
+    </div>
+  </div>
   <!-- LEASE WIZARD MODAL -->
   <div id="lease-wizard-overlay" class="modal-overlay hidden" onclick="closeLeaseWizard(event)">
     <div class="modal-card wizard-card" onclick="event.stopPropagation()">
@@ -1622,7 +1642,7 @@ function renderUnitsGrid(units) {
   if (!el) return;
 
   if (!units.length) {
-    el.innerHTML = '<div style="grid-column:1/-1;padding:48px;text-align:center;color:var(--color-text-secondary)">Aucun lot. <button class="btn-ghost" onclick="openUnitModal()">Ajouter un premier lot</button></div>';
+    el.innerHTML = '<div style="grid-column:1/-1;padding:48px;text-align:center;color:var(--color-text-secondary)">Aucun lot. <button class="btn-ghost" onclick="openLotWizard(_currentPropertyId)">Ajouter un premier lot</button></div>';
     return;
   }
 
@@ -1847,6 +1867,275 @@ async function deleteUnit(unitId) {
   const units = _allUnits.filter(u => u.property_id === _currentPropertyId);
   renderUnitsGrid(units);
   await openPropertyDetail(_currentPropertyId);
+}
+
+
+// ============================================================
+// WIZARD LOT + BAIL
+// ============================================================
+var _lotWizardStep = 1;
+var _lotWizardData = {};
+var _lotWizardWithBail = false;
+var _lotWizardTotalSteps = 2; // 1=Lot, 2=Avec locataire?, puis bail si oui
+
+function openLotWizard(propertyId) {
+  _currentPropertyId = propertyId || _currentPropertyId;
+  _lotWizardStep = 1;
+  _lotWizardData = {};
+  _lotWizardWithBail = false;
+  _lotWizardTotalSteps = 2;
+  renderLotWizardStep();
+  document.getElementById('lot-wizard-overlay').classList.remove('hidden');
+}
+
+function closeLotWizard(event) {
+  if (event && event.target !== document.getElementById('lot-wizard-overlay')) return;
+  document.getElementById('lot-wizard-overlay').classList.add('hidden');
+}
+
+function renderLotWizardStep() {
+  var body = document.getElementById('lot-wizard-body');
+  var stepsEl = document.getElementById('lot-wizard-steps');
+  var backBtn = document.getElementById('lot-wizard-back');
+  var nextBtn = document.getElementById('lot-wizard-next');
+
+  // Calculer les étapes dynamiquement
+  var steps = ['Le lot', 'Locataire ?'];
+  if (_lotWizardWithBail) {
+    steps = steps.concat(['Bailleur', 'Locataire', 'Conditions', 'Clauses', 'Confirmation']);
+  }
+  _lotWizardTotalSteps = steps.length;
+
+  // Steps indicator
+  stepsEl.innerHTML = steps.map(function(s, i) {
+    var active = i + 1 === _lotWizardStep;
+    var done = i + 1 < _lotWizardStep;
+    return '<div style="flex:1;padding:10px 6px;text-align:center;font-size:11px;font-weight:' + (active ? '700' : '500') + ';' +
+      'color:' + (active ? 'var(--color-primary)' : done ? 'var(--color-success)' : 'var(--color-text-tertiary)') + ';' +
+      'border-bottom:2px solid ' + (active ? 'var(--color-primary)' : done ? 'var(--color-success)' : 'transparent') + '">' +
+      (done ? '✓ ' : '') + s + '</div>';
+  }).join('');
+
+  // Back button
+  backBtn.style.display = _lotWizardStep > 1 ? 'block' : 'none';
+
+  // Next button label
+  var isLast = _lotWizardStep === _lotWizardTotalSteps;
+  nextBtn.textContent = isLast ? (_lotWizardWithBail ? 'Créer le lot et le bail' : 'Créer le lot') : 'Suivant →';
+
+  // Body content
+  body.innerHTML = getLotWizardStepContent(_lotWizardStep);
+}
+
+function getLotWizardStepContent(step) {
+  var d = _lotWizardData;
+
+  // Étape 1 — Le lot
+  if (step === 1) {
+    var typeOpts = ['Appartement','Maison','Local commercial','Garage / Box','Cave / Parking','Autre'].map(function(t) {
+      return '<option value="' + t + '"' + (d.unitType === t ? ' selected' : '') + '>' + t + '</option>';
+    }).join('');
+    return '<div class="wizard-section-title">Le lot</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Désignation *</label>' +
+        '<input type="text" id="lw-label" value="' + (d.unitLabel||'') + '" placeholder="T2 n°1, Studio RDC, Local..." /></div>' +
+        '<div class="form-group"><label>Type</label>' +
+        '<select id="lw-type">' + typeOpts + '</select></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Surface</label>' +
+        '<input type="text" id="lw-surface" value="' + (d.unitSurface||'') + '" placeholder="45 m²" /></div>' +
+        '<div class="form-group"><label>Étage</label>' +
+        '<input type="text" id="lw-floor" value="' + (d.unitFloor||'') + '" placeholder="1er étage" /></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Meublé</label>' +
+        '<select id="lw-furnished">' +
+        '<option value="false"' + (!d.unitFurnished ? ' selected' : '') + '>Non meublé</option>' +
+        '<option value="true"' + (d.unitFurnished ? ' selected' : '') + '>Meublé</option>' +
+        '</select></div>' +
+        '<div class="form-group"><label>Description</label>' +
+        '<input type="text" id="lw-description" value="' + (d.unitDescription||'') + '" placeholder="Cuisine équipée..." /></div>' +
+      '</div>';
+  }
+
+  // Étape 2 — Avec locataire ?
+  if (step === 2) {
+    return '<div class="wizard-section-title">Ce lot a-t-il un locataire ?</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px">' +
+        '<div class="choice-card' + (_lotWizardWithBail ? ' choice-card-active' : '') + '" onclick="setLotWithBail(true)" style="padding:24px;border-radius:12px;border:2px solid ' + (_lotWizardWithBail ? 'var(--color-primary)' : 'var(--color-border)') + ';cursor:pointer;text-align:center;transition:all 0.15s">' +
+          '<div style="font-size:32px;margin-bottom:8px">👤</div>' +
+          '<div style="font-weight:700;font-size:14px">Oui, il y a un locataire</div>' +
+          '<div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px">Je vais renseigner le bail</div>' +
+        '</div>' +
+        '<div class="choice-card' + (!_lotWizardWithBail ? ' choice-card-active' : '') + '" onclick="setLotWithBail(false)" style="padding:24px;border-radius:12px;border:2px solid ' + (!_lotWizardWithBail && _lotWizardStep===2 ? 'var(--color-border)' : 'var(--color-border)') + ';cursor:pointer;text-align:center;transition:all 0.15s">' +
+          '<div style="font-size:32px;margin-bottom:8px">🔑</div>' +
+          '<div style="font-weight:700;font-size:14px">Non, lot vacant</div>' +
+          '<div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px">Je créerai le bail plus tard</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  // Étapes bail (step 3+) — réutiliser WIZARD_STEPS_CONTENT
+  // step 3 = bailleur (wizard step 1)
+  // step 4 = locataire (wizard step 3)
+  // step 5 = conditions (wizard step 4)
+  // step 6 = clauses (wizard step 5)
+  // step 7 = confirmation (wizard step 6)
+  var bailStepMap = {3: 1, 4: 3, 5: 4, 6: 5, 7: 6};
+  var bailStep = bailStepMap[step];
+  if (bailStep) {
+    // Synchroniser _wizardData avec _lotWizardData
+    _wizardData = _lotWizardData;
+    // Pré-remplir adresse depuis la propriété courante
+    if (!_wizardData.propertyAddress && _currentPropertyId) {
+      var prop = _allProperties.find(function(p){ return p.id === _currentPropertyId; });
+      if (prop) {
+        _wizardData.propertyAddress = (prop.address||'') + (prop.city ? ', ' + prop.city : '');
+      }
+    }
+    if (!_wizardData.surface) _wizardData.surface = _lotWizardData.unitSurface || '';
+    if (!_wizardData.propertyFloor) _wizardData.propertyFloor = _lotWizardData.unitFloor || '';
+    if (!_wizardData.leaseType) _wizardData.leaseType = _lotWizardData.unitFurnished ? 'Location meublee' : 'Location vide';
+    _wizardStep = bailStep;
+    return WIZARD_STEPS_CONTENT[bailStep]();
+  }
+
+  return '<p>Étape inconnue</p>';
+}
+
+function setLotWithBail(val) {
+  _lotWizardWithBail = val;
+  renderLotWizardStep();
+}
+
+function collectLotWizardStep() {
+  var d = _lotWizardData;
+  if (_lotWizardStep === 1) {
+    d.unitLabel = (document.getElementById('lw-label')||{}).value || '';
+    d.unitType = (document.getElementById('lw-type')||{}).value || 'Appartement';
+    d.unitSurface = (document.getElementById('lw-surface')||{}).value || '';
+    d.unitFloor = (document.getElementById('lw-floor')||{}).value || '';
+    d.unitFurnished = (document.getElementById('lw-furnished')||{}).value === 'true';
+    d.unitDescription = (document.getElementById('lw-description')||{}).value || '';
+    if (!d.unitLabel) { showToast('La désignation est obligatoire.', 'error'); return false; }
+  }
+  // Pour les étapes bail, réutiliser collectStepData du wizard existant
+  if (_lotWizardStep >= 3) {
+    var bailStepMap = {3:1, 4:3, 5:4, 6:5, 7:6};
+    var bailStep = bailStepMap[_lotWizardStep];
+    if (bailStep) {
+      _wizardStep = bailStep;
+      collectStepData(bailStep);
+      // Copier dans _lotWizardData
+      Object.assign(_lotWizardData, _wizardData);
+    }
+  }
+  return true;
+}
+
+function lotWizardNext() {
+  if (!collectLotWizardStep()) return;
+
+  if (_lotWizardStep === _lotWizardTotalSteps) {
+    submitLotWizard();
+    return;
+  }
+
+  _lotWizardStep++;
+  renderLotWizardStep();
+}
+
+function lotWizardBack() {
+  if (_lotWizardStep > 1) {
+    _lotWizardStep--;
+    renderLotWizardStep();
+  }
+}
+
+async function submitLotWizard() {
+  var btn = document.getElementById('lot-wizard-next');
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement…';
+
+  // 1. Créer le lot
+  var unitPayload = {
+    property_id: _currentPropertyId,
+    label: _lotWizardData.unitLabel,
+    type: _lotWizardData.unitType || 'Appartement',
+    surface: _lotWizardData.unitSurface || '',
+    floor: _lotWizardData.unitFloor || '',
+    furnished: _lotWizardData.unitFurnished || false,
+    description: _lotWizardData.unitDescription || ''
+  };
+
+  var unitRes = await db.from('units').insert(unitPayload).select().single();
+  if (unitRes.error) {
+    showToast('Erreur création lot : ' + unitRes.error.message, 'error');
+    btn.disabled = false;
+    return;
+  }
+  var newUnit = unitRes.data;
+
+  // 2. Créer le bail si locataire
+  if (_lotWizardWithBail) {
+    var d = _lotWizardData;
+    var uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+
+    var leasePayload = {
+      id: uuid,
+      bailleur_id: 'default',
+      unit_id: newUnit.id,
+      data: { formData: {
+        landlordName: d.landlordName||'', landlordAddress: d.landlordAddress||'',
+        landlordRepresentative: d.landlordRepresentative||'', landlordEmail: d.landlordEmail||'',
+        signatureCity: d.signatureCity||'', signatureDate: d.signatureDate||'',
+        effectiveDate: d.effectiveDate||'', propertyAddress: d.propertyAddress||'',
+        leaseType: d.leaseType||'Location vide', surface: d.unitSurface||d.surface||'',
+        propertyFloor: d.unitFloor||d.propertyFloor||'', rooms: d.rooms||'',
+        dpeClass: d.dpeClass||'D', keysCount: d.keysCount||'2',
+        heatingType: d.heatingType||'', hotWaterType: d.hotWaterType||'',
+        tenantName: d.tenantName||'', tenantDOB: d.tenantDOB||'',
+        tenantEmail: d.tenantEmail||'', tenantPhone: d.tenantPhone||'',
+        tenantAddress: d.tenantAddress||'', tenantIdDoc: d.tenantIdDoc||'',
+        guarantorName: d.guarantorName||'', guarantorType: d.guarantorType||'',
+        guarantorAddress: d.guarantorAddress||'',
+        rent: d.rent||'', charges: d.charges||'', deposit: d.deposit||'',
+        rentDueDay: d.rentDueDay||'Le 1 de chaque mois',
+        duration: d.duration||'3 ans renouvelables par tacite reconduction',
+        irlReference: d.irlReference||'', chargesRegime: d.chargesRegime||'',
+        paymentTerms: d.paymentTerms||'Par virement bancaire',
+        specialClauses: d.specialClauses||'', annexesProvided: d.annexesProvided||''
+      }},
+      updated_at: new Date().toISOString()
+    };
+
+    var leaseRes = await db.from('leases').insert(leasePayload);
+    if (leaseRes.error) {
+      showToast('Lot créé mais erreur bail : ' + leaseRes.error.message, 'error');
+    } else {
+      showToast('Lot et bail créés !', 'success');
+    }
+  } else {
+    showToast('Lot créé !', 'success');
+  }
+
+  // Fermer et recharger
+  document.getElementById('lot-wizard-overlay').classList.add('hidden');
+  btn.disabled = false;
+
+  // Recharger les données
+  var [unitR, leaseR] = await Promise.all([
+    db.from('units').select('*'),
+    db.from('leases').select('*')
+  ]);
+  _allUnits = unitR.data || [];
+  _allLeases = leaseR.data || [];
+
+  if (_currentPropertyId) openPropertyDetail(_currentPropertyId);
 }
 
 // ============================================================
