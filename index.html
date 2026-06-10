@@ -2097,14 +2097,15 @@ async function pwNext() {
   btn.disabled = true; btn.textContent = 'Enregistrement…';
 
   var d = _pwData;
+  // Stocker siret et building_type dans description JSON car colonnes non presentes en DB
+  var meta = { siret: d.siret||'', buildingType: d.buildingType||'Immeuble', representative: d.representative||'' };
   var payload = {
     name: d.name,
     type: d.type || 'Particulier',
-    siret: d.siret || '',
     address: d.address || '',
     postal_code: d.postal || '',
     city: d.city || '',
-    building_type: d.buildingType || 'Immeuble',
+    description: JSON.stringify(meta),
     bailleur_id: 'default',
     updated_at: new Date().toISOString()
   };
