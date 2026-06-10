@@ -3928,27 +3928,96 @@ async function _doQSend(lease, month, rent, charges, isResend) {
 function genQuittanceHTML(f, mois, rent, charges, total, sigBailleur, profile) {
   var bailleur = profile.landlordName || f.landlordName || '';
   var adresseBailleur = profile.landlordAddress || f.landlordAddress || '';
-  var today = new Intl.DateTimeFormat('fr-FR').format(new Date());
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' +
-    'body{font-family:Arial,sans-serif;font-size:14px;color:#333;max-width:600px;margin:40px auto;padding:0 20px}' +
-    'h1{font-size:18px;text-align:center;margin-bottom:24px}' +
-    '.bloc{border:1px solid #ddd;border-radius:6px;padding:16px;margin-bottom:16px}' +
-    '.row{display:flex;justify-content:space-between;margin-bottom:6px}' +
-    '.total{font-weight:bold;font-size:16px;border-top:2px solid #333;padding-top:8px;margin-top:8px}' +
-    '.sig{margin-top:32px;text-align:right;font-size:12px;color:#666}' +
-    '</style></head><body>' +
-    '<h1>QUITTANCE DE LOYER — ' + mois.toUpperCase() + '</h1>' +
-    '<div class="bloc"><strong>Bailleur :</strong> ' + bailleur + '<br>' + adresseBailleur + '</div>' +
-    '<div class="bloc"><strong>Locataire :</strong> ' + (f.tenantName||'') + '<br>' + (f.propertyAddress||'') + '</div>' +
-    '<div class="bloc">' +
-    '<div class="row"><span>Loyer hors charges</span><span>' + rent.toFixed(2) + ' €</span></div>' +
-    (charges > 0 ? '<div class="row"><span>Charges</span><span>' + charges.toFixed(2) + ' €</span></div>' : '') +
-    '<div class="row total"><span>Total réglé</span><span>' + total.toFixed(2) + ' €</span></div>' +
-    '</div>' +
-    '<p style="font-size:12px;margin-top:16px">Je soussigné(e) <strong>' + bailleur + '</strong>, bailleur du logement désigné ci-dessus, déclare avoir reçu de <strong>' + (f.tenantName||'') + '</strong> la somme de <strong>' + total.toFixed(2) + ' €</strong> au titre du loyer et des charges du mois de <strong>' + mois + '</strong>, et lui en donne quittance.</p>' +
-    '<div class="sig">Fait le ' + today + (profile.signatureCity ? ', à ' + profile.signatureCity : '') + '<br>' +
-    (sigBailleur ? '<img src="' + sigBailleur + '" style="max-height:60px;margin-top:8px" />' : 'Signature bailleur') +
-    '</div></body></html>';
+  var representative = profile.landlordRepresentative || f.landlordRepresentative || '';
+  var signatureCity = profile.signatureCity || f.signatureCity || '';
+  var today = new Intl.DateTimeFormat('fr-FR', { dateStyle:'long' }).format(new Date());
+  var todayShort = new Intl.DateTimeFormat('fr-FR').format(new Date());
+  var fmtC = function(n) { return new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2}).format(Number(n)||0); };
+  var v = function(s) { return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  var num = 'Q-' + new Date().getFullYear() + '-' + String(new Date().getMonth()+1).padStart(2,'0');
+  var css = '.qdoc{max-width:680px;margin:0 auto;padding:0;font-family:Arial,sans-serif;color:#1a1208}'+
+    '.qdoc-band{height:7px;background:linear-gradient(90deg,#002395 33.3%,#fff 33.3% 66.6%,#ED2939 66.6%)}'+
+    '.qdoc-header{display:grid;grid-template-columns:1fr auto;gap:16px;padding:28px 32px 20px;border-bottom:2px solid #1a1208}'+
+    '.qdoc-header-left h1{font-size:1.55rem;font-weight:400;margin-bottom:3px;color:#1a1208}'+
+    '.qdoc-header-left p{font-size:.78rem;color:#6a5a40;letter-spacing:.04em;text-transform:uppercase}'+
+    '.qdoc-header-right{text-align:right}'+
+    '.qdoc-num-label{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#8a7060;display:block;margin-bottom:3px}'+
+    '.qdoc-num{font-size:1rem;font-weight:800;color:#1a1208;display:block;margin-bottom:8px}'+
+    '.qdoc-period{display:inline-block;background:#1a1208;color:#fff;font-size:.78rem;font-weight:700;padding:4px 12px;border-radius:4px}'+
+    '.qdoc-parties{display:grid;grid-template-columns:1fr 1fr;gap:0;border-bottom:1px solid #d4c8b8}'+
+    '.qdoc-party{padding:18px 32px}.qdoc-party:first-child{border-right:1px solid #d4c8b8}'+
+    '.qdoc-party-label{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#8a7060;margin-bottom:6px}'+
+    '.qdoc-party p{font-size:.84rem;line-height:1.65;color:#1a1208}'+
+    '.qdoc-party strong{display:block;font-size:.96rem;font-weight:700;margin-bottom:2px}'+
+    '.qdoc-bien{padding:14px 32px;background:#f8f4ee;border-bottom:1px solid #d4c8b8;display:flex;align-items:center;gap:12px}'+
+    '.qdoc-bien p{font-size:.84rem;color:#3a2a18}'+
+    '.qdoc-text{padding:22px 32px;border-bottom:1px solid #d4c8b8;line-height:1.9;font-size:.9rem;color:#1a1208;background:#fffdf8}'+
+    '.qdoc-table-wrap{padding:0 32px 20px;background:#fff}'+
+    '.qdoc-table{width:100%;border-collapse:collapse;margin-top:20px}'+
+    '.qdoc-table thead tr{background:#1a1208;color:#fff}'+
+    '.qdoc-table th{padding:9px 14px;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em}'+
+    '.qdoc-table th:last-child{text-align:right}'+
+    '.qdoc-table td{padding:10px 14px;font-size:.86rem;border-bottom:1px solid #e8e0d0;color:#1a1208}'+
+    '.qdoc-table td:last-child{text-align:right;font-weight:600}'+
+    '.qdoc-tr-total td{background:#f8f4ee;font-weight:700;font-size:.95rem;border-top:2px solid #1a1208;border-bottom:none}'+
+    '.qdoc-tr-total td:last-child{color:#1a5a2a;font-size:1.05rem}'+
+    '.qdoc-note{padding:10px 32px 0;font-size:.72rem;color:#8a7060;line-height:1.65;background:#fff}'+
+    '.qdoc-sig{display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:24px 32px;border-top:1px solid #d4c8b8;background:#fff}'+
+    '.qdoc-sig-block{text-align:center}'+
+    '.qdoc-sig-block h5{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#8a7060;margin-bottom:3px}'+
+    '.qdoc-sig-block p{font-size:.82rem;color:#3a2a18}'+
+    '.qdoc-sig-line{display:block;width:100%;height:1px;background:#8a7060;margin:36px 0 4px}'+
+    '.qdoc-sig-mention{font-size:.66rem;color:#9a8070;font-style:italic}'+
+    '.qdoc-footer{background:#1a1208;color:rgba(255,255,255,.55);padding:10px 32px;font-size:.68rem;display:flex;justify-content:space-between}';
+
+  var h = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{margin:0;padding:0;background:#f5f0ea}' + css + '</style></head><body>';
+  h += '<div class="qdoc">';
+  h += '<div class="qdoc-band"></div>';
+  h += '<div class="qdoc-header"><div class="qdoc-header-left"><h1>Quittance de loyer</h1><p>Loi n\u00b0 89-462 du 6 juillet 1989 \u2014 Article 21</p></div>';
+  h += '<div class="qdoc-header-right"><span class="qdoc-num-label">N\u00b0 de quittance</span><span class="qdoc-num">' + v(num) + '</span><span class="qdoc-period">P\u00e9riode\u00a0: ' + v(mois) + '</span></div></div>';
+  h += '<div class="qdoc-parties"><div class="qdoc-party"><div class="qdoc-party-label">Bailleur</div><p><strong>' + v(bailleur) + '</strong>';
+  if (representative) h += '<br>Repr\u00e9sent\u00e9 par\u00a0: ' + v(representative);
+  h += '<br>' + v(adresseBailleur);
+  if (profile.landlordEmail || f.landlordEmail) h += '<br>' + v(profile.landlordEmail || f.landlordEmail);
+  h += '</p></div>';
+  h += '<div class="qdoc-party"><div class="qdoc-party-label">Locataire</div><p><strong>' + v(f.tenantName) + '</strong>';
+  if (f.tenantAddress) h += '<br>' + v(f.tenantAddress);
+  if (f.tenantEmail)   h += '<br>' + v(f.tenantEmail);
+  if (f.tenantPhone)   h += '<br>' + v(f.tenantPhone);
+  h += '</p></div></div>';
+  h += '<div class="qdoc-bien"><div style="font-size:1.1rem">\ud83c\udfe0</div><p><strong>' + v(f.propertyAddress) + '</strong>';
+  if (f.propertyFloor) h += ' \u2014 ' + v(f.propertyFloor);
+  if (f.surface) h += ' \u00b7 Surface\u00a0: ' + v(f.surface);
+  if (f.dpeClass) h += ' \u00b7 DPE\u00a0: Classe <strong>' + v(f.dpeClass) + '</strong>';
+  h += '</p></div>';
+  h += '<div class="qdoc-text">Je soussign\u00e9(e) <strong>' + v(bailleur) + '</strong>, bailleur du logement susvis\u00e9, donne <strong>quittance</strong> \u00e0 ';
+  h += '<strong>' + v(f.tenantName) + '</strong> de la somme de <strong>' + fmtC(total) + '</strong>, ';
+  h += 'correspondant au loyer et aux charges du mois de <strong>' + v(mois) + '</strong>.</div>';
+  h += '<div class="qdoc-table-wrap"><table class="qdoc-table"><thead><tr><th>D\u00e9signation</th><th>Base contractuelle</th><th>Montant du mois</th></tr></thead><tbody>';
+  h += '<tr><td>Loyer principal hors charges<br><span style="font-size:.74rem;color:#8a7060">' + v(f.leaseType||'Location vide') + (f.effectiveDate ? ' \u2014 bail du ' + new Intl.DateTimeFormat('fr-FR',{dateStyle:'short'}).format(new Date(f.effectiveDate+'T12:00:00')) : '') + '</span></td>';
+  h += '<td>' + fmtC(rent) + '&nbsp;/&nbsp;mois</td><td>' + fmtC(rent) + '</td></tr>';
+  h += '<tr><td>Charges r\u00e9cup\u00e9rables<br><span style="font-size:.74rem;color:#8a7060">' + v(f.chargesRegime||'Provisions sur charges') + '</span></td>';
+  h += '<td>' + fmtC(charges) + '&nbsp;/&nbsp;mois</td><td>' + fmtC(charges) + '</td></tr>';
+  h += '<tr class="qdoc-tr-total"><td colspan="2"><strong>TOTAL R\u00c9GL\u00c9 \u2014 Charges comprises</strong></td><td>' + fmtC(total) + '</td></tr>';
+  h += '</tbody></table></div>';
+  h += '<div class="qdoc-note">\u2696\ufe0f Cette quittance annule tous les re\u00e7us ant\u00e9rieurs pour la m\u00eame p\u00e9riode. ';
+  h += 'Conform\u00e9ment \u00e0 l\'article 21 de la loi du 6 juillet 1989, cette quittance est d\u00e9livr\u00e9e gratuitement.</div>';
+  h += '<div class="qdoc-sig"><div class="qdoc-sig-block"><h5>Bailleur</h5><p>' + v(bailleur) + '</p>';
+  h += '<p style="font-size:.74rem;color:#8a7060;font-style:italic;margin-top:2px">Lu et approuv\u00e9</p>';
+  if (sigBailleur) {
+    h += '<img src="' + sigBailleur + '" style="max-height:70px;max-width:180px;margin:8px auto;display:block" />';
+  } else {
+    h += '<span class="qdoc-sig-line"></span><span class="qdoc-sig-mention">Signature</span>';
+  }
+  h += '</div><div class="qdoc-sig-block"><h5>Date et lieu</h5>';
+  h += '<p style="margin-top:8px">Fait \u00e0 <strong>' + v(signatureCity||'\u2014') + '</strong></p>';
+  h += '<p>le <strong>' + todayShort + '</strong></p>';
+  h += '<p style="margin-top:10px;font-size:.74rem;color:#6a5a40">Document valable pour toute demande<br>d\'allocation, aide sociale ou administrative.</p>';
+  h += '</div></div>';
+  h += '<div class="qdoc-footer"><span>Quittance n\u00b0 <strong>' + v(num) + '</strong> \u2014 ' + v(mois) + ' \u2014 G\u00e9n\u00e9r\u00e9 le ' + today + '</span>';
+  h += '<span>Bailo Gestion \u00b7 Loi 89-462 \u00b7 Art.\u00a021 \u00b7 <strong>' + v(bailleur) + '</strong></span></div>';
+  h += '</div></body></html>';
+  return h;
 }
 
 // ============================================================
