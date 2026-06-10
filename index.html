@@ -1526,7 +1526,7 @@ async function loadDetailQuittances(leaseId) {
   const el = document.getElementById('detail-quittances');
   if (!el) return;
   const { data, error } = await db.from('messages')
-    .select('id, kind, created_at, lease_id, data, subject, body')
+    .select('id, kind, created_at, lease_id, subject, body')
     .eq('lease_id', leaseId)
     .eq('kind', 'Quittance')
     .order('created_at', { ascending: false })
@@ -3628,7 +3628,7 @@ async function loadReceipts() {
   // Charger les quittances
   const { data: msgs, error } = await db
     .from('messages')
-    .select('id, kind, created_at, lease_id, data, subject, body')
+    .select('id, kind, created_at, lease_id, subject, body')
     .eq('kind', 'Quittance')
     .order('created_at', { ascending: false });
 
@@ -3686,8 +3686,10 @@ function renderReceiptsStats() {
   const thisMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
   const thisMo = _allReceipts.filter(r => r.created_at.startsWith(thisMonth));
   const total = _allReceipts.reduce((s, r) => {
-    const rent = parseFloat(r.data?.rent || 0);
-    const charges = parseFloat(r.data?.charges || 0);
+    const lease2 = _receiptsLeases.find(l => l.id === r.lease_id);
+    const f2 = (lease2?.data?.formData) || {};
+    const rent = parseFloat(f2.rent || 0);
+    const charges = parseFloat(f2.charges || 0);
     return s + rent + charges;
   }, 0);
 
@@ -3728,8 +3730,10 @@ function renderReceipts(receipts) {
     const address = lease ? leaseAddress(lease) : '';
     const mois = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' })
       .format(new Date(r.created_at));
-    const rent = parseFloat(r.data?.rent || 0);
-    const charges = parseFloat(r.data?.charges || 0);
+    const lease2 = _receiptsLeases.find(l => l.id === r.lease_id);
+    const f2 = (lease2?.data?.formData) || {};
+    const rent = parseFloat(f2.rent || 0);
+    const charges = parseFloat(f2.charges || 0);
     const total = rent + charges;
 
     return `<div class="list-item">
@@ -3757,6 +3761,8 @@ function openQModal(leaseId) {
   // Remplir le select baux
   var select = document.getElementById('qm-lease-select');
   if (!select) return;
+  // S'assurer que _allLeases est charge
+  if (!_allLeases.length) { loadLeases().then(function(){ openQModal(leaseId); }); return; }
   var leases = _allLeases.filter(function(l){
     var f = (l.data && l.data.formData) ? l.data.formData : {};
     return f.tenantName && f.tenantEmail;
@@ -3859,8 +3865,8 @@ async function renvoyerQuittance(receiptId) {
   if (!lease) { showToast('Bail introuvable.', 'error'); return; }
   var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
   var month = receipt.data?.mois || new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric'}).format(new Date(receipt.created_at));
-  var rent = parseFloat(receipt.data?.rent || f.rent || 0);
-  var charges = parseFloat(receipt.data?.charges || f.charges || 0);
+  var rent = parseFloat(f.rent || 0);
+  var charges = parseFloat(f.charges || 0);
   await _doQSend(lease, month, rent, charges, true);
   showToast('Quittance renvoyée !', 'success');
 }
@@ -3897,8 +3903,7 @@ async function _doQSend(lease, month, rent, charges, isResend) {
       sender: 'Bailleur',
       kind: 'Quittance',
       subject: subject,
-      body: body,
-      data: { mois: moisLabel, rent: rent, charges: charges, total: total }
+      body: body
     });
     if (insertRes.error) { console.error('Insert quittance error:', JSON.stringify(insertRes.error)); showToast('Erreur enregistrement: ' + insertRes.error.message, 'error'); }
   }
