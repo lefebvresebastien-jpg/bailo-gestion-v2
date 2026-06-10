@@ -2451,9 +2451,10 @@ const WIZARD_STEPS_CONTENT = {
       }
     });
 
-    // Stocker dans cache global
+    // Stocker dans cache global (seulement si pas encore charge)
     _tenantCache = {};
     tenants.forEach(function(t, i){ _tenantCache[i] = t; });
+    var _currentTenantNames = tenants.map(function(t){return t.name;});
 
     var tenantCards = '';
     if (tenants.length > 0) {
@@ -2475,8 +2476,6 @@ const WIZARD_STEPS_CONTENT = {
     }
 
     return '<div class="wizard-section-title">Le locataire</div>' +
-    tenantCards +
-    
     tenantCards +
       '<div class="form-row">' +
         '<div class="form-group"><label>Nom complet *</label>' +
@@ -3391,6 +3390,8 @@ function renderReceipts(receipts) {
 function initApp() {
   // Load dashboard (default page)
   loadDashboard();
+  // Charger le profil bailleur des le demarrage
+  loadSettings();
 }
 
 // Boot on DOM ready
