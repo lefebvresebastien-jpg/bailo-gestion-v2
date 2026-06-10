@@ -3914,10 +3914,10 @@ async function _doQSend(lease, month, rent, charges, isResend) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0' },
       body: JSON.stringify({
-        to: f.tenantEmail,
+        to: [f.tenantEmail],
         subject: subject,
         html: body,
-        resend_api_key: resendKey
+        resend_key: resendKey
       })
     });
     if (sendRes.ok) {
