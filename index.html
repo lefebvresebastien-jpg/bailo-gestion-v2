@@ -556,7 +556,7 @@
             </div>
             <div style="display:flex;gap:8px">
               <button class="btn-secondary" onclick="editProperty()" style="font-size:12px">✏️ Modifier</button>
-              <button class="btn-primary" onclick="openLotWizard(_currentPropertyId)" style="font-size:12px">+ Ajouter un lot</button>
+              <button class="btn-primary" onclick="openUnitModal()" style="font-size:12px">+ Ajouter un lot</button>
               <button class="btn-secondary" onclick="deleteProperty()" style="font-size:12px;color:var(--color-danger);border-color:var(--color-danger)">🗑️</button>
             </div>
           </div>
@@ -742,6 +742,10 @@
                 <input type="text" id="s-landlordRepresentative" placeholder="Gérant de la SCI" />
               </div>
               <div class="form-group">
+                <label>SIRET (si SCI ou société)</label>
+                <input type="text" id="s-landlordSiret" placeholder="123 456 789 00012" />
+              </div>
+              <div class="form-group">
                 <label>Adresse du bailleur *</label>
                 <input type="text" id="s-landlordAddress" placeholder="12 rue de la Paix, 75001 Paris" />
               </div>
@@ -770,47 +774,19 @@
 
   <!-- MODAL PROPRIÉTÉ -->
   <div id="property-modal-overlay" class="modal-overlay hidden" onclick="closePropertyModal(event)">
-    <div class="modal-card" style="max-width:500px" onclick="event.stopPropagation()">
+    <div class="modal-card" style="max-width:560px;max-height:92vh;overflow-y:auto" onclick="event.stopPropagation()">
       <div class="wizard-header">
         <h2 id="property-modal-title">Nouveau bien</h2>
         <button class="modal-close" onclick="closePropertyModal()">✕</button>
       </div>
-      <div style="padding:var(--space-xl);display:flex;flex-direction:column;gap:var(--space-md)">
-        <div class="form-group">
-          <label>Nom du bien / SCI *</label>
-          <input type="text" id="pm-name" placeholder="SCI LEFAAL ou Mon appartement" />
-        </div>
-        <div class="form-group">
-          <label>Type de structure</label>
-          <select id="pm-type">
-            <option value="Particulier">Particulier</option>
-            <option value="SCI">SCI</option>
-            <option value="Indivision">Indivision</option>
-            <option value="SARL de famille">SARL de famille</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Adresse *</label>
-          <input type="text" id="pm-address" placeholder="54 BIS rue de fresnicourt" />
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Code postal</label>
-            <input type="text" id="pm-postal" placeholder="62620" />
-          </div>
-          <div class="form-group">
-            <label>Ville</label>
-            <input type="text" id="pm-city" placeholder="BARLIN" />
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Description</label>
-          <textarea id="pm-description" rows="2" style="width:100%;padding:9px 12px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);resize:none;font-size:13px;outline:none" placeholder="Immeuble 3 lots, RDC commercial..."></textarea>
-        </div>
-      </div>
+      <!-- Steps -->
+      <div id="pw-steps" style="display:flex;border-bottom:1px solid var(--color-border)"></div>
+      <!-- Body -->
+      <div id="pw-body" style="padding:var(--space-xl)"></div>
+      <!-- Footer -->
       <div class="wizard-footer">
-        <button class="btn-secondary" onclick="closePropertyModal()">Annuler</button>
-        <button class="btn-primary" id="pm-submit" onclick="submitProperty()">Créer</button>
+        <button class="btn-secondary" id="pw-back" onclick="pwBack()">← Retour</button>
+        <button class="btn-primary" id="pw-next" onclick="pwNext()">Suivant →</button>
       </div>
     </div>
   </div>
@@ -870,25 +846,7 @@
   </div>
 
 
-  <!-- WIZARD LOT + BAIL -->
-  <div id="lot-wizard-overlay" class="modal-overlay hidden" onclick="closeLotWizard(event)">
-    <div class="modal-card" style="max-width:560px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">
-      <div class="wizard-header">
-        <h2 id="lot-wizard-title">Nouveau lot</h2>
-        <button class="modal-close" onclick="closeLotWizard()">✕</button>
-      </div>
-      <!-- Steps indicator -->
-      <div id="lot-wizard-steps" style="display:flex;gap:0;border-bottom:1px solid var(--color-border)">
-      </div>
-      <!-- Body -->
-      <div id="lot-wizard-body" style="padding:var(--space-xl)"></div>
-      <!-- Footer -->
-      <div class="wizard-footer">
-        <button class="btn-secondary" id="lot-wizard-back" onclick="lotWizardBack()">← Retour</button>
-        <button class="btn-primary" id="lot-wizard-next" onclick="lotWizardNext()">Suivant →</button>
-      </div>
-    </div>
-  </div>
+  <!-- wizard lot+bail supprimé - remplacé par wizard bien -->
 
   <!-- MODAL LIER BAIL -->
   <div id="lier-bail-overlay" class="modal-overlay hidden" onclick="closeLierBail(event)">
@@ -1598,7 +1556,7 @@ async function loadSettings() {
     if (res.data && res.data.value) {
       _landlordProfile = JSON.parse(res.data.value);
       // Remplir les champs
-      var fields = ['landlordName','landlordRepresentative','landlordAddress','landlordEmail','signatureCity'];
+      var fields = ['landlordName','landlordRepresentative','landlordAddress','landlordEmail','signatureCity','landlordSiret'];
       fields.forEach(function(f) {
         var el = document.getElementById('s-' + f);
         if (el && _landlordProfile[f]) el.value = _landlordProfile[f];
@@ -1613,7 +1571,8 @@ async function saveSettings() {
     landlordRepresentative: (document.getElementById('s-landlordRepresentative')||{}).value || '',
     landlordAddress: (document.getElementById('s-landlordAddress')||{}).value || '',
     landlordEmail: (document.getElementById('s-landlordEmail')||{}).value || '',
-    signatureCity: (document.getElementById('s-signatureCity')||{}).value || ''
+    signatureCity: (document.getElementById('s-signatureCity')||{}).value || '',
+    landlordSiret: (document.getElementById('s-landlordSiret')||{}).value || ''
   };
 
   if (!profile.landlordName) { showToast('Le nom est obligatoire.', 'error'); return; }
@@ -1877,7 +1836,7 @@ function renderUnitsGrid(units) {
   if (!el) return;
 
   if (!units.length) {
-    el.innerHTML = '<div style="grid-column:1/-1;padding:48px;text-align:center;color:var(--color-text-secondary)">Aucun lot. <button class="btn-ghost" onclick="openLotWizard(_currentPropertyId)">Ajouter un premier lot</button></div>';
+    el.innerHTML = '<div style="grid-column:1/-1;padding:48px;text-align:center;color:var(--color-text-secondary)">Aucun lot. <button class="btn-ghost" onclick="openUnitModal()">Ajouter un premier lot</button></div>';
     return;
   }
 
@@ -1952,17 +1911,43 @@ function openLeaseWizardForUnit(unitId) {
 var _wizardEditUnitId = null;
 
 // ── Modals Propriété ──
+// ============================================================
+// WIZARD BIEN (pw = property wizard)
+// ============================================================
+var _pwStep = 1;
+var _pwData = {};
+var _pwEditId = null;
+var _pwLots = []; // lots a creer
+var PW_TOTAL = 3;
+
 function openPropertyModal(editId) {
-  _editPropertyId = editId || null;
-  const prop = editId ? _allProperties.find(p => p.id === editId) : null;
+  _pwEditId = editId || null;
+  _pwStep = 1;
+  _pwLots = [];
+  _pwData = {};
+
+  if (editId) {
+    var prop = _allProperties.find(function(p){ return p.id === editId; });
+    if (prop) {
+      _pwData = {
+        name: prop.name || '',
+        type: prop.type || 'Particulier',
+        siret: prop.siret || '',
+        address: prop.address || '',
+        postal: prop.postal_code || '',
+        city: prop.city || '',
+        buildingType: prop.building_type || 'Immeuble'
+      };
+    }
+  } else {
+    // Pre-remplir depuis le profil bailleur
+    _pwData.name = _landlordProfile.landlordName || '';
+    _pwData.type = _landlordProfile.landlordName && _landlordProfile.landlordName.toUpperCase().includes('SCI') ? 'SCI' : 'Particulier';
+    _pwData.siret = _landlordProfile.landlordSiret || '';
+  }
+
   document.getElementById('property-modal-title').textContent = editId ? 'Modifier le bien' : 'Nouveau bien';
-  document.getElementById('pm-name').value = prop ? prop.name : '';
-  document.getElementById('pm-type').value = prop ? prop.type : 'Particulier';
-  document.getElementById('pm-address').value = prop ? (prop.address || '') : '';
-  document.getElementById('pm-postal').value = prop ? (prop.postal_code || '') : '';
-  document.getElementById('pm-city').value = prop ? (prop.city || '') : '';
-  document.getElementById('pm-description').value = prop ? (prop.description || '') : '';
-  document.getElementById('pm-submit').textContent = editId ? 'Enregistrer' : 'Créer';
+  pwRender();
   document.getElementById('property-modal-overlay').classList.remove('hidden');
 }
 
@@ -1971,42 +1956,203 @@ function closePropertyModal(event) {
   document.getElementById('property-modal-overlay').classList.add('hidden');
 }
 
-async function submitProperty() {
-  const name = document.getElementById('pm-name').value.trim();
-  if (!name) { showToast('Le nom est obligatoire.', 'error'); return; }
+function pwRender() {
+  var steps = ['Propriétaire', 'Bien', 'Lots'];
+  var stepsEl = document.getElementById('pw-steps');
+  stepsEl.innerHTML = steps.map(function(s, i) {
+    var n = i + 1;
+    var active = n === _pwStep;
+    var done = n < _pwStep;
+    return '<div style="flex:1;padding:10px 6px;text-align:center;font-size:11px;font-weight:' + (active?'700':'500') + ';' +
+      'color:' + (active?'var(--color-primary)':done?'var(--color-success)':'var(--color-text-tertiary)') + ';' +
+      'border-bottom:2px solid ' + (active?'var(--color-primary)':done?'var(--color-success)':'transparent') + '">' +
+      (done?'✓ ':'') + s + '</div>';
+  }).join('');
 
-  const payload = {
-    name,
-    type: document.getElementById('pm-type').value,
-    address: document.getElementById('pm-address').value.trim(),
-    postal_code: document.getElementById('pm-postal').value.trim(),
-    city: document.getElementById('pm-city').value.trim(),
-    description: document.getElementById('pm-description').value.trim(),
+  var d = _pwData;
+  var body = '';
+  if (_pwStep === 1) {
+    var isSCI = d.type === 'SCI' || d.type === 'SARL de famille' || d.type === 'Indivision';
+    body = '<div class="wizard-section-title">Le propriétaire</div>' +
+      '<div class="form-group"><label>Type de structure *</label>' +
+      '<select id="pw-type" onchange="pwTypeChange()">' +
+      ['Particulier','SCI','Indivision','SARL de famille'].map(function(t){
+        return '<option value="' + t + '"' + (d.type===t?' selected':'') + '>' + t + '</option>';
+      }).join('') + '</select></div>' +
+      '<div class="form-group"><label>' + (isSCI ? 'Nom de la société *' : 'Nom *') + '</label>' +
+      '<input type="text" id="pw-name" value="' + (d.name||'') + '" placeholder="' + (isSCI?'SCI LEFAAL':'Jean Dupont') + '" /></div>' +
+      (isSCI ? '<div class="form-group"><label>SIRET</label>' +
+        '<input type="text" id="pw-siret" value="' + (d.siret||'') + '" placeholder="123 456 789 00012" /></div>' : '') +
+      '<div class="form-group"><label>Représentant légal</label>' +
+      '<input type="text" id="pw-representative" value="' + (d.representative||_landlordProfile.landlordRepresentative||'') + '" placeholder="Gérant de la SCI" /></div>';
+  } else if (_pwStep === 2) {
+    body = '<div class="wizard-section-title">Le bien</div>' +
+      '<div class="form-group"><label>Adresse *</label>' +
+      '<input type="text" id="pw-address" value="' + (d.address||'') + '" placeholder="54 BIS rue de Fresnicourt" /></div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Code postal</label>' +
+        '<input type="text" id="pw-postal" value="' + (d.postal||'') + '" placeholder="62620" /></div>' +
+        '<div class="form-group"><label>Ville</label>' +
+        '<input type="text" id="pw-city" value="' + (d.city||'') + '" placeholder="BARLIN" /></div>' +
+      '</div>' +
+      '<div class="form-group"><label>Type de bien *</label>' +
+      '<select id="pw-buildingType">' +
+      ['Immeuble','Maison','Appartement','Garage / Box','Local commercial','Autre'].map(function(t){
+        return '<option value="' + t + '"' + (d.buildingType===t?' selected':'') + '>' + t + '</option>';
+      }).join('') + '</select></div>';
+  } else if (_pwStep === 3) {
+    var lotsHtml = '<div class="wizard-section-title">Les lots</div>' +
+      '<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px">Ajoutez les lots de ce bien. Vous pourrez créer les baux ensuite depuis chaque lot.</p>';
+    if (_pwLots.length > 0) {
+      lotsHtml += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">' +
+        _pwLots.map(function(l, i) {
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--color-bg-secondary);border-radius:var(--radius-md)">' +
+            '<span style="font-size:13px;font-weight:600">' + l.label + '</span>' +
+            '<span style="font-size:12px;color:var(--color-text-secondary)">' + (l.type||'') + (l.surface?' · '+l.surface:'') + (l.tenant?' · '+l.tenant:'') + '</span>' +
+            '<button onclick="pwRemoveLot(' + i + ')" style="background:none;border:none;color:var(--color-danger);cursor:pointer;font-size:16px">✕</button>' +
+            '</div>';
+        }).join('') + '</div>';
+    }
+    lotsHtml += '<div style="border:1.5px dashed var(--color-border);border-radius:var(--radius-md);padding:var(--space-md)">' +
+      '<div style="font-size:11px;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:10px">Ajouter un lot</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Désignation *</label>' +
+        '<input type="text" id="pw-lot-label" placeholder="T2 RDC, Studio n°1, Garage..." /></div>' +
+        '<div class="form-group"><label>Type</label>' +
+        '<select id="pw-lot-type">' +
+        ['Appartement','Maison','Local commercial','Garage / Box','Cave / Parking','Autre'].map(function(t){
+          return '<option value="' + t + '">' + t + '</option>';
+        }).join('') + '</select></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Surface</label>' +
+        '<input type="text" id="pw-lot-surface" placeholder="45 m²" /></div>' +
+        '<div class="form-group"><label>Étage</label>' +
+        '<input type="text" id="pw-lot-floor" placeholder="RDC, 1er..." /></div>' +
+      '</div>' +
+      '<div class="form-group"><label>Occupant actuel (optionnel)</label>' +
+      '<input type="text" id="pw-lot-tenant" placeholder="Nom du locataire si déjà occupé" /></div>' +
+      '<button class="btn-secondary" onclick="pwAddLot()" style="margin-top:4px;font-size:13px">+ Ajouter ce lot</button>' +
+      '</div>';
+    body = lotsHtml;
+  }
+
+  document.getElementById('pw-body').innerHTML = body;
+  document.getElementById('pw-back').style.display = _pwStep > 1 ? '' : 'none';
+  document.getElementById('pw-next').textContent = _pwStep === PW_TOTAL ? (_pwEditId ? 'Enregistrer' : 'Créer le bien') : 'Suivant →';
+}
+
+function pwTypeChange() {
+  var sel = document.getElementById('pw-type');
+  if (sel) _pwData.type = sel.value;
+  pwCollect();
+  pwRender();
+}
+
+function pwAddLot() {
+  var label = (document.getElementById('pw-lot-label')||{}).value || '';
+  if (!label.trim()) { showToast('La désignation est obligatoire.', 'error'); return; }
+  _pwLots.push({
+    label: label.trim(),
+    type: (document.getElementById('pw-lot-type')||{}).value || 'Appartement',
+    surface: (document.getElementById('pw-lot-surface')||{}).value || '',
+    floor: (document.getElementById('pw-lot-floor')||{}).value || '',
+    tenant: (document.getElementById('pw-lot-tenant')||{}).value || ''
+  });
+  pwRender();
+}
+
+function pwRemoveLot(i) {
+  _pwLots.splice(i, 1);
+  pwRender();
+}
+
+function pwCollect() {
+  var d = _pwData;
+  if (_pwStep === 1) {
+    var t = document.getElementById('pw-type'); if (t) d.type = t.value;
+    var n = document.getElementById('pw-name'); if (n) d.name = n.value.trim();
+    var s = document.getElementById('pw-siret'); if (s) d.siret = s.value.trim();
+    var r = document.getElementById('pw-representative'); if (r) d.representative = r.value.trim();
+  } else if (_pwStep === 2) {
+    var a = document.getElementById('pw-address'); if (a) d.address = a.value.trim();
+    var p = document.getElementById('pw-postal'); if (p) d.postal = p.value.trim();
+    var c = document.getElementById('pw-city'); if (c) d.city = c.value.trim();
+    var b = document.getElementById('pw-buildingType'); if (b) d.buildingType = b.value;
+  }
+}
+
+function pwBack() {
+  if (_pwStep > 1) { pwCollect(); _pwStep--; pwRender(); }
+}
+
+async function pwNext() {
+  pwCollect();
+  if (_pwStep === 1 && !_pwData.name) { showToast('Le nom est obligatoire.', 'error'); return; }
+  if (_pwStep === 2 && !_pwData.address) { showToast("L'adresse est obligatoire.", 'error'); return; }
+  if (_pwStep < PW_TOTAL) { _pwStep++; pwRender(); return; }
+
+  // Etape 3 : créer/modifier le bien + ses lots
+  var btn = document.getElementById('pw-next');
+  btn.disabled = true; btn.textContent = 'Enregistrement…';
+
+  var d = _pwData;
+  var payload = {
+    name: d.name,
+    type: d.type || 'Particulier',
+    siret: d.siret || '',
+    address: d.address || '',
+    postal_code: d.postal || '',
+    city: d.city || '',
+    building_type: d.buildingType || 'Immeuble',
     bailleur_id: 'default',
     updated_at: new Date().toISOString()
   };
 
-  const btn = document.getElementById('pm-submit');
-  btn.disabled = true; btn.textContent = 'Enregistrement…';
-
-  let res;
-  if (_editPropertyId) {
-    res = await db.from('properties').update(payload).eq('id', _editPropertyId);
+  var propId = _pwEditId;
+  if (_pwEditId) {
+    await db.from('properties').update(payload).eq('id', _pwEditId);
   } else {
-    res = await db.from('properties').insert(payload);
+    var res = await db.from('properties').insert(payload).select().single();
+    if (res.error) {
+      showToast('Erreur : ' + res.error.message, 'error');
+      btn.disabled = false; btn.textContent = 'Créer le bien'; return;
+    }
+    propId = res.data.id;
   }
 
-  if (res.error) {
-    showToast('Erreur : ' + res.error.message, 'error');
-    btn.disabled = false; btn.textContent = _editPropertyId ? 'Enregistrer' : 'Créer';
-    return;
+  // Créer les lots
+  for (var i = 0; i < _pwLots.length; i++) {
+    var lot = _pwLots[i];
+    await db.from('units').insert({
+      property_id: propId,
+      label: lot.label,
+      type: lot.type || 'Appartement',
+      surface: lot.surface || '',
+      floor: lot.floor || '',
+      furnished: false,
+      description: lot.tenant ? 'Occupant: ' + lot.tenant : ''
+    });
   }
 
-  showToast(_editPropertyId ? 'Bien mis à jour !' : 'Bien créé !', 'success');
+  // Mettre a jour le profil bailleur avec SIRET si saisi
+  if (d.siret && !_landlordProfile.landlordSiret) {
+    _landlordProfile.landlordSiret = d.siret;
+    await db.from('settings').upsert({ key: 'landlord_profile', value: JSON.stringify(_landlordProfile) }, { onConflict: 'key' });
+  }
+
+  showToast((propId ? 'Bien créé' : 'Bien modifié') + (_pwLots.length ? ' avec ' + _pwLots.length + ' lot(s) !' : ' !'), 'success');
   document.getElementById('property-modal-overlay').classList.add('hidden');
   btn.disabled = false;
-  await loadProperties();
-  if (_editPropertyId) openPropertyDetail(_editPropertyId);
+
+  var [propR, unitR] = await Promise.all([
+    db.from('properties').select('*').eq('bailleur_id', 'default'),
+    db.from('units').select('*')
+  ]);
+  _allProperties = propR.data || [];
+  _allUnits = unitR.data || [];
+  loadProperties();
+  if (propId) openPropertyDetail(propId);
 }
 
 function editProperty() {
