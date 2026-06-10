@@ -1084,7 +1084,10 @@ function renderLeaseCard(l) {
       </div>
       <div class="lease-card-footer">
         <span>${f.leaseType || 'Bail nu'}</span>
-        <span>ID: ${l.id.substring(0,8)}</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="font-size:11px;color:var(--color-text-tertiary)">ID: ${l.id.substring(0,8)}</span>
+          <button class="btn-ghost" onclick="event.stopPropagation();supprimerBail('${l.id}')" style="font-size:11px;color:var(--color-danger);padding:2px 6px" title="Supprimer">&#128465;</button>
+        </div>
       </div>
     </div>`;
 }
