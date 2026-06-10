@@ -2448,10 +2448,30 @@ const WIZARD_STEPS_CONTENT = {
       }
     });
 
-    // Stocker dans cache global (seulement si pas encore charge)
+    // Stocker dans cache global avec toutes les donnees du bail
     _tenantCache = {};
-    tenants.forEach(function(t, i){ _tenantCache[i] = t; });
-    var _currentTenantNames = tenants.map(function(t){return t.name;});
+    var tenantLeaseData = {};
+    _allLeases.forEach(function(l) {
+      var f = (l.data && l.data.formData) ? l.data.formData : {};
+      if (f.tenantName && !tenantLeaseData[f.tenantName]) {
+        tenantLeaseData[f.tenantName] = f;
+      }
+    });
+    tenants.forEach(function(t, i){
+      var f = tenantLeaseData[t.name] || {};
+      _tenantCache[i] = {
+        name: t.name, email: t.email, phone: t.phone,
+        address: t.address, dob: t.dob, idDoc: t.idDoc,
+        // Donnees financieres du bail existant
+        rent: f.rent||'', charges: f.charges||'', deposit: f.deposit||'',
+        rentDueDay: f.rentDueDay||'', duration: f.duration||'',
+        irlReference: f.irlReference||'', paymentTerms: f.paymentTerms||'',
+        chargesRegime: f.chargesRegime||'', leaseType: f.leaseType||'',
+        propertyAddress: f.propertyAddress||'', surface: f.surface||'',
+        guarantorName: f.guarantorName||'', guarantorType: f.guarantorType||'',
+        guarantorAddress: f.guarantorAddress||'', guarantorIncome: f.guarantorIncome||''
+      };
+    });
 
     // Un locataire existant est-il sélectionné ?
     var tenantSelected = tenants.some(function(t){ return t.name === d.tenantName; });
@@ -2649,22 +2669,24 @@ function handleDpeFile(input) {
 var _tenantCache = {};
 
 function selectExistingTenant(t) {
-  var tenant = t;
-  _wizardData.tenantName = tenant.name || '';
-  _wizardData.tenantEmail = tenant.email || '';
-  _wizardData.tenantPhone = tenant.phone || '';
-  _wizardData.tenantAddress = tenant.address || '';
-  _wizardData.tenantDOB = tenant.dob || '';
-  _wizardData.tenantIdDoc = tenant.idDoc || '';
+  var fields = ['tenantName','tenantEmail','tenantPhone','tenantAddress','tenantDOB','tenantIdDoc',
+    'rent','charges','deposit','rentDueDay','duration','irlReference','paymentTerms',
+    'chargesRegime','leaseType','guarantorName','guarantorType','guarantorAddress','guarantorIncome'];
+  var map = {
+    tenantName:t.name||'', tenantEmail:t.email||'', tenantPhone:t.phone||'',
+    tenantAddress:t.address||'', tenantDOB:t.dob||'', tenantIdDoc:t.idDoc||'',
+    rent:t.rent||'', charges:t.charges||'', deposit:t.deposit||'',
+    rentDueDay:t.rentDueDay||'', duration:t.duration||'',
+    irlReference:t.irlReference||'', paymentTerms:t.paymentTerms||'',
+    chargesRegime:t.chargesRegime||'', leaseType:t.leaseType||'',
+    guarantorName:t.guarantorName||'', guarantorType:t.guarantorType||'',
+    guarantorAddress:t.guarantorAddress||'', guarantorIncome:t.guarantorIncome||''
+  };
+  fields.forEach(function(f){ _wizardData[f] = map[f]; });
   // Synchroniser aussi _lotWizardData si on est dans le wizard lot
   var lotOverlay = document.getElementById('lot-wizard-overlay');
   if (lotOverlay && !lotOverlay.classList.contains('hidden')) {
-    _lotWizardData.tenantName = tenant.name || '';
-    _lotWizardData.tenantEmail = tenant.email || '';
-    _lotWizardData.tenantPhone = tenant.phone || '';
-    _lotWizardData.tenantAddress = tenant.address || '';
-    _lotWizardData.tenantDOB = tenant.dob || '';
-    _lotWizardData.tenantIdDoc = tenant.idDoc || '';
+    fields.forEach(function(f){ _lotWizardData[f] = map[f]; });
     renderLotWizardStep();
   } else {
     renderWizardStep();
