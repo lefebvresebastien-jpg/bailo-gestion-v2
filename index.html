@@ -2649,7 +2649,19 @@ function selectExistingTenant(t) {
   _wizardData.tenantAddress = tenant.address || '';
   _wizardData.tenantDOB = tenant.dob || '';
   _wizardData.tenantIdDoc = tenant.idDoc || '';
-  renderWizardStep();
+  // Synchroniser aussi _lotWizardData si on est dans le wizard lot
+  var lotOverlay = document.getElementById('lot-wizard-overlay');
+  if (lotOverlay && !lotOverlay.classList.contains('hidden')) {
+    _lotWizardData.tenantName = tenant.name || '';
+    _lotWizardData.tenantEmail = tenant.email || '';
+    _lotWizardData.tenantPhone = tenant.phone || '';
+    _lotWizardData.tenantAddress = tenant.address || '';
+    _lotWizardData.tenantDOB = tenant.dob || '';
+    _lotWizardData.tenantIdDoc = tenant.idDoc || '';
+    renderLotWizardStep();
+  } else {
+    renderWizardStep();
+  }
 }
 
 function _selectTenant(idx) {
