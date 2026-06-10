@@ -307,6 +307,71 @@
 }
 .msg-attachment:hover { background: var(--color-primary-light); color: var(--color-primary); }
 
+
+/* ============================================================
+   PROPERTIES & UNITS
+   ============================================================ */
+.property-card-v2 {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-lg);
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.1s;
+}
+.property-card-v2:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+
+.property-card-header {
+  display: flex; align-items: flex-start;
+  justify-content: space-between; margin-bottom: 12px;
+}
+.property-type-badge {
+  font-size: 10px; font-weight: 700; padding: 3px 8px;
+  border-radius: 99px; text-transform: uppercase; letter-spacing: 0.05em;
+}
+.badge-sci { background: #dbeafe; color: #1d4ed8; }
+.badge-particulier { background: #f3f4f6; color: #6b7280; }
+.badge-indivision { background: #fef3c7; color: #d97706; }
+.badge-sarl { background: #ede9fe; color: #7c3aed; }
+
+.property-name { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+.property-address-small { font-size: 12px; color: var(--color-text-secondary); }
+
+.property-lots-row {
+  display: flex; gap: var(--space-md); flex-wrap: wrap;
+  margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid var(--color-border-light);
+}
+.lot-chip {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 99px;
+  font-size: 11px; font-weight: 500;
+  background: var(--color-bg); border: 1px solid var(--color-border);
+}
+.lot-chip.occupied { background: var(--color-success-light); border-color: var(--color-success); color: var(--color-success); }
+.lot-chip.vacant { background: var(--color-warning-light); border-color: var(--color-warning); color: var(--color-warning); }
+
+.unit-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-lg);
+  transition: box-shadow 0.15s;
+  cursor: pointer;
+}
+.unit-card:hover { box-shadow: var(--shadow-md); }
+.unit-card.vacant { border-left: 3px solid var(--color-warning); }
+.unit-card.occupied { border-left: 3px solid var(--color-success); }
+
+.unit-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+.unit-label { font-size: 14px; font-weight: 700; }
+.unit-type { font-size: 11px; color: var(--color-text-secondary); margin-top: 2px; }
+.unit-tenant { font-size: 13px; font-weight: 600; color: var(--color-primary); margin-top: 8px; }
+.unit-vacant-text { font-size: 12px; color: var(--color-warning); margin-top: 8px; font-style: italic; }
+.unit-footer { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--color-border-light); display: flex; justify-content: space-between; font-size: 11px; color: var(--color-text-tertiary); }
+
 </style>
 </head>
 <body>
@@ -466,13 +531,36 @@
 
       <!-- BIENS -->
       <section id="page-properties" class="page hidden">
-        <div class="page-header">
-          <div><h1>Biens</h1><p class="page-sub">Vos logements en gestion</p></div>
-          <button class="btn-primary" onclick="openPropertyForm()">+ Ajouter un bien</button>
+
+        <!-- Vue liste des propriétés -->
+        <div id="properties-view-list">
+          <div class="page-header">
+            <div><h1>Biens</h1><p class="page-sub">Votre patrimoine immobilier</p></div>
+            <button class="btn-primary" onclick="openPropertyModal()">+ Ajouter un bien</button>
+          </div>
+          <div id="properties-list" class="properties-grid">
+            <div class="list-loading">Chargement…</div>
+          </div>
         </div>
-        <div id="properties-list" class="properties-grid">
-          <div class="list-loading">Chargement…</div>
+
+        <!-- Vue détail d'une propriété -->
+        <div id="properties-view-detail" style="display:none">
+          <div class="page-header">
+            <div>
+              <button class="btn-ghost" onclick="showPropertiesList()" style="margin-bottom:8px">← Retour</button>
+              <h1 id="prop-detail-name">—</h1>
+              <p class="page-sub" id="prop-detail-address"></p>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="btn-secondary" onclick="editProperty()" style="font-size:12px">✏️ Modifier</button>
+              <button class="btn-primary" onclick="openUnitModal()" style="font-size:12px">+ Ajouter un lot</button>
+              <button class="btn-secondary" onclick="deleteProperty()" style="font-size:12px;color:var(--color-danger);border-color:var(--color-danger)">🗑️</button>
+            </div>
+          </div>
+          <div id="prop-detail-stats" class="kpi-grid" style="margin-bottom:var(--space-lg)"></div>
+          <div id="units-grid" class="properties-grid"></div>
         </div>
+
       </section>
 
       <!-- BAUX -->
@@ -642,6 +730,108 @@
       </section>
 
     </main>
+  </div>
+
+
+  <!-- MODAL PROPRIÉTÉ -->
+  <div id="property-modal-overlay" class="modal-overlay hidden" onclick="closePropertyModal(event)">
+    <div class="modal-card" style="max-width:500px" onclick="event.stopPropagation()">
+      <div class="wizard-header">
+        <h2 id="property-modal-title">Nouveau bien</h2>
+        <button class="modal-close" onclick="closePropertyModal()">✕</button>
+      </div>
+      <div style="padding:var(--space-xl);display:flex;flex-direction:column;gap:var(--space-md)">
+        <div class="form-group">
+          <label>Nom du bien / SCI *</label>
+          <input type="text" id="pm-name" placeholder="SCI LEFAAL ou Mon appartement" />
+        </div>
+        <div class="form-group">
+          <label>Type de structure</label>
+          <select id="pm-type">
+            <option value="Particulier">Particulier</option>
+            <option value="SCI">SCI</option>
+            <option value="Indivision">Indivision</option>
+            <option value="SARL de famille">SARL de famille</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Adresse *</label>
+          <input type="text" id="pm-address" placeholder="54 BIS rue de fresnicourt" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Code postal</label>
+            <input type="text" id="pm-postal" placeholder="62620" />
+          </div>
+          <div class="form-group">
+            <label>Ville</label>
+            <input type="text" id="pm-city" placeholder="BARLIN" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="pm-description" rows="2" style="width:100%;padding:9px 12px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);resize:none;font-size:13px;outline:none" placeholder="Immeuble 3 lots, RDC commercial..."></textarea>
+        </div>
+      </div>
+      <div class="wizard-footer">
+        <button class="btn-secondary" onclick="closePropertyModal()">Annuler</button>
+        <button class="btn-primary" id="pm-submit" onclick="submitProperty()">Créer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL LOT -->
+  <div id="unit-modal-overlay" class="modal-overlay hidden" onclick="closeUnitModal(event)">
+    <div class="modal-card" style="max-width:480px" onclick="event.stopPropagation()">
+      <div class="wizard-header">
+        <h2 id="unit-modal-title">Nouveau lot</h2>
+        <button class="modal-close" onclick="closeUnitModal()">✕</button>
+      </div>
+      <div style="padding:var(--space-xl);display:flex;flex-direction:column;gap:var(--space-md)">
+        <div class="form-group">
+          <label>Désignation du lot *</label>
+          <input type="text" id="um-label" placeholder="T2 n°1, Studio RDC, Local commercial..." />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Type</label>
+            <select id="um-type">
+              <option value="Appartement">Appartement</option>
+              <option value="Maison">Maison</option>
+              <option value="Local commercial">Local commercial</option>
+              <option value="Garage / Box">Garage / Box</option>
+              <option value="Cave / Parking">Cave / Parking</option>
+              <option value="Autre">Autre</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Surface</label>
+            <input type="text" id="um-surface" placeholder="45 m²" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Étage</label>
+            <input type="text" id="um-floor" placeholder="1er étage" />
+          </div>
+          <div class="form-group">
+            <label>Meublé</label>
+            <select id="um-furnished">
+              <option value="false">Non meublé</option>
+              <option value="true">Meublé</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="um-description" rows="2" style="width:100%;padding:9px 12px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);resize:none;font-size:13px;outline:none" placeholder="Cuisine équipée, double vitrage..."></textarea>
+        </div>
+      </div>
+      <div class="wizard-footer">
+        <button class="btn-secondary" onclick="closeUnitModal()">Annuler</button>
+        <button class="btn-primary" id="um-submit" onclick="submitUnit()">Ajouter</button>
+      </div>
+    </div>
   </div>
 
   <!-- LEASE WIZARD MODAL -->
@@ -1307,44 +1497,357 @@ async function loadDetailQuittances(leaseId) {
 // ============================================================
 // BIENS
 // ============================================================
+
+// ============================================================
+// BIENS — Properties & Units
+// ============================================================
+let _allProperties = [];
+let _allUnits = [];
+let _currentPropertyId = null;
+let _editPropertyId = null;
+let _editUnitId = null;
+
+const UNIT_ICONS = {
+  'Appartement': '🏠',
+  'Maison': '🏡',
+  'Local commercial': '🏪',
+  'Garage / Box': '🅿️',
+  'Cave / Parking': '🚗',
+  'Autre': '📦'
+};
+
+const TYPE_BADGE = {
+  'SCI': 'badge-sci',
+  'Particulier': 'badge-particulier',
+  'Indivision': 'badge-indivision',
+  'SARL de famille': 'badge-sarl'
+};
+
 async function loadProperties() {
   const el = document.getElementById('properties-list');
   if (!el) return;
   el.innerHTML = '<div class="list-loading">Chargement…</div>';
-  const { data, error } = await db.from('leases').select('id, data').order('updated_at', { ascending: false });
-  if (error) { el.innerHTML = '<div class="list-loading">Erreur de chargement.</div>'; return; }
-  if (!data?.length) {
-    el.innerHTML = '<div style="grid-column:1/-1;padding:48px;text-align:center;color:var(--color-text-secondary);">Aucun bien. <button class="btn-ghost" onclick="openLeaseWizard()">Créer un bail</button></div>';
+
+  // Charger propriétés + units + baux en parallèle
+  const [propRes, unitRes, leaseRes] = await Promise.all([
+    db.from('properties').select('*').order('created_at', { ascending: false }),
+    db.from('units').select('*'),
+    db.from('leases').select('id, data, unit_id')
+  ]);
+
+  _allProperties = propRes.data || [];
+  _allUnits = unitRes.data || [];
+
+  // Enrichir les baux dans _allLeases si pas encore chargé
+  if (!_allLeases.length && leaseRes.data) _allLeases = leaseRes.data;
+
+  if (!_allProperties.length) {
+    el.innerHTML = '<div style="grid-column:1/-1;padding:48px;text-align:center;color:var(--color-text-secondary)">Aucun bien. <button class="btn-ghost" onclick="openPropertyModal()">Créer votre premier bien</button></div>';
     return;
   }
-  el.innerHTML = data.map(l => renderPropertyCard(l)).join('');
+
+  el.innerHTML = _allProperties.map(p => renderPropertyCard(p)).join('');
 }
 
-function renderPropertyCard(l) {
-  const f = fd(l);
-  return `
-    <div class="property-card" onclick="navigate('leases')">
-      <div class="property-card-header">
-        <div>
-          <div class="property-address">${f.propertyAddress || '—'}</div>
-          <div class="property-type">${f.leaseType || 'Bail nu'}${f.surface ? ' · ' + f.surface : ''}</div>
-        </div>
-        ${leaseStatusBadge(leaseStatus(l))}
+function renderPropertyCard(p) {
+  const units = _allUnits.filter(u => u.property_id === p.id);
+  const badgeClass = TYPE_BADGE[p.type] || 'badge-particulier';
+
+  // Pour chaque lot, chercher si un bail actif existe
+  const lotChips = units.map(u => {
+    const lease = _allLeases.find(l => l.unit_id === u.id);
+    const occupied = !!lease;
+    const tenant = occupied ? leaseTenantName(lease) : 'Vacant';
+    return `<span class="lot-chip ${occupied ? 'occupied' : 'vacant'}">
+      ${UNIT_ICONS[u.type] || '🏠'} ${u.label}${occupied ? ' · ' + tenant : ''}
+    </span>`;
+  }).join('');
+
+  const totalLoyer = units.reduce((sum, u) => {
+    const lease = _allLeases.find(l => l.unit_id === u.id);
+    return sum + (lease ? leaseRent(lease) : 0);
+  }, 0);
+
+  const occupiedCount = units.filter(u => _allLeases.find(l => l.unit_id === u.id)).length;
+
+  return `<div class="property-card-v2" onclick="openPropertyDetail('${p.id}')">
+    <div class="property-card-header">
+      <div>
+        <div class="property-name">${p.name}</div>
+        <div class="property-address-small">${p.address || ''}${p.city ? ', ' + p.city : ''}</div>
       </div>
-      <div class="property-card-body">
-        <div class="property-stat">
-          <span class="property-stat-label">Loyer CC</span>
-          <span class="property-stat-value">${formatCurrency(leaseRent(l))}</span>
+      <span class="property-type-badge ${badgeClass}">${p.type}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--color-text-secondary);margin-bottom:8px">
+      <span>${units.length} lot${units.length > 1 ? 's' : ''} · ${occupiedCount} occupé${occupiedCount > 1 ? 's' : ''}</span>
+      ${totalLoyer > 0 ? '<span style="font-weight:600;color:var(--color-text)">' + formatCurrency(totalLoyer) + '/mois</span>' : ''}
+    </div>
+    ${units.length > 0 ? '<div class="property-lots-row">' + lotChips + '</div>' : '<div style="font-size:12px;color:var(--color-text-tertiary);margin-top:8px">Aucun lot — <button class="btn-ghost" style="font-size:11px" onclick="event.stopPropagation();_currentPropertyId=\''+p.id+'\';openUnitModal()">Ajouter un lot</button></div>'}
+  </div>`;
+}
+
+async function openPropertyDetail(propertyId) {
+  _currentPropertyId = propertyId;
+  const prop = _allProperties.find(p => p.id === propertyId);
+  if (!prop) return;
+
+  // Afficher la vue détail
+  document.getElementById('properties-view-list').style.display = 'none';
+  document.getElementById('properties-view-detail').style.display = 'block';
+
+  document.getElementById('prop-detail-name').textContent = prop.name;
+  document.getElementById('prop-detail-address').textContent = [prop.address, prop.postal_code, prop.city].filter(Boolean).join(', ');
+
+  // Stats
+  const units = _allUnits.filter(u => u.property_id === propertyId);
+  const occupiedUnits = units.filter(u => _allLeases.find(l => l.unit_id === u.id));
+  const totalLoyer = units.reduce((sum, u) => {
+    const lease = _allLeases.find(l => l.unit_id === u.id);
+    return sum + (lease ? leaseRent(lease) : 0);
+  }, 0);
+
+  document.getElementById('prop-detail-stats').innerHTML = `
+    <div class="kpi-card"><div class="kpi-icon blue">🏠</div><div class="kpi-body"><span class="kpi-value">${units.length}</span><span class="kpi-label">Lots</span></div></div>
+    <div class="kpi-card"><div class="kpi-icon green">✅</div><div class="kpi-body"><span class="kpi-value">${occupiedUnits.length}</span><span class="kpi-label">Occupés</span></div></div>
+    <div class="kpi-card"><div class="kpi-icon orange">🔑</div><div class="kpi-body"><span class="kpi-value">${units.length - occupiedUnits.length}</span><span class="kpi-label">Vacants</span></div></div>
+    <div class="kpi-card"><div class="kpi-icon purple">💶</div><div class="kpi-body"><span class="kpi-value">${formatCurrency(totalLoyer)}</span><span class="kpi-label">Loyers/mois</span></div></div>
+  `;
+
+  // Grille des lots
+  renderUnitsGrid(units);
+}
+
+function renderUnitsGrid(units) {
+  const el = document.getElementById('units-grid');
+  if (!el) return;
+
+  if (!units.length) {
+    el.innerHTML = '<div style="grid-column:1/-1;padding:48px;text-align:center;color:var(--color-text-secondary)">Aucun lot. <button class="btn-ghost" onclick="openUnitModal()">Ajouter un premier lot</button></div>';
+    return;
+  }
+
+  el.innerHTML = units.map(u => {
+    const lease = _allLeases.find(l => l.unit_id === u.id);
+    const occupied = !!lease;
+    const tenant = occupied ? leaseTenantName(lease) : null;
+    const loyer = occupied ? leaseRent(lease) : 0;
+    const icon = UNIT_ICONS[u.type] || '🏠';
+
+    return `<div class="unit-card ${occupied ? 'occupied' : 'vacant'}" onclick="openUnitDetail('${u.id}')">
+      <div class="unit-header">
+        <div>
+          <div class="unit-label">${icon} ${u.label}</div>
+          <div class="unit-type">${u.type}${u.surface ? ' · ' + u.surface : ''}${u.floor ? ' · ' + u.floor : ''}${u.furnished ? ' · Meublé' : ''}</div>
         </div>
-        ${f.tenantName ? `<div class="property-stat">
-          <span class="property-stat-label">Locataire</span>
-          <span class="property-stat-value">${f.tenantName}</span>
-        </div>` : ''}
+        <div style="display:flex;gap:6px">
+          <button class="btn-ghost" onclick="event.stopPropagation();editUnit('${u.id}')" style="font-size:11px;padding:2px 6px">✏️</button>
+          <button class="btn-ghost" onclick="event.stopPropagation();deleteUnit('${u.id}')" style="font-size:11px;padding:2px 6px;color:var(--color-danger)">🗑️</button>
+        </div>
+      </div>
+      ${occupied
+        ? `<div class="unit-tenant">👤 ${tenant}</div>
+           <div style="font-size:12px;color:var(--color-text-secondary);margin-top:2px">${formatCurrency(loyer)}/mois</div>`
+        : '<div class="unit-vacant-text">Vacant — disponible</div>'
+      }
+      <div class="unit-footer">
+        <span>${occupied ? 'Actif' : 'Sans locataire'}</span>
+        ${occupied
+          ? '<button class="btn-ghost" style="font-size:11px" onclick="event.stopPropagation();openLeaseDetail(\'' + (_allLeases.find(l=>l.unit_id===u.id)||{}).id + '\')" >Voir le bail →</button>'
+          : '<button class="btn-ghost" style="font-size:11px" onclick="event.stopPropagation();openLeaseWizardForUnit(\'' + u.id + '\')">+ Créer un bail</button>'
+        }
       </div>
     </div>`;
+  }).join('');
 }
 
-function openPropertyForm() { openLeaseWizard(); }
+function showPropertiesList() {
+  document.getElementById('properties-view-list').style.display = 'block';
+  document.getElementById('properties-view-detail').style.display = 'none';
+  _currentPropertyId = null;
+}
+
+function openUnitDetail(unitId) {
+  const unit = _allUnits.find(u => u.id === unitId);
+  if (!unit) return;
+  const lease = _allLeases.find(l => l.unit_id === unitId);
+  if (lease) openLeaseDetail(lease.id);
+  else showToast('Lot vacant — créez un bail pour ce lot.', '', 3000);
+}
+
+function openLeaseWizardForUnit(unitId) {
+  const unit = _allUnits.find(u => u.id === unitId);
+  if (unit) {
+    _wizardData = {
+      propertyAddress: (() => {
+        const prop = _allProperties.find(p => p.id === unit.property_id);
+        return prop ? (prop.address || '') + (prop.city ? ', ' + prop.city : '') : '';
+      })(),
+      surface: unit.surface || '',
+      propertyFloor: unit.floor || '',
+      leaseType: unit.furnished ? 'Location meublee' : 'Location vide',
+    };
+    _wizardEditUnitId = unitId;
+  }
+  openLeaseWizard();
+}
+
+var _wizardEditUnitId = null;
+
+// ── Modals Propriété ──
+function openPropertyModal(editId) {
+  _editPropertyId = editId || null;
+  const prop = editId ? _allProperties.find(p => p.id === editId) : null;
+  document.getElementById('property-modal-title').textContent = editId ? 'Modifier le bien' : 'Nouveau bien';
+  document.getElementById('pm-name').value = prop ? prop.name : '';
+  document.getElementById('pm-type').value = prop ? prop.type : 'Particulier';
+  document.getElementById('pm-address').value = prop ? (prop.address || '') : '';
+  document.getElementById('pm-postal').value = prop ? (prop.postal_code || '') : '';
+  document.getElementById('pm-city').value = prop ? (prop.city || '') : '';
+  document.getElementById('pm-description').value = prop ? (prop.description || '') : '';
+  document.getElementById('pm-submit').textContent = editId ? 'Enregistrer' : 'Créer';
+  document.getElementById('property-modal-overlay').classList.remove('hidden');
+}
+
+function closePropertyModal(event) {
+  if (event && event.target !== document.getElementById('property-modal-overlay')) return;
+  document.getElementById('property-modal-overlay').classList.add('hidden');
+}
+
+async function submitProperty() {
+  const name = document.getElementById('pm-name').value.trim();
+  if (!name) { showToast('Le nom est obligatoire.', 'error'); return; }
+
+  const payload = {
+    name,
+    type: document.getElementById('pm-type').value,
+    address: document.getElementById('pm-address').value.trim(),
+    postal_code: document.getElementById('pm-postal').value.trim(),
+    city: document.getElementById('pm-city').value.trim(),
+    description: document.getElementById('pm-description').value.trim(),
+    bailleur_id: 'default',
+    updated_at: new Date().toISOString()
+  };
+
+  const btn = document.getElementById('pm-submit');
+  btn.disabled = true; btn.textContent = 'Enregistrement…';
+
+  let res;
+  if (_editPropertyId) {
+    res = await db.from('properties').update(payload).eq('id', _editPropertyId);
+  } else {
+    res = await db.from('properties').insert(payload);
+  }
+
+  if (res.error) {
+    showToast('Erreur : ' + res.error.message, 'error');
+    btn.disabled = false; btn.textContent = _editPropertyId ? 'Enregistrer' : 'Créer';
+    return;
+  }
+
+  showToast(_editPropertyId ? 'Bien mis à jour !' : 'Bien créé !', 'success');
+  document.getElementById('property-modal-overlay').classList.add('hidden');
+  btn.disabled = false;
+  await loadProperties();
+  if (_editPropertyId) openPropertyDetail(_editPropertyId);
+}
+
+function editProperty() {
+  if (_currentPropertyId) openPropertyModal(_currentPropertyId);
+}
+
+async function deleteProperty() {
+  const prop = _allProperties.find(p => p.id === _currentPropertyId);
+  if (!prop) return;
+  if (!confirm('Supprimer ' + prop.name + ' et tous ses lots ? Cette action est irréversible.')) return;
+  const res = await db.from('properties').delete().eq('id', _currentPropertyId);
+  if (res.error) { showToast('Erreur : ' + res.error.message, 'error'); return; }
+  showToast('Bien supprimé.', 'success');
+  showPropertiesList();
+  loadProperties();
+}
+
+// ── Modals Lot ──
+function openUnitModal(editId) {
+  _editUnitId = editId || null;
+  const unit = editId ? _allUnits.find(u => u.id === editId) : null;
+  document.getElementById('unit-modal-title').textContent = editId ? 'Modifier le lot' : 'Nouveau lot';
+  document.getElementById('um-label').value = unit ? unit.label : '';
+  document.getElementById('um-type').value = unit ? unit.type : 'Appartement';
+  document.getElementById('um-surface').value = unit ? (unit.surface || '') : '';
+  document.getElementById('um-floor').value = unit ? (unit.floor || '') : '';
+  document.getElementById('um-furnished').value = unit ? String(unit.furnished) : 'false';
+  document.getElementById('um-description').value = unit ? (unit.description || '') : '';
+  document.getElementById('um-submit').textContent = editId ? 'Enregistrer' : 'Ajouter';
+  document.getElementById('unit-modal-overlay').classList.remove('hidden');
+}
+
+function closeUnitModal(event) {
+  if (event && event.target !== document.getElementById('unit-modal-overlay')) return;
+  document.getElementById('unit-modal-overlay').classList.add('hidden');
+}
+
+async function submitUnit() {
+  const label = document.getElementById('um-label').value.trim();
+  if (!label) { showToast('La désignation est obligatoire.', 'error'); return; }
+  if (!_currentPropertyId && !_editUnitId) { showToast('Aucun bien sélectionné.', 'error'); return; }
+
+  const payload = {
+    label,
+    type: document.getElementById('um-type').value,
+    surface: document.getElementById('um-surface').value.trim(),
+    floor: document.getElementById('um-floor').value.trim(),
+    furnished: document.getElementById('um-furnished').value === 'true',
+    description: document.getElementById('um-description').value.trim(),
+  };
+
+  if (!_editUnitId) payload.property_id = _currentPropertyId;
+
+  const btn = document.getElementById('um-submit');
+  btn.disabled = true; btn.textContent = 'Enregistrement…';
+
+  let res;
+  if (_editUnitId) {
+    res = await db.from('units').update(payload).eq('id', _editUnitId);
+  } else {
+    res = await db.from('units').insert(payload);
+  }
+
+  if (res.error) {
+    showToast('Erreur : ' + res.error.message, 'error');
+    btn.disabled = false;
+    return;
+  }
+
+  showToast(_editUnitId ? 'Lot mis à jour !' : 'Lot ajouté !', 'success');
+  document.getElementById('unit-modal-overlay').classList.add('hidden');
+  btn.disabled = false;
+
+  // Recharger units
+  const unitRes = await db.from('units').select('*');
+  _allUnits = unitRes.data || [];
+  if (_currentPropertyId) {
+    const units = _allUnits.filter(u => u.property_id === _currentPropertyId);
+    renderUnitsGrid(units);
+    await openPropertyDetail(_currentPropertyId);
+  }
+}
+
+function editUnit(unitId) {
+  openUnitModal(unitId);
+}
+
+async function deleteUnit(unitId) {
+  const unit = _allUnits.find(u => u.id === unitId);
+  if (!unit) return;
+  if (!confirm('Supprimer le lot ' + unit.label + ' ?')) return;
+  const res = await db.from('units').delete().eq('id', unitId);
+  if (res.error) { showToast('Erreur : ' + res.error.message, 'error'); return; }
+  showToast('Lot supprimé.', 'success');
+  _allUnits = _allUnits.filter(u => u.id !== unitId);
+  const units = _allUnits.filter(u => u.property_id === _currentPropertyId);
+  renderUnitsGrid(units);
+  await openPropertyDetail(_currentPropertyId);
+}
 
 // ============================================================
 // LOCATAIRES
