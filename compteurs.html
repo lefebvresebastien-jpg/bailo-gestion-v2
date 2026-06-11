@@ -214,9 +214,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 
     <!-- Graphique -->
     <div class="card">
-      <div class="card-title">📈 Évolution de la consommation</div>
+      <div class="card-title">📈 Évolution de la consommation (courbe)</div>
+      <div style="font-size:12px;color:var(--ink-3);margin-bottom:8px">🔵 Compteur général (bailleur uniquement) · 🟢 Sous-compteurs</div>
       <div class="chart-wrap">
         <canvas id="chart-conso"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">📊 Consommation mensuelle par lot (m³)</div>
+      <div class="chart-wrap">
+        <canvas id="chart-barres"></canvas>
       </div>
     </div>
   </div>
@@ -680,26 +687,44 @@ function renderAlertes() {
 }
 
 // ============================================================
-// GRAPHIQUE
+// GRAPHIQUES
 // ============================================================
+let _chartBarres = null;
+
 function renderChart() {
   const canvas = document.getElementById('chart-conso');
   if (!canvas || !_currentLeaseId) return;
 
   const releves = _compteurs[_currentLeaseId]?.releves || [];
-  if (releves.length < 2) { if (_chart) { _chart.destroy(); _chart = null; } return; }
+  const sc = _compteurs[_currentLeaseId]?.sousCompteurs || [];
+
+  if (releves.length < 2) {
+    if (_chart) { _chart.destroy(); _chart = null; }
+    if (_chartBarres) { _chartBarres.destroy(); _chartBarres = null; }
+    return;
+  }
 
   const labels = releves.map(r => formatDate(r.date));
+
+  // COURBE — compteur général (bailleur) + sous-compteurs
   const consoG = releves.map((r, i) => {
     if (i === 0 || r.general == null || releves[i-1].general == null) return 0;
     return parseFloat((r.general - releves[i-1].general).toFixed(3));
   });
 
-  const sc = _compteurs[_currentLeaseId]?.sousCompteurs || [];
-  const datasets = [
-    { label: 'Eau générale (m³)', data: consoG, borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.1)', tension: 0.3, fill: true }
+  const datasetsLine = [
+    {
+      label: 'Eau générale — bailleur (m³)',
+      data: consoG,
+      borderColor: '#2563eb',
+      backgroundColor: 'rgba(37,99,235,.1)',
+      tension: 0.3,
+      fill: true,
+      borderDash: []
+    }
   ];
 
+  const scColors = ['#16a34a','#d97706','#dc2626','#7c3aed','#0891b2'];
   sc.forEach((s, idx) => {
     const consoSC = releves.map((r, i) => {
       if (i === 0) return 0;
@@ -708,18 +733,81 @@ function renderChart() {
       if (ci == null || pi == null) return 0;
       return parseFloat((ci - pi).toFixed(3));
     });
-    const colors = ['#16a34a','#d97706','#dc2626','#7c3aed'];
-    datasets.push({ label: s.label || 'Sous-cpt ' + (idx+1), data: consoSC, borderColor: colors[idx % colors.length], backgroundColor: colors[idx % colors.length] + '20', tension: 0.3, fill: true });
+    datasetsLine.push({
+      label: (s.label || 'Sous-cpt ' + (idx+1)) + ' (m³)',
+      data: consoSC,
+      borderColor: scColors[idx % scColors.length],
+      backgroundColor: scColors[idx % scColors.length] + '20',
+      tension: 0.3,
+      fill: true
+    });
   });
 
   if (_chart) _chart.destroy();
   _chart = new Chart(canvas, {
     type: 'line',
-    data: { labels, datasets },
+    data: { labels, datasets: datasetsLine },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { position: 'top' } },
       scales: { y: { beginAtZero: true, title: { display: true, text: 'm³' } } }
+    }
+  });
+
+  // BARRES — consommation mensuelle par sous-compteur uniquement
+  const canvasB = document.getElementById('chart-barres');
+  if (!canvasB) return;
+
+  // Labels = périodes entre relevés
+  const labelsB = releves.slice(1).map((r, i) =>
+    formatDate(releves[i].date) + ' → ' + formatDate(r.date)
+  );
+
+  const datasetsBar = sc.map((s, idx) => {
+    const consoSC = releves.slice(1).map((r, i) => {
+      const ci = r.sousCompteurs?.[idx]?.index;
+      const pi = releves[i].sousCompteurs?.[idx]?.index;
+      if (ci == null || pi == null) return 0;
+      return parseFloat((ci - pi).toFixed(3));
+    });
+    return {
+      label: s.label || 'Sous-cpt ' + (idx+1),
+      data: consoSC,
+      backgroundColor: scColors[idx % scColors.length] + 'cc',
+      borderColor: scColors[idx % scColors.length],
+      borderWidth: 1.5,
+      borderRadius: 4
+    };
+  });
+
+  // Ajouter ligne de référence théorique
+  const totalOccupants = sc.reduce((s, c) => s + (c.occupants || 1), 0) || 1;
+  const refMois = (_config.consoRef || 54) * totalOccupants / 12;
+
+  if (_chartBarres) _chartBarres.destroy();
+  _chartBarres = new Chart(canvasB, {
+    type: 'bar',
+    data: { labels: labelsB, datasets: datasetsBar },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top' },
+        annotation: {
+          annotations: {
+            refLine: {
+              type: 'line',
+              yMin: refMois, yMax: refMois,
+              borderColor: '#dc2626',
+              borderWidth: 2,
+              borderDash: [6, 4],
+              label: { display: true, content: 'Référence INSEE (' + refMois.toFixed(1) + ' m³)', position: 'end', font: { size: 11 } }
+            }
+          }
+        }
+      },
+      scales: {
+        y: { beginAtZero: true, title: { display: true, text: 'm³ consommés' } }
+      }
     }
   });
 }
