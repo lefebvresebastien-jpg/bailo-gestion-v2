@@ -492,9 +492,12 @@
       var cpMatch = (f.propertyAddress || '').match(/(\d{2})\d{3}/);
       var dept = cpMatch ? cpMatch[0].substring(0,2) : null;
       // Départements à potentiel radon élevé (catégorie 3 - IRSN 2018)
-      var radonHigh = ['08','09','15','19','23','43','48','63','87','63','12','32','65','64','31','09','67','68','57','54','88'];
+      // Source : arrêté du 27 juin 2018 - catégorie 3 (potentiel radon élevé)
+      // Bretagne, Massif Central, Alsace, Vosges, Pyrénées, Ardennes, Limousin, Auvergne, Corse
+      var radonHigh = ['08','09','12','15','19','22','23','29','31','35','43','48','56','57','58','63','64','65','67','68','87','88','2A','2B'];
       // Catégorie 2 (potentiel significatif)
-      var radonMed = ['02','04','05','06','07','10','11','13','14','16','17','18','21','22','24','25','26','27','28','29','30','33','34','35','36','37','38','39','40','41','42','44','45','46','47','49','50','51','52','53','55','56','58','59','60','61','62','69','70','71','72','73','74','75','76','77','78','79','80','81','82','83','84','85','86','89','90','91','92','93','94','95'];
+      // Catégorie 2 : formations géologiques avec facteurs facilitant le transfert
+      var radonMed = ['04','05','06','07','10','11','13','14','16','17','18','21','24','25','26','27','28','30','33','34','36','37','38','39','40','41','42','44','45','46','47','49','50','51','52','53','55','59','60','61','62','69','70','71','72','73','74','76','77','78','79','80','81','82','83','84','85','86','89','90'];
       var radonLevel = dept ? (radonHigh.indexOf(dept) >= 0 ? 3 : (radonMed.indexOf(dept) >= 0 ? 2 : 1)) : 1;
       var radonColor = radonLevel === 3 ? '#dc2626' : radonLevel === 2 ? '#d97706' : '#16a34a';
       var radonBg = radonLevel === 3 ? '#fee2e2' : radonLevel === 2 ? '#fef3c7' : '#dcfce7';
