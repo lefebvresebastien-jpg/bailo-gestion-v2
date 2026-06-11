@@ -6,6 +6,7 @@
 <title>Compteurs — Bailo Gestion</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <style>
 :root {
   --primary: #2563eb; --success: #16a34a; --danger: #dc2626; --warning: #d97706;
@@ -792,6 +793,14 @@ function renderChart() {
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { position: 'top' },
+        datalabels: {
+          display: true,
+          anchor: 'center',
+          align: 'center',
+          color: 'white',
+          font: { weight: 'bold', size: 12 },
+          formatter: function(value) { return value > 0 ? value.toFixed(2) + ' m³' : ''; }
+        },
         annotation: {
           annotations: {
             refLine: {
@@ -860,6 +869,7 @@ function showToast(msg) {
   t._t = setTimeout(() => t.style.display = 'none', 3000);
 }
 
+Chart.register(ChartDataLabels);
 document.addEventListener('DOMContentLoaded', init);
 </script>
 </body>
