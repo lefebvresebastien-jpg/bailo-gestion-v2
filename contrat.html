@@ -721,6 +721,7 @@
       var params = new URLSearchParams(window.location.search);
       var leaseId = params.get('lease');
       var modeLocataire = params.get('mode') === 'locataire';
+      var modeGarant = params.get('mode') === 'garant';
 
       if (!leaseId) {
         document.getElementById('loading').innerHTML = '<p style="font-family:Inter,sans-serif;color:red">Aucun bail spécifié.</p>';
@@ -765,6 +766,15 @@
       // Stocker pour SignWell
       _currentLeaseId = leaseId;
       _currentLeaseData = lease.data || {};
+
+      // Charger signature bailleur existante sur tous les canvas bailleur
+      var sigBExist = f.sig_bailleur;
+      if (sigBExist) {
+        setTimeout(function() {
+          var cb = document.getElementById('sig-bailleur');
+          if (cb) { var img=new Image(); img.onload=function(){ cb.getContext('2d').drawImage(img,0,0,cb.width,cb.height); }; img.src=sigBExist; }
+        }, 400);
+      }
 
       // Initialiser les canvas de signature
       initSignatureCanvas('sig-bailleur');
@@ -834,6 +844,19 @@
 
         // Bloquer les boutons signer jusqu&#39;à validation des annexes
         checkAnnexes();
+      }
+
+      // Mode garant
+      if (modeGarant) {
+        document.querySelectorAll('.signatures').forEach(function(el) { el.style.display='none'; });
+        var banner = document.createElement('div');
+        banner.style.cssText = 'position:sticky;top:0;z-index:200;background:#7c3aed;color:white;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;font-family:Inter,sans-serif;font-size:13px';
+        banner.innerHTML = '<span>🤝 Acte de caution solidaire — Lisez attentivement avant de signer</span>' +
+          '<button onclick="saveGarantSig(&#39;' + leaseId + '&#39;)" style="background:white;color:#7c3aed;border:none;padding:7px 16px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer">✅ Signer l&#39;acte de caution</button>';
+        document.body.insertBefore(banner, document.body.firstChild);
+        var signwellBlock2 = document.getElementById('signwell-block');
+        if (signwellBlock2) signwellBlock2.style.display = 'none';
+        setTimeout(maskSigBlocks, 500);
         var eligBlock = document.getElementById('eligibility-preview');
         if (eligBlock) eligBlock.closest('section').style.display = 'none';
 
@@ -889,6 +912,25 @@
       // Warning
       var warn = document.getElementById('annexes-warning');
       if (warn) warn.style.display = allChecked ? 'none' : '';
+    }
+
+    async function saveGarantSig(leaseId) {
+      var canvas = document.getElementById('sig-locataire') || document.getElementById('sig-bailleur');
+      if (!canvas) return;
+      var blank = document.createElement('canvas'); blank.width=canvas.width; blank.height=canvas.height;
+      if (canvas.toDataURL() === blank.toDataURL()) { alert('Veuillez signer avant de valider.'); return; }
+      var sig = canvas.toDataURL('image/png');
+      var resp = await db.from('leases').select('data').eq('id', leaseId).single();
+      if (!resp.data) { alert('Erreur : bail introuvable.'); return; }
+      var leaseData = resp.data.data || {};
+      var fd = leaseData.formData || {};
+      fd.sig_garant = sig;
+      fd.sig_garant_at = new Date().toISOString();
+      leaseData.formData = fd;
+      await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
+      alert('Votre signature de caution a ete enregistree.');
+      var btn = document.querySelector('[onclick*="saveGarantSig"]');
+      if (btn) { btn.textContent='Signe'; btn.style.opacity='0.6'; btn.disabled=true; }
     }
 
     async function saveLocataireSig(leaseId) {
