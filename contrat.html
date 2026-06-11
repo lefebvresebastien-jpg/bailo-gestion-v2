@@ -772,7 +772,7 @@
           name: docName,
           subject: 'Signature du bail - '+(f.propertyAddress||'votre logement'),
           message: 'Bonjour,\n\nVeuillez trouver ci-joint votre bail de location a signer.\n\nCordialement,\nBailo Pro',
-          test_mode: true, with_signature_page: true, apply_signing_order: true, reminders: true, language: 'fr',
+          test_mode: false, with_signature_page: true, apply_signing_order: true, reminders: true, language: 'fr',
           recipients: signers.map(function(s){ return {id:'signer'+s.order, name:s.name, email:s.email, order:s.order}; }),
           files: [{name:docName+'.html', file_base64:btoa(unescape(encodeURIComponent(bailEl.outerHTML)))}],
           redirect_url: 'https://v2.gestion.bailo.pro'
