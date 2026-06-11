@@ -995,6 +995,31 @@
     }
 
     loadAndRender();
+
+    // Polling toutes les 30s pour détecter nouvelles signatures (locataire ou garant)
+    setInterval(async function() {
+      if (!_currentLeaseId) return;
+      var resp = await db.from('leases').select('data').eq('id', _currentLeaseId).single();
+      if (!resp.data) return;
+      var newF = resp.data.data?.formData || {};
+      var prevF = _currentLeaseData?.formData || {};
+
+      // Nouvelle signature détectée ?
+      if (
+        (newF.sig_locataire && !prevF.sig_locataire) ||
+        (newF.sig_garant && !prevF.sig_garant)
+      ) {
+        _currentLeaseData = resp.data.data;
+        // Re-rendre la section signatures
+        var sigSection = document.querySelector('.signature-section');
+        if (sigSection) {
+          var newSigHtml = addSignatureSection(newF);
+          var tmp = document.createElement('div');
+          tmp.innerHTML = newSigHtml;
+          sigSection.replaceWith(tmp.firstChild);
+        }
+      }
+    }, 30000);
   </script>
 </body>
 </html>
