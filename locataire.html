@@ -549,14 +549,15 @@ function renderCompteurs() {
 
   // Graphique sous-compteurs uniquement
   if (releves.length >= 2) {
-    const labels = releves.map(r => formatDate(r.date));
     const scColors = ['#16a34a','#2563eb','#d97706','#dc2626'];
+    // Supprimer le premier relevé (pas de consommation calculable)
+    const relevesConso = releves.slice(1);
+    const labelsChart = relevesConso.map(r => formatDate(r.date));
     const datasets = sc.map((s, idx) => ({
       label: s.label || 'Sous-cpt ' + (idx+1),
-      data: releves.map((r, i) => {
-        if (i === 0) return 0;
+      data: relevesConso.map((r, i) => {
         const ci = r.sousCompteurs?.[idx]?.index;
-        const pi = releves[i-1].sousCompteurs?.[idx]?.index;
+        const pi = releves[i].sousCompteurs?.[idx]?.index;
         return (ci != null && pi != null) ? parseFloat((ci-pi).toFixed(3)) : 0;
       }),
       borderColor: scColors[idx % scColors.length],
@@ -568,7 +569,7 @@ function renderCompteurs() {
     if (_chart) _chart.destroy();
     _chart = new Chart(document.getElementById('chart-tenant'), {
       type: 'bar',
-      data: { labels, datasets },
+      data: { labels: labelsChart, datasets },
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { position: 'top' } },
