@@ -537,7 +537,7 @@ function renderCompteurs() {
   let html = sc.map((s, i) => {
     const lastIdx = last?.sousCompteurs?.[i]?.index ?? '—';
     const prevIdx = prev?.sousCompteurs?.[i]?.index;
-    const conso = (last && prev && lastIdx !== '—' && prevIdx != null) ? (lastIdx - prevIdx).toFixed(3) : '—';
+    const conso = (last && prev && lastIdx !== '—' && prevIdx != null) ? (lastIdx - prevIdx).toLocaleString('fr-FR', {minimumFractionDigits:0, maximumFractionDigits:3}) : '—';
     return `<div class="info-row">
       <span class="info-label">💧 ${escH(s.label || 'Sous-compteur ' + (i+1))}</span>
       <span class="info-value">Index: <strong>${lastIdx}</strong> m³ ${conso !== '—' ? '· Conso: <strong>' + conso + ' m³</strong>' : ''}</span>
