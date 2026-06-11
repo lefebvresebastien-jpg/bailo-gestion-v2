@@ -1289,7 +1289,16 @@ async function loadKPIs() {
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
   set('kpi-biens-val', nbProperties);
   set('kpi-baux-val', active.length);
-  set('kpi-loyers-val', formatCurrency(totalLoyer));
+  // Charger les statuts de paiement du mois courant
+  const nowM = new Date();
+  const currentMonth = nowM.getFullYear() + '-' + String(nowM.getMonth()+1).padStart(2,'0');
+  const statusRes = await db.from('settings').select('value').eq('key','loyers_status').maybeSingle();
+  const loyersStatus = statusRes.data ? JSON.parse(statusRes.data.value) : {};
+  const totalPaye = active.reduce((sum, l) => {
+    const key = l.id + '_' + currentMonth;
+    return loyersStatus[key] === 'paye' ? sum + leaseRent(l) : sum;
+  }, 0);
+  set('kpi-loyers-val', formatCurrency(totalPaye) + ' / ' + formatCurrency(totalLoyer));
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
