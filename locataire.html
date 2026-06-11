@@ -294,6 +294,10 @@ async function init() {
     // Charger profil bailleur
     const pRes = await db.from('settings').select('value').eq('key', 'landlord_profile').maybeSingle();
     _profile = pRes.data ? JSON.parse(pRes.data.value) : {};
+    const cfgRes = await db.from('settings').select('value').eq('key','compteurs_config').maybeSingle();
+    const cptCfg = cfgRes.data ? JSON.parse(cfgRes.data.value) : {};
+    window._cptDateRef = cptCfg.dateRef || null;
+    window._cptPrixM3 = parseFloat(cptCfg.prixM3) || 4.2;
 
     // Afficher l'app
     document.getElementById('loading-screen').style.display = 'none';
@@ -531,8 +535,14 @@ function renderCompteurs() {
   }
 
   // Dernier relevé
-  const last = releves[releves.length - 1];
-  const prev = releves[releves.length - 2];
+  // Filtrer par date de référence
+  let relevesF = releves;
+  if (window._cptDateRef) {
+    const ridx = releves.findIndex(r => r.date >= window._cptDateRef);
+    if (ridx > 0) relevesF = releves.slice(ridx - 1);
+  }
+  const last = relevesF[relevesF.length - 1];
+  const prev = relevesF[relevesF.length - 2];
 
   let html = sc.map((s, i) => {
     const lastIdx = last?.sousCompteurs?.[i]?.index ?? '—';
@@ -545,19 +555,32 @@ function renderCompteurs() {
   }).join('');
 
   if (last) html += `<div class="info-row"><span class="info-label">Dernier relevé</span><span class="info-value">${formatDate(last.date)}</span></div>`;
+  // Total période
+  if (relevesF.length >= 2) {
+    const premier = relevesF[0];
+    let totalConso = 0;
+    sc.forEach((s, i) => {
+      const idxE = premier.sousCompteurs?.[i]?.index;
+      const idxF = last.sousCompteurs?.[i]?.index;
+      if (idxE != null && idxF != null) totalConso += idxF - idxE;
+    });
+    const montant = (totalConso * (window._cptPrixM3||4.2)).toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
+    const dateRef = window._cptDateRef ? ' depuis ' + formatDate(window._cptDateRef) : '';
+    html += '<div style="margin-top:12px;background:#dbeafe;border:1px solid #93c5fd;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:700;color:#1e40af">Total consommé' + dateRef + ' : ' + totalConso.toLocaleString('fr-FR',{maximumFractionDigits:3}) + ' m³ · ' + montant + '</div>';
+  }
   el.innerHTML = html;
 
   // Graphique sous-compteurs uniquement
   if (releves.length >= 2) {
     const scColors = ['#16a34a','#2563eb','#d97706','#dc2626'];
     // Supprimer le premier relevé (pas de consommation calculable)
-    const relevesConso = releves.slice(1);
+    const relevesConso = relevesF.slice(1);
     const labelsChart = relevesConso.map(r => formatDate(r.date));
     const datasets = sc.map((s, idx) => ({
       label: s.label || 'Sous-cpt ' + (idx+1),
       data: relevesConso.map((r, i) => {
         const ci = r.sousCompteurs?.[idx]?.index;
-        const pi = releves[i].sousCompteurs?.[idx]?.index;
+        const pi = relevesF[i].sousCompteurs?.[idx]?.index;
         return (ci != null && pi != null) ? parseFloat((ci-pi).toFixed(3)) : 0;
       }),
       borderColor: scColors[idx % scColors.length],
