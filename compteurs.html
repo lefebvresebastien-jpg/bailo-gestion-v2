@@ -576,7 +576,7 @@ function renderRegu() {
     html += `<div style="background:#f1ede7;border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:12px;font-size:13px">
       <span style="font-weight:700">💧 Compteur général</span>
       <span style="color:var(--ink-3);margin-left:8px">(référence bailleur — hors régularisation individuelle)</span>
-      <div style="margin-top:6px">Consommation totale sur la période : <strong>${consoReelle.toFixed(3)} m³</strong></div>
+      <div style="margin-top:6px">Consommation totale sur la période : <strong>${consoReelle.toLocaleString('fr-FR',{maximumFractionDigits:3}) + ' m³'}</strong></div>
     </div>`;
   }
 
