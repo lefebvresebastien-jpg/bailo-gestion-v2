@@ -34,15 +34,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 .tenant-avatar { width:36px; height:36px; border-radius:50%; background:var(--primary); color:white; font-size:14px; font-weight:700; display:flex; align-items:center; justify-content:center; }
 
 /* Bottom nav (mobile) */
-.bottom-nav { position:fixed; bottom:0; left:0; right:0; background:var(--sidebar-bg); display:flex; border-top:1px solid rgba(255,255,255,.1); z-index:100; }
-.nav-btn { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:10px 4px 12px; border:none; background:transparent; color:var(--sidebar-text); cursor:pointer; font-size:.68rem; font-weight:600; position:relative; }
-.nav-btn .nav-icon { font-size:1.1rem; }
-.nav-btn.active { color:white; }
-.nav-btn.active::after { content:''; position:absolute; bottom:0; left:20%; right:20%; height:2px; background:var(--primary); border-radius:2px 2px 0 0; }
-.nav-badge { background:var(--danger); color:white; font-size:.58rem; font-weight:700; padding:1px 5px; border-radius:99px; min-width:15px; text-align:center; position:absolute; top:6px; right:calc(50% - 18px); }
+.bottom-nav { display:none; }
+.top-nav { background:var(--sidebar-bg); display:flex; border-bottom:1px solid rgba(255,255,255,.1); overflow-x:auto; scrollbar-width:none; -ms-overflow-style:none; }
+.top-nav::-webkit-scrollbar { display:none; }
+.nav-btn { flex:1; min-width:70px; display:flex; flex-direction:column; align-items:center; gap:4px; padding:12px 6px 10px; border:none; background:transparent; color:var(--sidebar-text); cursor:pointer; font-size:.72rem; font-weight:600; position:relative; border-bottom:3px solid transparent; transition:all .15s; }
+.nav-btn .nav-icon { font-size:1.4rem; }
+.nav-btn.active { color:white; border-bottom-color:var(--primary); background:rgba(255,255,255,.07); }
+.nav-btn:hover:not(.active) { color:rgba(255,255,255,.9); background:rgba(255,255,255,.04); }
+.nav-badge { background:var(--danger); color:white; font-size:.58rem; font-weight:700; padding:2px 6px; border-radius:99px; min-width:16px; text-align:center; position:absolute; top:8px; right:calc(50% - 20px); }
 
 /* Content */
-.content { padding:16px 16px 80px; max-width:700px; margin:0 auto; }
+.content { padding:16px 16px 24px; max-width:700px; margin:0 auto; }
 
 /* Cards */
 .card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r); padding:16px 18px; margin-bottom:12px; }
@@ -127,6 +129,29 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
     </div>
     <div id="tenant-avatar" class="tenant-avatar">?</div>
   </div>
+
+  <!-- Top Nav -->
+  <nav class="top-nav">
+    <button class="nav-btn active" onclick="showSection('bail', this)">
+      <span class="nav-icon">🏠</span>Mon bail
+    </button>
+    <button class="nav-btn" onclick="showSection('quittances', this)">
+      <span class="nav-icon">🧾</span>Quittances
+    </button>
+    <button class="nav-btn" onclick="showSection('edl', this)">
+      <span class="nav-icon">📋</span>EDL
+    </button>
+    <button class="nav-btn" onclick="showSection('compteurs', this)">
+      <span class="nav-icon">💧</span>Compteurs
+    </button>
+    <button class="nav-btn" onclick="showSection('messages', this)">
+      <span class="nav-icon">💬</span>Messages
+      <span class="nav-badge" id="badge-msg" style="display:none">!</span>
+    </button>
+    <button class="nav-btn" onclick="showSection('documents', this)">
+      <span class="nav-icon">📎</span>Docs
+    </button>
+  </nav>
 
   <div class="content">
     <!-- MON BAIL -->
@@ -218,28 +243,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
     </div>
   </div>
 
-  <!-- Bottom Nav -->
-  <nav class="bottom-nav">
-    <button class="nav-btn active" onclick="showSection('bail', this)">
-      <span class="nav-icon">🏠</span>Mon bail
-    </button>
-    <button class="nav-btn" onclick="showSection('quittances', this)">
-      <span class="nav-icon">🧾</span>Quittances
-    </button>
-    <button class="nav-btn" onclick="showSection('edl', this)">
-      <span class="nav-icon">📋</span>EDL
-    </button>
-    <button class="nav-btn" onclick="showSection('compteurs', this)">
-      <span class="nav-icon">💧</span>Compteurs
-    </button>
-    <button class="nav-btn" onclick="showSection('messages', this)">
-      <span class="nav-icon">💬</span>Messages
-      <span class="nav-badge" id="badge-msg" style="display:none">!</span>
-    </button>
-    <button class="nav-btn" onclick="showSection('documents', this)">
-      <span class="nav-icon">📎</span>Docs
-    </button>
-  </nav>
+  <!-- Bottom Nav kept for compatibility -->
+  <nav class="bottom-nav"></nav>
 </div>
 
 <!-- Modal incident -->
