@@ -651,6 +651,85 @@
       canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
     }
 
+    // ── Signature bas de page (locataire/garant) ──
+    function initSigCanvasBas() {
+      var canvas = document.getElementById('sig-canvas-bas');
+      if (!canvas || canvas._init) return;
+      canvas._init = true;
+      var ctx = canvas.getContext('2d');
+      var drawing = false;
+      function pos(e) {
+        var r=canvas.getBoundingClientRect(), sx=canvas.width/r.width, sy=canvas.height/r.height;
+        var src=e.touches?e.touches[0]:e;
+        return {x:(src.clientX-r.left)*sx, y:(src.clientY-r.top)*sy};
+      }
+      canvas.addEventListener('mousedown',function(e){drawing=true;var p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});
+      canvas.addEventListener('mousemove',function(e){if(!drawing)return;var p=pos(e);ctx.lineTo(p.x,p.y);ctx.strokeStyle='#1a1208';ctx.lineWidth=2.5;ctx.lineCap='round';ctx.stroke();});
+      canvas.addEventListener('mouseup',function(){drawing=false;});
+      canvas.addEventListener('mouseleave',function(){drawing=false;});
+      canvas.addEventListener('touchstart',function(e){e.preventDefault();drawing=true;var p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});
+      canvas.addEventListener('touchmove',function(e){e.preventDefault();if(!drawing)return;var p=pos(e);ctx.lineTo(p.x,p.y);ctx.strokeStyle='#1a1208';ctx.lineWidth=2.5;ctx.lineCap='round';ctx.stroke();},{passive:false});
+      canvas.addEventListener('touchend',function(){drawing=false;});
+    }
+
+    function clearSigBas() {
+      var c=document.getElementById('sig-canvas-bas');
+      if(c){c.getContext('2d').clearRect(0,0,c.width,c.height);c._init=false;initSigCanvasBas();}
+    }
+
+    function checkAnnexes() {
+      var ids=['chk-notice','chk-dpe','chk-erp','chk-repartition','chk-radon','chk-bail'];
+      var all=ids.every(function(id){var el=document.getElementById(id);return el&&el.checked;});
+      var btn=document.getElementById('btn-signer-bail');
+      if(btn){btn.disabled=!all;btn.style.opacity=all?'1':'0.4';btn.style.pointerEvents=all?'auto':'none';}
+      var warn=document.getElementById('annexes-warning');
+      if(warn)warn.style.display=all?'none':'block';
+    }
+
+    async function saveLocataireSig(leaseId) {
+      var canvas = document.getElementById('sig-canvas-bas');
+      if (!canvas) { alert('Erreur: canvas introuvable.'); return; }
+      var blank = document.createElement('canvas'); blank.width=canvas.width; blank.height=canvas.height;
+      if (canvas.toDataURL() === blank.toDataURL()) { alert('Veuillez signer dans la zone de signature avant de valider.'); return; }
+      var sig = canvas.toDataURL('image/png');
+      var resp = await db.from('leases').select('data').eq('id', leaseId).single();
+      if (!resp.data) { alert('Erreur : bail introuvable.'); return; }
+      var leaseData = resp.data.data || {};
+      var fd = leaseData.formData || {};
+      fd.sig_locataire = sig;
+      fd.sig_locataire_at = new Date().toISOString();
+      var annexes = ['chk-notice','chk-dpe','chk-erp','chk-repartition','chk-radon','chk-bail'];
+      var annexChecks = {};
+      annexes.forEach(function(id){ var el=document.getElementById(id); if(el) annexChecks[id]=el.checked; });
+      fd.annexChecks = annexChecks;
+      fd.annexesValidatedAt = new Date().toISOString();
+      leaseData.formData = fd;
+      var res = await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
+      if (res.error) { alert('Erreur sauvegarde : ' + res.error.message); return; }
+      var btn = document.getElementById('btn-signer-bail');
+      if (btn) { btn.textContent = '✅ Bail signé !'; btn.style.background = '#6b7280'; btn.disabled = true; btn.style.pointerEvents = 'none'; }
+      alert('Votre signature a ete enregistree. Le bail est maintenant signe.');
+    }
+
+    async function saveGarantSig(leaseId) {
+      var canvas = document.getElementById('sig-canvas-bas');
+      if (!canvas) { alert('Erreur: canvas introuvable.'); return; }
+      var blank = document.createElement('canvas'); blank.width=canvas.width; blank.height=canvas.height;
+      if (canvas.toDataURL() === blank.toDataURL()) { alert('Veuillez signer avant de valider.'); return; }
+      var sig = canvas.toDataURL('image/png');
+      var resp = await db.from('leases').select('data').eq('id', leaseId).single();
+      if (!resp.data) { alert('Erreur : bail introuvable.'); return; }
+      var leaseData = resp.data.data || {};
+      var fd = leaseData.formData || {};
+      fd.sig_garant = sig;
+      fd.sig_garant_at = new Date().toISOString();
+      leaseData.formData = fd;
+      await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
+      var btn = document.querySelector('[onclick*="saveGarantSig"]');
+      if (btn) { btn.textContent = 'Signe'; btn.style.opacity = '0.6'; btn.disabled = true; }
+      alert('Votre acte de caution a ete signe et enregistre.');
+    }
+
     var SIGNWELL_API_KEY = 'YWNjZXNzOmQyN2I5YzVhZjljZTdlYzU1MWViYWUyMGQ2MTQwYmNl';
     var _currentLeaseId = null;
     var _currentLeaseData = null;
@@ -782,189 +861,113 @@
 
       // Mode locataire : masquer éléments bailleur-only + activer sauvegarde sig locataire
       if (modeLocataire) {
-        // Masquer le canvas bailleur et le bloc signwell
-        var sigBailleurBlock = document.getElementById('sig-bailleur');
-        if (sigBailleurBlock) {
-          var parent = sigBailleurBlock.closest('.sig-block') || sigBailleurBlock.parentElement;
-          if (parent) parent.style.opacity = '0.4';
-        }
-        var signwellBlock = document.getElementById('signwell-block');
-        if (signwellBlock) {
-          var swTitle = signwellBlock.querySelector('h4');
-          if (swTitle) swTitle.textContent = 'Signature electronique legale (eIDAS)';
-          var swDesc = signwellBlock.querySelector('p');
-          if (swDesc) swDesc.textContent = 'Signez ce bail electroniquement. Vous et votre bailleur recevrez un email de confirmation avec le document signe.';
-          var swBtn = document.getElementById('btn-signwell');
-          if (swBtn) { swBtn.textContent = 'Signer electroniquement (eIDAS)'; swBtn.style.background = '#16a34a'; }
-        }
-
-        // Masquer les cases de signature vides après rendu du template
+        // Masquer les rectangles vides de signature
         function maskSigBlocks() {
-          // Cibler le conteneur grille (grid 1fr 1fr) contenant Signature Bailleur/Locataire
           document.querySelectorAll('p').forEach(function(p) {
             var txt = p.textContent.trim();
             if (txt === 'Signature Bailleur' || txt === 'Signature Locataire') {
-              // Remonter au parent grid
-              var parent = p.parentElement; // div du bloc signature
-              var grandParent = parent && parent.parentElement; // div grid
-              if (grandParent) grandParent.style.display = 'none';
+              var gp = p.parentElement && p.parentElement.parentElement;
+              if (gp) gp.style.display = 'none';
             }
           });
-          // Masquer aussi les canvas bailleur (garder seulement locataire)
-          var sigB = document.getElementById('sig-bailleur');
-          if (sigB) {
-            var sigBParent = sigB.closest('.sig-block') || sigB.parentElement;
-            if (sigBParent) sigBParent.style.opacity = '0.3';
-          }
-          // Masquer la signature-grid du bas (les rectangles vides)
           document.querySelectorAll('[style*="grid-template-columns: 1fr 1fr"]').forEach(function(el) {
             if (el.textContent.includes('Signature Bailleur')) el.style.display = 'none';
           });
         }
         setTimeout(maskSigBlocks, 500);
 
-        // Ajouter les checkboxes annexes avant le bloc signwell
-        var annexesCheck = document.createElement('div');
-        annexesCheck.id = 'annexes-check-bloc';
-        annexesCheck.style.cssText = 'margin:20px 0;padding:18px;background:#fffdf8;border:1.5px solid #d4c8b8;border-radius:10px;font-family:Inter,sans-serif';
-        annexesCheck.innerHTML = [
-          '<div style="font-size:13px;font-weight:700;margin-bottom:14px;color:#1a1208">✅ Avant de signer, confirmez avoir reçu et lu :</div>',
-          '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-notice" onchange="checkAnnexes()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0"> Notice d&#39;information relative aux droits et obligations des locataires et bailleurs (Décret 2015-587)</label>',
-          '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-dpe" onchange="checkAnnexes()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0"> Diagnostic de Performance Energétique (DPE)</label>',
-          '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-erp" onchange="checkAnnexes()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0"> État des risques et pollutions (ERP)</label>',
-          '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-repartition" onchange="checkAnnexes()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0"> Répartition des charges locatives (Décret 87-712)</label>',
-          '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-radon" onchange="checkAnnexes()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0"> Information sur le risque Radon (zones concernées selon arrêté préfectoral)</label>',
-          '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:16px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-bail" onchange="checkAnnexes()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0"> J&#39;ai lu et compris l&#39;intégralité du présent contrat de bail</label>',
-          '<div id="annexes-warning" style="display:none;padding:8px 12px;background:#fee2e2;border:1px solid #fca5a5;border-radius:7px;font-size:12px;color:#dc2626;margin-bottom:10px">⚠️ Vous devez cocher toutes les cases pour pouvoir signer.</div>'
-        ].join('');
+        // Masquer signwell et art 19
+        var signwellBlock = document.getElementById('signwell-block');
+        if (signwellBlock) signwellBlock.style.display = 'none';
+        var eligBlock = document.getElementById('eligibility-preview');
+        if (eligBlock) { var s19 = eligBlock.closest('section'); if (s19) s19.style.display = 'none'; }
 
-        if (signwellBlock) {
-          signwellBlock.parentNode.insertBefore(annexesCheck, signwellBlock);
+        // Déjà signé ?
+        var alreadySigned = !!f.sig_locataire;
+        if (alreadySigned) {
+          setTimeout(function() {
+            var cl = document.getElementById('sig-locataire');
+            if (cl) { var img2=new Image(); img2.onload=function(){ cl.getContext('2d').drawImage(img2,0,0,cl.width,cl.height); }; img2.src=f.sig_locataire; }
+          }, 600);
         }
 
-        // Bloquer les boutons signer jusqu&#39;à validation des annexes
-        checkAnnexes();
+        // Insérer le bloc annexes + signature en bas de page
+        var pw = document.getElementById('page-wrapper');
+        var bloc = document.createElement('div');
+        bloc.style.cssText = 'max-width:800px;margin:24px auto;padding:0 16px 40px;font-family:Inter,sans-serif';
+        bloc.innerHTML =
+          '<div style="background:#fffdf8;border:2px solid #d4c8b8;border-radius:12px;padding:20px">' +
+          '<div style="font-size:15px;font-weight:700;margin-bottom:16px;color:#1a1208;border-bottom:1px solid #e0d5c8;padding-bottom:10px">✍️ Signature du bail</div>' +
+          '<p style="font-size:13px;color:#3a2a18;margin-bottom:16px">Avant de signer, confirmez avoir recu et lu les documents suivants :</p>' +
+          '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-notice" onchange="checkAnnexes()"' + (alreadySigned?' checked':'') + '> Notice d&#39;information droits et obligations (Décret 2015-587)</label>' +
+          '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-dpe" onchange="checkAnnexes()"' + (alreadySigned?' checked':'') + '> Diagnostic de Performance Energétique (DPE)</label>' +
+          '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-erp" onchange="checkAnnexes()"' + (alreadySigned?' checked':'') + '> État des risques et pollutions (ERP)</label>' +
+          '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-repartition" onchange="checkAnnexes()"' + (alreadySigned?' checked':'') + '> Répartition des charges locatives (Décret 87-712)</label>' +
+          '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-radon" onchange="checkAnnexes()"' + (alreadySigned?' checked':'') + '> Information sur le risque Radon (arrêté du 27 juin 2018)</label>' +
+          '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:16px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-bail" onchange="checkAnnexes()"' + (alreadySigned?' checked':'') + '> J&#39;ai lu et compris l&#39;intégralité du contrat de bail et des annexes</label>' +
+          '<div id="annexes-warning" style="display:none;padding:8px 12px;background:#fee2e2;border:1px solid #fca5a5;border-radius:7px;font-size:12px;color:#dc2626;margin-bottom:12px">⚠️ Cochez toutes les cases ci-dessus pour activer la signature.</div>' +
+          (alreadySigned ?
+            '<div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:14px;text-align:center;font-size:14px;font-weight:700;color:#166534">✅ Vous avez déjà signé ce bail</div>' :
+            '<div style="margin-bottom:10px;font-size:13px;font-weight:600;color:#1a1208">Votre signature :</div>' +
+            '<canvas id="sig-canvas-bas" style="width:100%;height:120px;border:2px solid #d4c8b8;border-radius:8px;touch-action:none;background:white;cursor:crosshair;display:block" width="700" height="120"></canvas>' +
+            '<div style="display:flex;gap:8px;margin-top:10px">' +
+            '<button onclick="clearSigBas()" style="padding:8px 16px;border:1.5px solid #d4c8b8;border-radius:7px;font-size:13px;cursor:pointer;background:white">🗑 Effacer</button>' +
+            '<button id="btn-signer-bail" onclick="saveLocataireSig(&#39;' + leaseId + '&#39;)" style="flex:1;padding:10px 20px;background:#16a34a;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;opacity:.4;pointer-events:none" disabled>✅ Signer le bail</button>' +
+            '</div>'
+          ) +
+          '</div>';
+
+        if (pw) pw.appendChild(bloc);
+        setTimeout(function() {
+          initSigCanvasBas();
+          checkAnnexes();
+        }, 300);
       }
 
       // Mode garant
       if (modeGarant) {
-        document.querySelectorAll('.signatures').forEach(function(el) { el.style.display='none'; });
-        var banner = document.createElement('div');
-        banner.style.cssText = 'position:sticky;top:0;z-index:200;background:#7c3aed;color:white;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;font-family:Inter,sans-serif;font-size:13px';
-        banner.innerHTML = '<span>🤝 Acte de caution solidaire — Lisez attentivement avant de signer</span>' +
-          '<button onclick="saveGarantSig(&#39;' + leaseId + '&#39;)" style="background:white;color:#7c3aed;border:none;padding:7px 16px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer">✅ Signer l&#39;acte de caution</button>';
-        document.body.insertBefore(banner, document.body.firstChild);
-        var signwellBlock2 = document.getElementById('signwell-block');
-        if (signwellBlock2) signwellBlock2.style.display = 'none';
-        setTimeout(maskSigBlocks, 500);
-        var eligBlock = document.getElementById('eligibility-preview');
-        if (eligBlock) eligBlock.closest('section').style.display = 'none';
+        setTimeout(function() {
+          document.querySelectorAll('p').forEach(function(p) {
+            var txt = p.textContent.trim();
+            if (txt === 'Signature Bailleur' || txt === 'Signature Locataire') {
+              var gp = p.parentElement && p.parentElement.parentElement;
+              if (gp) gp.style.display = 'none';
+            }
+          });
+          document.querySelectorAll('[style*="grid-template-columns: 1fr 1fr"]').forEach(function(el) {
+            if (el.textContent.includes('Signature Bailleur')) el.style.display = 'none';
+          });
+        }, 500);
 
-        // Charger signature locataire existante
-        var sigExist = f.sig_locataire || (lease.data && lease.data.sig_locataire);
-        if (sigExist) {
-          var canvas = document.getElementById('sig-locataire');
-          if (canvas) {
-            var img = new Image();
-            img.onload = function() {
-              var ctx = canvas.getContext('2d');
-              ctx.clearRect(0,0,canvas.width,canvas.height);
-              ctx.drawImage(img,0,0);
-            };
-            img.src = sigExist;
-          }
-        }
+        var signwellBlock3 = document.getElementById('signwell-block');
+        if (signwellBlock3) signwellBlock3.style.display = 'none';
 
-        // Bandeau info locataire
-        var banner = document.createElement('div');
-        banner.style.cssText = 'position:sticky;top:0;z-index:200;background:#1a1208;color:white;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;font-family:Inter,sans-serif;font-size:13px';
-        banner.innerHTML = '<span>📋 Votre contrat de bail — Lisez attentivement avant de signer</span>' +
-          '<button onclick="saveLocataireSig(&#39;' + leaseId + '&#39;)" style="background:#16a34a;color:white;border:none;padding:7px 16px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer">Signer le bail</button>';
-        document.body.insertBefore(banner, document.body.firstChild);
+        var alreadySignedG = !!f.sig_garant;
+        var pw2 = document.getElementById('page-wrapper');
+        var blocG = document.createElement('div');
+        blocG.style.cssText = 'max-width:800px;margin:24px auto;padding:0 16px 40px;font-family:Inter,sans-serif';
+        blocG.innerHTML =
+          '<div style="background:#f5f0ff;border:2px solid #7c3aed;border-radius:12px;padding:20px">' +
+          '<div style="font-size:15px;font-weight:700;margin-bottom:12px;color:#4c1d95;border-bottom:1px solid #ddd6fe;padding-bottom:10px">🤝 Acte de caution solidaire</div>' +
+          '<p style="font-size:13px;color:#3a2a18;margin-bottom:16px">En signant ci-dessous, vous vous portez caution solidaire pour <strong>' + (f.tenantName||'le locataire') + '</strong> pour le logement situé <strong>' + (f.propertyAddress||'') + '</strong>, conformément aux conditions du bail.</p>' +
+          (alreadySignedG ?
+            '<div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:14px;text-align:center;font-size:14px;font-weight:700;color:#166534">✅ Acte de caution déjà signé</div>' :
+            '<div style="margin-bottom:10px;font-size:13px;font-weight:600;color:#1a1208">Votre signature de caution :</div>' +
+            '<canvas id="sig-canvas-bas" style="width:100%;height:120px;border:2px solid #7c3aed;border-radius:8px;touch-action:none;background:white;cursor:crosshair;display:block" width="700" height="120"></canvas>' +
+            '<div style="display:flex;gap:8px;margin-top:10px">' +
+            '<button onclick="clearSigBas()" style="padding:8px 16px;border:1.5px solid #d4c8b8;border-radius:7px;font-size:13px;cursor:pointer;background:white">🗑 Effacer</button>' +
+            '<button onclick="saveGarantSig(&#39;' + leaseId + '&#39;)" style="flex:1;padding:10px 20px;background:#7c3aed;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">✅ Signer l&#39;acte de caution</button>' +
+            '</div>'
+          ) +
+          '</div>';
+
+        if (pw2) pw2.appendChild(blocG);
+        setTimeout(function() { initSigCanvasBas(); }, 300);
       }
 
       // Afficher
       document.getElementById('loading').style.display = 'none';
       document.getElementById('page-wrapper').style.display = 'block';
-    }
-
-    // Sauvegarde signature locataire depuis le contrat
-    function checkAnnexes() {
-      var chks = ['chk-notice','chk-dpe','chk-erp','chk-repartition','chk-radon','chk-bail'];
-      var allChecked = chks.every(function(id) {
-        var el = document.getElementById(id);
-        return el && el.checked;
-      });
-      // Bouton canvas
-      var btnCanvas = document.querySelector('[onclick*="saveLocataireSig"]');
-      if (btnCanvas) {
-        btnCanvas.disabled = !allChecked;
-        btnCanvas.style.opacity = allChecked ? '1' : '0.5';
-        btnCanvas.style.cursor = allChecked ? 'pointer' : 'not-allowed';
-      }
-      // Bouton SignWell
-      var btnSW = document.getElementById('btn-signwell');
-      if (btnSW) {
-        btnSW.disabled = !allChecked;
-        btnSW.style.opacity = allChecked ? '1' : '0.5';
-        btnSW.style.cursor = allChecked ? 'pointer' : 'not-allowed';
-      }
-      // Warning
-      var warn = document.getElementById('annexes-warning');
-      if (warn) warn.style.display = allChecked ? 'none' : '';
-    }
-
-    async function saveGarantSig(leaseId) {
-      var canvas = document.getElementById('sig-locataire') || document.getElementById('sig-bailleur');
-      if (!canvas) return;
-      var blank = document.createElement('canvas'); blank.width=canvas.width; blank.height=canvas.height;
-      if (canvas.toDataURL() === blank.toDataURL()) { alert('Veuillez signer avant de valider.'); return; }
-      var sig = canvas.toDataURL('image/png');
-      var resp = await db.from('leases').select('data').eq('id', leaseId).single();
-      if (!resp.data) { alert('Erreur : bail introuvable.'); return; }
-      var leaseData = resp.data.data || {};
-      var fd = leaseData.formData || {};
-      fd.sig_garant = sig;
-      fd.sig_garant_at = new Date().toISOString();
-      leaseData.formData = fd;
-      await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
-      alert('Votre signature de caution a ete enregistree.');
-      var btn = document.querySelector('[onclick*="saveGarantSig"]');
-      if (btn) { btn.textContent='Signe'; btn.style.opacity='0.6'; btn.disabled=true; }
-    }
-
-    async function saveLocataireSig(leaseId) {
-      var canvas = document.getElementById('sig-locataire');
-      if (!canvas) return;
-      var blank = document.createElement('canvas');
-      blank.width = canvas.width; blank.height = canvas.height;
-      if (canvas.toDataURL() === blank.toDataURL()) {
-        alert('Veuillez signer dans la zone de signature du locataire avant de valider.');
-        canvas.scrollIntoView({behavior:'smooth', block:'center'});
-        return;
-      }
-      var sig = canvas.toDataURL('image/png');
-      // Charger le bail actuel
-      var resp = await db.from('leases').select('data').eq('id', leaseId).single();
-      if (!resp.data) { alert('Erreur : bail introuvable.'); return; }
-      var leaseData = resp.data.data || {};
-      var fd = leaseData.formData || {};
-      fd.sig_locataire = sig;
-      leaseData.formData = fd;
-      var res = await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
-      if (res.error) { alert('Erreur sauvegarde : ' + res.error.message); return; }
-      // Sauvegarder aussi la validation des annexes
-      var annexes = ['chk-notice','chk-dpe','chk-erp','chk-repartition','chk-bail'];
-      var annexChecks = {};
-      annexes.forEach(function(id) { var el = document.getElementById(id); if (el) annexChecks[id] = el.checked; });
-      fd.annexesValidatedAt = new Date().toISOString();
-      fd.annexChecks = annexChecks;
-      await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
-
-      alert('Votre signature a ete enregistree. Le bail est maintenant signe electroniquement.');
-      // Changer le bouton
-      var btn = document.querySelector('[onclick*="saveLocataireSig"]');
-      if (btn) { btn.textContent = '✅ Signé'; btn.style.background = '#6b7280'; btn.disabled = true; }
     }
 
     loadAndRender();
