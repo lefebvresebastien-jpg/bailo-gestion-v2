@@ -490,26 +490,21 @@
       // ── ANNEXE 3bis : RADON ──
       // Déterminer le département depuis l'adresse (code postal)
       var cpMatch = (f.propertyAddress || '').match(/(\d{2})\d{3}/);
-      var dept = cpMatch ? cpMatch[0].substring(0,2) : null;
-      // Départements à potentiel radon élevé (catégorie 3 - IRSN 2018)
-      // Source : arrêté du 27 juin 2018 - catégorie 3 (potentiel radon élevé)
-      // Bretagne, Massif Central, Alsace, Vosges, Pyrénées, Ardennes, Limousin, Auvergne, Corse
-      var radonHigh = ['08','09','12','15','19','22','23','29','31','35','43','48','56','57','58','63','64','65','67','68','87','88','2A','2B'];
-      // Catégorie 2 (potentiel significatif)
-      // Catégorie 2 : formations géologiques avec facteurs facilitant le transfert
-      var radonMed = ['04','05','06','07','10','11','13','14','16','17','18','21','24','25','26','27','28','30','33','34','36','37','38','39','40','41','42','44','45','46','47','49','50','51','52','53','55','59','60','61','62','69','70','71','72','73','74','76','77','78','79','80','81','82','83','84','85','86','89','90'];
-      var radonLevel = dept ? (radonHigh.indexOf(dept) >= 0 ? 3 : (radonMed.indexOf(dept) >= 0 ? 2 : 1)) : 1;
-      var radonColor = radonLevel === 3 ? '#dc2626' : radonLevel === 2 ? '#d97706' : '#16a34a';
-      var radonBg = radonLevel === 3 ? '#fee2e2' : radonLevel === 2 ? '#fef3c7' : '#dcfce7';
-      var radonLabel = radonLevel === 3 ? 'Catégorie 3 — Potentiel radon élevé' : radonLevel === 2 ? 'Catégorie 2 — Potentiel radon significatif' : 'Catégorie 1 — Potentiel radon faible';
+      // RADON : classement par COMMUNE selon arrêté du 27 juin 2018
+      // Source officielle : georisques.gouv.fr - NE PAS calculer depuis le département
+      var georisquesUrl = 'https://errial.georisques.gouv.fr/#/';
 
       out += '<div style="margin-bottom:32px;padding:20px;background:#fdfaf6;border:1px solid #e0d5c8;border-radius:10px;page-break-inside:avoid">';
-      out += '<h3 style="font-size:.9rem;font-family:Inter,sans-serif;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;color:#e8793a">Annexe 3bis — Information sur le risque Radon</h3>';
-      out += '<p style="font-size:.78rem;color:#8a7060;margin-bottom:12px">Art. R.125-26 du Code de l&#39;environnement — Décret n° 2018-434 du 4 juin 2018</p>';
-      out += '<div style="background:' + radonBg + ';border:2px solid ' + radonColor + ';border-radius:8px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px">';
-      out += '<div style="font-size:2rem">☢️</div>';
-      out += '<div><p style="font-size:.9rem;font-weight:700;color:' + radonColor + '">' + radonLabel + '</p>';
-      out += '<p style="font-size:.8rem;color:#3a2010;margin-top:4px">Logement situé : <strong>' + (f.propertyAddress || '') + '</strong>' + (dept ? ' (Département ' + dept + ')' : '') + '</p></div></div>';
+      out += '<h3 style="font-size:.9rem;font-family:Inter,sans-serif;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;color:#e8793a">Annexe 3bis &#8212; Information sur le risque Radon</h3>';
+      out += '<p style="font-size:.78rem;color:#8a7060;margin-bottom:12px">Art. R.125-26 du Code de l&#39;environnement &#8212; Arr&#234;t&#233; du 27 juin 2018 portant d&#233;limitation des zones &#224; potentiel radon</p>';
+      out += '<div style="background:#fef3c7;border:2px solid #f59e0b;border-radius:8px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:flex-start;gap:12px">';
+      out += '<div style="font-size:2rem;flex-shrink:0">&#9762;&#65039;</div>';
+      out += '<div><p style="font-size:.9rem;font-weight:700;color:#92400e">V&#233;rifiez le classement radon de votre commune</p>';
+      out += '<p style="font-size:.8rem;color:#3a2010;margin-top:6px">Le classement radon est &#233;tabli <strong>commune par commune</strong> selon l&#39;arr&#234;t&#233; du 27 juin 2018. Le niveau exact de la commune concern&#233;e est disponible sur le site officiel de l&#39;&#201;tat.</p>';
+      out += '<p style="font-size:.8rem;color:#3a2010;margin-top:6px">Logement concern&#233; : <strong>' + (f.propertyAddress || '') + '</strong></p>';
+      out += '<p style="margin-top:10px"><a href="' + georisquesUrl + '" target="_blank" style="display:inline-block;background:#f59e0b;color:white;padding:7px 14px;border-radius:6px;font-size:.82rem;font-weight:700;text-decoration:none">Consulter georisques.gouv.fr &#8594;</a></p>';
+      out += '<p style="font-size:.75rem;color:#6a5a40;margin-top:8px">Ce site officiel de l&#39;&#201;tat fournit le classement radon exact (cat&#233;gorie 1, 2 ou 3) ainsi que l&#39;&#233;tat complet des risques pour l&#39;adresse du logement.</p>';
+      out += '</div></div>';
       out += '<div style="font-size:.82rem;line-height:1.7;color:#3a2010">';
       out += '<p><strong>Qu&#39;est-ce que le radon ?</strong> Le radon est un gaz radioactif naturel, inodore et incolore. Son accumulation dans les batiments est un risque pour la sante (2eme cause de cancer du poumon en France).</p>';
       out += '<p style="margin-top:8px"><strong>Risque pour la sante :</strong> Le radon est classe cancerigene certain par l&#39;OMS. Il est la 2eme cause de cancer du poumon en France apres le tabac.</p>';
