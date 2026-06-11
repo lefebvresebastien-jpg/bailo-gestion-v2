@@ -298,28 +298,41 @@
       return html;
     }
 
+    function sigBlock(label, name, canvasId, existingSig, canEdit) {
+      var dateStr = existingSig ? new Intl.DateTimeFormat('fr-FR').format(new Date()) : '';
+      return '<div class="sig-box">' +
+        '<span class="sig-label">' + label + '</span>' +
+        '<span class="sig-name">' + (name || '') + '</span>' +
+        (existingSig ?
+          '<div style="border:1px solid #d4c8b8;border-radius:8px;overflow:hidden;background:white;padding:4px">' +
+          '<img src="' + existingSig + '" style="width:100%;max-height:120px;object-fit:contain;display:block">' +
+          '</div>' +
+          (canEdit ? '<div class="sig-actions"><button class="btn-sig-clear" onclick="clearSig(\'' + canvasId + '\')">Effacer</button></div>' : '') +
+          '<div class="sig-date" style="color:#16a34a;font-weight:600">✅ Lu et approuvé — ' + dateStr + '</div>' :
+          '<canvas class="sig-canvas" id="' + canvasId + '" width="400" height="120"></canvas>' +
+          (canEdit ? '<div class="sig-actions"><button class="btn-sig-clear" onclick="clearSig(\'' + canvasId + '\')">Effacer</button></div>' : '') +
+          '<div class="sig-date">Lu et approuvé</div>'
+        ) +
+        '</div>';
+    }
+
     function addSignatureSection(f) {
       var today = new Intl.DateTimeFormat('fr-FR').format(new Date());
-      return '<div class="signature-section">' +
+      var html = '<div class="signature-section">' +
         '<h4>Signatures</h4>' +
         '<p style="font-size:13px;font-family:Inter,sans-serif;color:#8a7060;margin-bottom:16px">Fait à ' + (f.signatureCity || '______') + ', le ' + today + ', en deux exemplaires originaux.</p>' +
         '<div class="signature-grid">' +
-          '<div class="sig-box">' +
-            '<span class="sig-label">Le Bailleur</span>' +
-            '<span class="sig-name">' + (f.landlordName || '') + '</span>' +
-            '<canvas class="sig-canvas" id="sig-bailleur" width="400" height="120"></canvas>' +
-            '<div class="sig-actions"><button class="btn-sig-clear" onclick="clearSig(\'sig-bailleur\')">Effacer</button></div>' +
-            '<div class="sig-date">Lu et approuvé</div>' +
-          '</div>' +
-          '<div class="sig-box">' +
-            '<span class="sig-label">Le Locataire</span>' +
-            '<span class="sig-name">' + (f.tenantName || '') + '</span>' +
-            '<canvas class="sig-canvas" id="sig-locataire" width="400" height="120"></canvas>' +
-            '<div class="sig-actions"><button class="btn-sig-clear" onclick="clearSig(\'sig-locataire\')">Effacer</button></div>' +
-            '<div class="sig-date">Lu et approuvé</div>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
+          sigBlock('Le Bailleur', f.landlordName || '', 'sig-bailleur', f.sig_bailleur, true) +
+          sigBlock('Le Locataire', f.tenantName || '', 'sig-locataire', f.sig_locataire, true) +
+        '</div>';
+
+      // Garant si présent
+      if (f.guarantorName) {
+        html += '<div style="margin-top:16px">' + sigBlock('Le Garant (caution solidaire)', f.guarantorName, 'sig-garant', f.sig_garant, false) + '</div>';
+      }
+
+      html += '</div>';
+      return html;
     }
 
 
@@ -847,13 +860,28 @@
       _currentLeaseData = lease.data || {};
 
       // Charger signature bailleur existante sur tous les canvas bailleur
-      var sigBExist = f.sig_bailleur;
-      if (sigBExist) {
-        setTimeout(function() {
-          var cb = document.getElementById('sig-bailleur');
-          if (cb) { var img=new Image(); img.onload=function(){ cb.getContext('2d').drawImage(img,0,0,cb.width,cb.height); }; img.src=sigBExist; }
-        }, 400);
-      }
+      // Charger les signatures existantes sur les canvas
+      setTimeout(function() {
+        function loadSig(canvasId, dataUrl) {
+          if (!dataUrl) return;
+          var c = document.getElementById(canvasId);
+          if (!c) return;
+          var img = new Image();
+          img.onload = function() { c.getContext('2d').clearRect(0,0,c.width,c.height); c.getContext('2d').drawImage(img,0,0,c.width,c.height); };
+          img.src = dataUrl;
+        }
+        loadSig('sig-bailleur', f.sig_bailleur);
+        loadSig('sig-locataire', f.sig_locataire);
+        loadSig('sig-garant', f.sig_garant);
+
+        // Masquer les "← Zone de signature" si signature présente
+        if (f.sig_bailleur || f.sig_locataire) {
+          document.querySelectorAll('.signature-line').forEach(function(el) { el.style.display = 'none'; });
+          document.querySelectorAll('span').forEach(function(el) {
+            if (el.textContent.trim() === '← Zone de signature') el.style.display = 'none';
+          });
+        }
+      }, 500);
 
       // Initialiser les canvas de signature
       initSignatureCanvas('sig-bailleur');
