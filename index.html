@@ -513,7 +513,8 @@
           <div class="kpi-card" onclick="navigate('loyers')" style="cursor:pointer" title="Suivi des loyers">
             <div class="kpi-icon purple">💶</div>
             <div class="kpi-body">
-              <span class="kpi-value" id="kpi-loyers-val">—</span>
+              <span class="kpi-value" id="kpi-loyers-paye" style="font-size:1.1rem">—</span>
+              <span style="font-size:11px;color:var(--color-text-secondary);margin-top:1px" id="kpi-loyers-total">/ —</span>
               <span class="kpi-label">Loyers / mois</span>
             </div>
           </div>
@@ -1298,7 +1299,10 @@ async function loadKPIs() {
     const key = l.id + '_' + currentMonth;
     return loyersStatus[key] === 'paye' ? sum + leaseRent(l) : sum;
   }, 0);
-  set('kpi-loyers-val', formatCurrency(totalPaye) + ' / ' + formatCurrency(totalLoyer));
+  const elPaye = document.getElementById('kpi-loyers-paye');
+  const elTotal = document.getElementById('kpi-loyers-total');
+  if (elPaye) elPaye.textContent = formatCurrency(totalPaye);
+  if (elTotal) elTotal.textContent = '/ ' + formatCurrency(totalLoyer);
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
