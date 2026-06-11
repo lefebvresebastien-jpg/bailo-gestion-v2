@@ -132,7 +132,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
     <!-- MON BAIL -->
     <div id="section-bail" class="section active">
       <div class="card">
-        <div class="card-title">🏠 Mon bail</div>
+        <div class="card-title">
+          🏠 Mon bail
+          <button class="btn btn-primary btn-sm" id="btn-voir-contrat" onclick="voirContrat()">📋 Voir et signer le bail</button>
+        </div>
         <div id="bail-info"></div>
       </div>
       <div class="card">
@@ -334,10 +337,16 @@ function showError() {
 // ============================================================
 // MON BAIL
 // ============================================================
+function voirContrat() {
+  if (!_lease?.id) return;
+  window.open('contrat.html?lease=' + _lease.id + '&mode=locataire', '_blank');
+}
+
 function renderBail() {
   const f = _fd;
   const bail = document.getElementById('bail-info');
 
+  const sigLocataire = _fd.sig_locataire;
   const rows = [
     ['Locataire', f.tenantName || '—'],
     ['Adresse', f.propertyAddress || '—'],
@@ -355,7 +364,10 @@ function renderBail() {
     `<div class="info-row"><span class="info-label">${label}</span><span class="info-value">${value}</span></div>`
   ).join('');
 
-  bail.innerHTML = rows;
+  let sigStatus = sigLocataire
+    ? '<div style="margin-top:10px;background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:10px 14px;font-size:13px;color:#166534;font-weight:600">✅ Bail signé électroniquement<br><img src="' + sigLocataire + '" style="max-height:40px;margin-top:6px;display:block"></div>'
+    : '<div style="margin-top:10px;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:13px;color:#92400e">⚠️ Bail non encore signé — cliquez sur <strong>Voir et signer le bail</strong></div>';
+  bail.innerHTML = rows + sigStatus;
 
   // CAF
   const caf = document.getElementById('caf-info');
