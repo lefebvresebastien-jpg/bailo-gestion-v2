@@ -625,7 +625,7 @@ function renderCompteurs() {
 async function loadMessages() {
   const el = document.getElementById('msg-list');
   const { data: msgs } = await db.from('messages')
-    .select('id, sender, subject, body, kind, created_at, replies, status')
+    .select('id, sender, subject, body, kind, created_at, replies, status, incident_status')
     .eq('lease_id', _lease.id)
     .in('kind', ['Renseignement', 'Incident', 'Information'])
     .order('created_at', { ascending: true });
@@ -648,8 +648,21 @@ async function loadMessages() {
     const cls = m.kind === 'Incident' ? 'incident' : (isMe ? 'locataire' : 'bailleur');
     const replies = Array.isArray(m.replies) ? m.replies : [];
 
+    // Badge statut incident
+    const incSt = m.incident_status || 'en-attente';
+    const incBadge = {
+      'en-attente': { label: '🔴 En attente', bg: '#fee2e2', color: '#dc2626', border: '#fca5a5' },
+      'en-cours':   { label: '🟡 En cours de traitement', bg: '#fef3c7', color: '#d97706', border: '#fcd34d' },
+      'resolu':     { label: '✅ Résolu', bg: '#dcfce7', color: '#16a34a', border: '#86efac' },
+    }[incSt] || { label: '🔴 En attente', bg: '#fee2e2', color: '#dc2626', border: '#fca5a5' };
+
     let html = `<div class="msg-bubble ${cls}">
-      ${m.kind === 'Incident' ? '<div style="font-size:11px;font-weight:700;color:#856404;margin-bottom:4px">🚨 INCIDENT — ' + escH(m.subject||'') + '</div>' : (m.subject ? '<div style="font-size:11px;font-weight:700;margin-bottom:4px">' + escH(m.subject) + '</div>' : '')}
+      ${m.kind === 'Incident' ?
+        '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:8px">' +
+        '<div style="font-size:12px;font-weight:700;color:#856404">🚨 INCIDENT — ' + escH(m.subject||'') + '</div>' +
+        '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:' + incBadge.bg + ';color:' + incBadge.color + ';border:1px solid ' + incBadge.border + '">' + incBadge.label + '</span>' +
+        '</div>' :
+        (m.subject ? '<div style="font-size:11px;font-weight:700;margin-bottom:4px">' + escH(m.subject) + '</div>' : '')}
       ${escH(m.body || '')}
       <div class="msg-meta">${formatRelative(m.created_at)}</div>
     </div>`;
