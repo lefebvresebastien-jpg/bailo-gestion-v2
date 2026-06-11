@@ -754,6 +754,32 @@
           var swBtn = document.getElementById('btn-signwell');
           if (swBtn) { swBtn.textContent = 'Signer electroniquement (eIDAS)'; swBtn.style.background = '#16a34a'; }
         }
+
+        // Masquer les lignes de signature vides (section .signatures du template)
+        document.querySelectorAll('.signatures .signature-line').forEach(function(el) {
+          el.closest('div') && (el.closest('div').style.display = 'none');
+        });
+
+        // Ajouter les checkboxes annexes avant le bloc signwell
+        var annexesCheck = document.createElement('div');
+        annexesCheck.id = 'annexes-check-bloc';
+        annexesCheck.style.cssText = 'margin:20px 0;padding:18px;background:#fffdf8;border:1.5px solid #d4c8b8;border-radius:10px;font-family:Inter,sans-serif';
+        annexesCheck.innerHTML = [
+          '<div style="font-size:13px;font-weight:700;margin-bottom:14px;color:#1a1208">✅ Avant de signer, confirmez avoir reçu et lu :</div>',
+          '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-notice" onchange="checkAnnexes()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0"> Notice d&#39;information relative aux droits et obligations des locataires et bailleurs (Décret 2015-587)</label>',
+          '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-dpe" onchange="checkAnnexes()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0"> Diagnostic de Performance Energétique (DPE)</label>',
+          '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-erp" onchange="checkAnnexes()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0"> État des risques et pollutions (ERP)</label>',
+          '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-repartition" onchange="checkAnnexes()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0"> Répartition des charges locatives (Décret 87-712)</label>',
+          '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:16px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-bail" onchange="checkAnnexes()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0"> J&#39;ai lu et compris l&#39;intégralité du présent contrat de bail</label>',
+          '<div id="annexes-warning" style="display:none;padding:8px 12px;background:#fee2e2;border:1px solid #fca5a5;border-radius:7px;font-size:12px;color:#dc2626;margin-bottom:10px">⚠️ Vous devez cocher toutes les cases pour pouvoir signer.</div>'
+        ].join('');
+
+        if (signwellBlock) {
+          signwellBlock.parentNode.insertBefore(annexesCheck, signwellBlock);
+        }
+
+        // Bloquer les boutons signer jusqu&#39;à validation des annexes
+        checkAnnexes();
         var eligBlock = document.getElementById('eligibility-preview');
         if (eligBlock) eligBlock.closest('section').style.display = 'none';
 
@@ -786,6 +812,31 @@
     }
 
     // Sauvegarde signature locataire depuis le contrat
+    function checkAnnexes() {
+      var chks = ['chk-notice','chk-dpe','chk-erp','chk-repartition','chk-bail'];
+      var allChecked = chks.every(function(id) {
+        var el = document.getElementById(id);
+        return el && el.checked;
+      });
+      // Bouton canvas
+      var btnCanvas = document.querySelector('[onclick*="saveLocataireSig"]');
+      if (btnCanvas) {
+        btnCanvas.disabled = !allChecked;
+        btnCanvas.style.opacity = allChecked ? '1' : '0.5';
+        btnCanvas.style.cursor = allChecked ? 'pointer' : 'not-allowed';
+      }
+      // Bouton SignWell
+      var btnSW = document.getElementById('btn-signwell');
+      if (btnSW) {
+        btnSW.disabled = !allChecked;
+        btnSW.style.opacity = allChecked ? '1' : '0.5';
+        btnSW.style.cursor = allChecked ? 'pointer' : 'not-allowed';
+      }
+      // Warning
+      var warn = document.getElementById('annexes-warning');
+      if (warn) warn.style.display = allChecked ? 'none' : '';
+    }
+
     async function saveLocataireSig(leaseId) {
       var canvas = document.getElementById('sig-locataire');
       if (!canvas) return;
@@ -806,7 +857,15 @@
       leaseData.formData = fd;
       var res = await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
       if (res.error) { alert('Erreur sauvegarde : ' + res.error.message); return; }
-      alert('✅ Votre signature a été enregistrée. Le bail est maintenant signé électroniquement.');
+      // Sauvegarder aussi la validation des annexes
+      var annexes = ['chk-notice','chk-dpe','chk-erp','chk-repartition','chk-bail'];
+      var annexChecks = {};
+      annexes.forEach(function(id) { var el = document.getElementById(id); if (el) annexChecks[id] = el.checked; });
+      fd.annexesValidatedAt = new Date().toISOString();
+      fd.annexChecks = annexChecks;
+      await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
+
+      alert('Votre signature a ete enregistree. Le bail est maintenant signe electroniquement.');
       // Changer le bouton
       var btn = document.querySelector('[onclick*="saveLocataireSig"]');
       if (btn) { btn.textContent = '✅ Signé'; btn.style.background = '#6b7280'; btn.disabled = true; }
