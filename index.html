@@ -611,6 +611,7 @@
               ✏️ Modifier
             </button>
             <button class="btn-secondary" onclick="ouvrirEDL(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">📋 EDL</button>
+            <button class="btn-secondary" onclick="ouvrirEspaceLocataire(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">👤 Espace locataire</button>
             <button class="btn-primary" id="btn-voir-contrat" onclick="ouvrirContratV1(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
               📄 Voir le contrat
             </button>
@@ -1538,6 +1539,11 @@ function modifierBail(leaseId) {
 function ouvrirEDL(leaseId) {
   if (!leaseId) return;
   window.open('edl.html?lease=' + leaseId, '_blank');
+}
+
+function ouvrirEspaceLocataire(leaseId) {
+  if (!leaseId) return;
+  window.open('locataire.html?id=' + leaseId, '_blank');
 }
 
 function ouvrirContratV1(leaseId) {
