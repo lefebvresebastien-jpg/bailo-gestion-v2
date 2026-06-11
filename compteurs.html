@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compteurs — Bailo Gestion</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --primary: #2563eb; --success: #16a34a; --danger: #dc2626; --warning: #d97706;
+  --ink: #1a1208; --ink-2: #3a2a18; --ink-3: #6a5a40;
+  --border: #e2d9cc; --bg: #f8f4ee; --bg-card: #ffffff; --r: 10px;
+  --success-light: #dcfce7; --warning-light: #fef3c7; --danger-light: #fee2e2;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); min-height: 100vh; }
+
+/* Header */
+.header { background: #1a1208; color: white; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
+.header h1 { font-size: 1rem; font-weight: 700; }
+.header-sub { font-size: .75rem; opacity: .6; margin-top: 2px; }
+.btn-back { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.2); color: white; padding: 6px 12px; border-radius: 6px; font-size: .8rem; cursor: pointer; text-decoration: none; }
+
+/* Layout */
+.container { max-width: 960px; margin: 0 auto; padding: 20px 16px; }
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r); padding: 20px; margin-bottom: 16px; }
+.card-title { font-size: 13px; font-weight: 700; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+
+/* Tabs */
+.tabs { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 20px; gap: 0; }
+.tab { padding: 10px 18px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; background: none; color: var(--ink-3); border-bottom: 2px solid transparent; margin-bottom: -2px; }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* Forms */
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.form-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.form-group label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); }
+.form-group input, .form-group select { padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 13px; background: var(--bg); }
+.form-group input:focus, .form-group select:focus { outline: none; border-color: var(--primary); }
+
+/* Buttons */
+.btn { padding: 8px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
+.btn-primary { background: var(--primary); color: white; }
+.btn-secondary { background: var(--bg-card); color: var(--ink-2); border: 1.5px solid var(--border); }
+.btn-success { background: var(--success); color: white; }
+.btn-danger { background: var(--danger); color: white; }
+.btn-sm { padding: 5px 10px; font-size: .78rem; }
+.btn-ghost { background: none; border: 1.5px solid var(--border); color: var(--ink-2); padding: 5px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+
+/* Compteur cards */
+.meter-card { background: var(--bg-card); border: 1.5px solid var(--border); border-radius: var(--r); padding: 16px; margin-bottom: 12px; }
+.meter-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.meter-name { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.meter-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+.badge-water { background: #dbeafe; color: #1d4ed8; }
+.badge-elec { background: #fef9c3; color: #854d0e; }
+.badge-gas { background: #fce7f3; color: #9d174d; }
+
+/* Relevés table */
+.releves-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.releves-table th { background: #f1ede7; padding: 8px 10px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); }
+.releves-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); }
+.releves-table tr:last-child td { border-bottom: none; }
+.releves-table tr:hover td { background: #faf7f2; }
+
+/* Régularisation */
+.regu-card { border-radius: var(--r); padding: 16px; margin-bottom: 12px; }
+.regu-credit { background: var(--success-light); border: 1px solid #86efac; }
+.regu-debit { background: var(--danger-light); border: 1px solid #fca5a5; }
+.regu-neutral { background: var(--warning-light); border: 1px solid #fcd34d; }
+
+/* Alerte */
+.alert { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 8px; }
+.alert-warning { background: var(--warning-light); border: 1px solid #fcd34d; }
+.alert-danger { background: var(--danger-light); border: 1px solid #fca5a5; }
+.alert-success { background: var(--success-light); border: 1px solid #86efac; }
+
+/* Chart */
+.chart-wrap { position: relative; height: 260px; margin-top: 16px; }
+
+/* Toast */
+#toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1a1208; color: white; padding: 10px 20px; border-radius: 8px; font-size: 13px; display: none; z-index: 9999; }
+
+@media (max-width: 600px) {
+  .form-row, .form-row-3 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>💧 Compteurs & Sous-compteurs</h1>
+    <div class="header-sub" id="header-sub">Gestion des relevés et régularisations</div>
+  </div>
+  <a href="/" class="btn-back">← Retour</a>
+</div>
+
+<div class="container">
+
+  <!-- Sélecteur bail -->
+  <div class="card" style="padding:14px 20px">
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+      <div class="form-group" style="flex:2;min-width:220px;margin:0">
+        <label>Bien / Locataire</label>
+        <select id="sel-lease" onchange="onLeaseChange()">
+          <option value="">-- Choisir un bail --</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:1;min-width:160px;margin:0">
+        <label>Fréquence de relevé</label>
+        <select id="sel-freq" onchange="saveConfig()">
+          <option value="monthly">Mensuel</option>
+          <option value="quarterly">Trimestriel</option>
+          <option value="biannual">Semestriel</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:1;min-width:160px;margin:0">
+        <label>Régularisation tous les</label>
+        <select id="sel-regu" onchange="saveConfig()">
+          <option value="6">6 mois</option>
+          <option value="12">12 mois</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('params')">⚙️ Paramètres</button>
+    <button class="tab" onclick="showTab('releves')">📊 Relevés</button>
+    <button class="tab" onclick="showTab('regu')">💰 Régularisation</button>
+    <button class="tab" onclick="showTab('alertes')">🚨 Alertes</button>
+  </div>
+
+  <!-- TAB: PARAMÈTRES -->
+  <div id="tab-params">
+    <div class="card">
+      <div class="card-title">💧 Eau — Paramètres généraux</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Prix du m³ TTC (€)</label>
+          <input type="number" id="p-prix-m3" step="0.01" placeholder="ex: 4.20" />
+        </div>
+        <div class="form-group">
+          <label>Région / Commune</label>
+          <input type="text" id="p-region" placeholder="ex: Barlin, Pas-de-Calais" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Consommation référence/personne/an (m³)</label>
+          <input type="number" id="p-conso-ref" step="0.1" placeholder="54 (INSEE)" />
+          <span style="font-size:11px;color:var(--ink-3);margin-top:3px">Référence INSEE : 54 m³/an/personne</span>
+        </div>
+        <div class="form-group">
+          <label>Index compteur général (m³)</label>
+          <input type="number" id="p-index-general" step="0.001" placeholder="ex: 1234.567" />
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="saveParams()">💾 Enregistrer les paramètres</button>
+    </div>
+
+    <!-- Sous-compteurs par lot -->
+    <div class="card">
+      <div class="card-title">
+        🏠 Sous-compteurs par lot
+        <button class="btn btn-secondary btn-sm" onclick="addSousCompteur()">+ Ajouter</button>
+      </div>
+      <div id="sous-compteurs-list">
+        <div style="padding:24px;text-align:center;color:var(--ink-3);font-size:13px">Choisissez un bail pour configurer les sous-compteurs.</div>
+      </div>
+    </div>
+
+    <!-- Électricité & Gaz -->
+    <div class="card">
+      <div class="card-title">⚡ Électricité & 🔥 Gaz — Index</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Index électricité (kWh)</label>
+          <input type="number" id="p-index-elec" step="1" placeholder="ex: 45230" />
+        </div>
+        <div class="form-group">
+          <label>Index gaz (m³)</label>
+          <input type="number" id="p-index-gaz" step="0.001" placeholder="ex: 2341.123" />
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="saveParams()">💾 Enregistrer</button>
+    </div>
+  </div>
+
+  <!-- TAB: RELEVÉS -->
+  <div id="tab-releves" style="display:none">
+    <div class="card">
+      <div class="card-title">
+        📊 Nouveau relevé
+        <div style="display:flex;gap:8px">
+          <input type="date" id="releve-date" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">
+        </div>
+      </div>
+      <div id="releve-form">
+        <div style="padding:24px;text-align:center;color:var(--ink-3)">Choisissez un bail pour saisir un relevé.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📋 Historique des relevés</div>
+      <div id="releves-history">
+        <div style="padding:24px;text-align:center;color:var(--ink-3)">Aucun relevé enregistré.</div>
+      </div>
+    </div>
+
+    <!-- Graphique -->
+    <div class="card">
+      <div class="card-title">📈 Évolution de la consommation</div>
+      <div class="chart-wrap">
+        <canvas id="chart-conso"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: RÉGULARISATION -->
+  <div id="tab-regu" style="display:none">
+    <div class="card">
+      <div class="card-title">💰 Calcul de régularisation</div>
+      <div id="regu-content">
+        <div style="padding:24px;text-align:center;color:var(--ink-3)">Choisissez un bail pour calculer la régularisation.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: ALERTES -->
+  <div id="tab-alertes" style="display:none">
+    <div class="card">
+      <div class="card-title">🚨 Alertes de consommation</div>
+      <div id="alertes-list">
+        <div style="padding:24px;text-align:center;color:var(--ink-3)">Aucune alerte.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://nltuysmnxsomlhgvbtwz.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ============================================================
+// STATE
+// ============================================================
+let _leases = [];
+let _currentLeaseId = null;
+let _config = {}; // params généraux
+let _compteurs = {}; // { leaseId: { sousCompteurs: [], releves: [], params: {} } }
+let _chart = null;
+
+// ============================================================
+// INIT
+// ============================================================
+async function init() {
+  // Date du jour
+  document.getElementById('releve-date').valueAsDate = new Date();
+
+  // Charger baux
+  const { data: leases } = await db.from('leases').select('id, data');
+  _leases = (leases || []).filter(l => l.data?.formData?.tenantName);
+  const sel = document.getElementById('sel-lease');
+  _leases.forEach(l => {
+    const f = l.data.formData;
+    const opt = document.createElement('option');
+    opt.value = l.id;
+    opt.textContent = f.tenantName + ' — ' + (f.propertyAddress || '').split(',')[0];
+    sel.appendChild(opt);
+  });
+
+  // Charger config globale
+  const res = await db.from('settings').select('value').eq('key', 'compteurs_config').maybeSingle();
+  _config = res.data ? JSON.parse(res.data.value) : {};
+  if (_config.prixM3) document.getElementById('p-prix-m3').value = _config.prixM3;
+  if (_config.region) document.getElementById('p-region').value = _config.region;
+  if (_config.consoRef) document.getElementById('p-conso-ref').value = _config.consoRef;
+  if (_config.indexGeneral) document.getElementById('p-index-general').value = _config.indexGeneral;
+  if (_config.indexElec) document.getElementById('p-index-elec').value = _config.indexElec;
+  if (_config.indexGaz) document.getElementById('p-index-gaz').value = _config.indexGaz;
+  if (_config.freq) document.getElementById('sel-freq').value = _config.freq;
+  if (_config.regu) document.getElementById('sel-regu').value = _config.regu;
+
+  // Lire param URL
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('lease')) {
+    sel.value = params.get('lease');
+    onLeaseChange();
+  }
+}
+
+async function onLeaseChange() {
+  _currentLeaseId = document.getElementById('sel-lease').value;
+  if (!_currentLeaseId) return;
+
+  const lease = _leases.find(l => l.id === _currentLeaseId);
+  const f = lease?.data?.formData || {};
+  document.getElementById('header-sub').textContent = f.tenantName + ' — ' + (f.propertyAddress || '');
+
+  // Charger données compteurs depuis le bail
+  const { data } = await db.from('leases').select('data').eq('id', _currentLeaseId).single();
+  const leaseData = data?.data || {};
+  _compteurs[_currentLeaseId] = leaseData.compteurs || {
+    sousCompteurs: [], releves: [], params: {}
+  };
+
+  if (_compteurs[_currentLeaseId].params?.freq)
+    document.getElementById('sel-freq').value = _compteurs[_currentLeaseId].params.freq;
+
+  renderSousCompteurs();
+  renderReleveForm();
+  renderHistory();
+  renderRegu();
+  renderAlertes();
+  renderChart();
+}
+
+function saveConfig() {
+  _config.freq = document.getElementById('sel-freq').value;
+  _config.regu = document.getElementById('sel-regu').value;
+  // pas de sauvegarde immédiate — sauvegardé dans saveParams
+}
+
+// ============================================================
+// PARAMS
+// ============================================================
+async function saveParams() {
+  _config.prixM3 = parseFloat(document.getElementById('p-prix-m3').value) || 0;
+  _config.region = document.getElementById('p-region').value.trim();
+  _config.consoRef = parseFloat(document.getElementById('p-conso-ref').value) || 54;
+  _config.indexGeneral = parseFloat(document.getElementById('p-index-general').value) || 0;
+  _config.indexElec = parseFloat(document.getElementById('p-index-elec').value) || 0;
+  _config.indexGaz = parseFloat(document.getElementById('p-index-gaz').value) || 0;
+  _config.freq = document.getElementById('sel-freq').value;
+  _config.regu = document.getElementById('sel-regu').value;
+
+  await db.from('settings').upsert({ key: 'compteurs_config', value: JSON.stringify(_config) }, { onConflict: 'key' });
+  showToast('Paramètres enregistrés ✅');
+}
+
+// ============================================================
+// SOUS-COMPTEURS
+// ============================================================
+function renderSousCompteurs() {
+  const el = document.getElementById('sous-compteurs-list');
+  if (!_currentLeaseId) return;
+  const sc = _compteurs[_currentLeaseId]?.sousCompteurs || [];
+
+  if (!sc.length) {
+    el.innerHTML = '<p style="font-size:13px;color:var(--ink-3);padding:12px 0">Aucun sous-compteur. Cliquez "+ Ajouter" pour en créer un.</p>';
+    return;
+  }
+
+  el.innerHTML = sc.map((s, i) => `
+    <div class="meter-card">
+      <div class="meter-header">
+        <div class="meter-name">
+          💧 ${escH(s.label || 'Sous-compteur ' + (i+1))}
+          <span class="meter-badge badge-water">${escH(s.numero || '')}</span>
+        </div>
+        <button class="btn-ghost btn-sm" onclick="removeSousCompteur(${i})">✕ Supprimer</button>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Désignation</label>
+          <input value="${escH(s.label)}" onchange="updateSC(${i},'label',this.value)" placeholder="ex: Appartement RDC" />
+        </div>
+        <div class="form-group">
+          <label>N° compteur</label>
+          <input value="${escH(s.numero)}" onchange="updateSC(${i},'numero',this.value)" placeholder="ex: SC-001" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Nbre d'occupants</label>
+          <input type="number" value="${s.occupants||1}" min="1" onchange="updateSC(${i},'occupants',parseInt(this.value))" />
+        </div>
+        <div class="form-group">
+          <label>Index d'entrée (m³)</label>
+          <input type="number" step="0.001" value="${s.indexEntree||''}" onchange="updateSC(${i},'indexEntree',parseFloat(this.value))" placeholder="Index au démarrage" />
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--ink-3);margin-top:4px">
+        Conso théorique : <strong>${((s.occupants||1) * (_config.consoRef||54) / 12).toFixed(1)} m³/mois</strong>
+        · Provision estimée : <strong>${(((s.occupants||1) * (_config.consoRef||54) / 12) * (_config.prixM3||4.2)).toFixed(2)} €/mois</strong>
+      </div>
+    </div>
+  `).join('');
+}
+
+function addSousCompteur() {
+  if (!_currentLeaseId) { showToast('Choisissez un bail d\'abord.'); return; }
+  _compteurs[_currentLeaseId].sousCompteurs.push({ label: '', numero: '', occupants: 1, indexEntree: 0 });
+  renderSousCompteurs();
+  saveCompteurs();
+}
+
+function removeSousCompteur(i) {
+  if (!confirm('Supprimer ce sous-compteur ?')) return;
+  _compteurs[_currentLeaseId].sousCompteurs.splice(i, 1);
+  renderSousCompteurs();
+  saveCompteurs();
+}
+
+function updateSC(i, field, val) {
+  _compteurs[_currentLeaseId].sousCompteurs[i][field] = val;
+  renderSousCompteurs();
+  saveCompteurs();
+}
+
+// ============================================================
+// RELEVÉS
+// ============================================================
+function renderReleveForm() {
+  const el = document.getElementById('releve-form');
+  if (!_currentLeaseId) return;
+  const sc = _compteurs[_currentLeaseId]?.sousCompteurs || [];
+
+  let html = '<div class="form-row-3">';
+  html += `<div class="form-group">
+    <label>💧 Compteur général (m³)</label>
+    <input type="number" step="0.001" id="r-general" placeholder="Index actuel" />
+  </div>
+  <div class="form-group">
+    <label>⚡ Électricité (kWh)</label>
+    <input type="number" step="1" id="r-elec" placeholder="Index actuel" />
+  </div>
+  <div class="form-group">
+    <label>🔥 Gaz (m³)</label>
+    <input type="number" step="0.001" id="r-gaz" placeholder="Index actuel" />
+  </div>`;
+  html += '</div>';
+
+  if (sc.length) {
+    html += '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin:12px 0 8px">Sous-compteurs eau</div>';
+    html += '<div class="form-row">';
+    sc.forEach((s, i) => {
+      html += `<div class="form-group">
+        <label>💧 ${escH(s.label || 'Sous-compteur ' + (i+1))} (m³)</label>
+        <input type="number" step="0.001" id="r-sc-${i}" placeholder="Index actuel" />
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  html += `<button class="btn btn-primary" onclick="addReleve()">+ Enregistrer le relevé</button>`;
+  el.innerHTML = html;
+}
+
+async function addReleve() {
+  if (!_currentLeaseId) return;
+  const date = document.getElementById('releve-date').value;
+  if (!date) { showToast('Choisissez une date.'); return; }
+
+  const sc = _compteurs[_currentLeaseId]?.sousCompteurs || [];
+  const releve = {
+    id: 'r_' + Date.now(),
+    date: date,
+    general: parseFloat(document.getElementById('r-general')?.value) || null,
+    elec: parseFloat(document.getElementById('r-elec')?.value) || null,
+    gaz: parseFloat(document.getElementById('r-gaz')?.value) || null,
+    sousCompteurs: sc.map((s, i) => ({
+      label: s.label,
+      index: parseFloat(document.getElementById('r-sc-' + i)?.value) || null
+    }))
+  };
+
+  _compteurs[_currentLeaseId].releves.push(releve);
+  _compteurs[_currentLeaseId].releves.sort((a, b) => a.date.localeCompare(b.date));
+
+  await saveCompteurs();
+  renderHistory();
+  renderRegu();
+  renderAlertes();
+  renderChart();
+  showToast('Relevé enregistré ✅');
+
+  // Reset form
+  document.getElementById('r-general').value = '';
+  if (document.getElementById('r-elec')) document.getElementById('r-elec').value = '';
+  if (document.getElementById('r-gaz')) document.getElementById('r-gaz').value = '';
+  sc.forEach((s, i) => { const el = document.getElementById('r-sc-' + i); if (el) el.value = ''; });
+}
+
+function renderHistory() {
+  const el = document.getElementById('releves-history');
+  if (!_currentLeaseId) return;
+  const releves = _compteurs[_currentLeaseId]?.releves || [];
+  if (!releves.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--ink-3)">Aucun relevé.</div>'; return; }
+
+  el.innerHTML = `<table class="releves-table">
+    <thead><tr>
+      <th>Date</th><th>Eau générale (m³)</th><th>Sous-cpt eau (m³)</th><th>Élec (kWh)</th><th>Gaz (m³)</th><th></th>
+    </tr></thead>
+    <tbody>
+    ${[...releves].reverse().map((r, i) => {
+      const prev = releves[releves.length - 1 - i - 1];
+      const consoG = prev && r.general != null && prev.general != null ? (r.general - prev.general).toFixed(3) : '—';
+      const scStr = r.sousCompteurs?.map(s => `${s.label}: ${s.index ?? '—'}`).join('<br>') || '—';
+      return `<tr>
+        <td>${formatDate(r.date)}</td>
+        <td>${r.general ?? '—'} ${consoG !== '—' ? '<span style="font-size:11px;color:var(--ink-3)">(+' + consoG + ')</span>' : ''}</td>
+        <td style="font-size:12px">${scStr}</td>
+        <td>${r.elec ?? '—'}</td>
+        <td>${r.gaz ?? '—'}</td>
+        <td><button class="btn-ghost btn-sm" onclick="removeReleve('${r.id}')">✕</button></td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>`;
+}
+
+async function removeReleve(id) {
+  if (!confirm('Supprimer ce relevé ?')) return;
+  _compteurs[_currentLeaseId].releves = _compteurs[_currentLeaseId].releves.filter(r => r.id !== id);
+  await saveCompteurs();
+  renderHistory();
+  renderRegu();
+  renderChart();
+}
+
+// ============================================================
+// RÉGULARISATION
+// ============================================================
+function renderRegu() {
+  const el = document.getElementById('regu-content');
+  if (!_currentLeaseId) return;
+
+  const releves = _compteurs[_currentLeaseId]?.releves || [];
+  const sc = _compteurs[_currentLeaseId]?.sousCompteurs || [];
+  const prixM3 = _config.prixM3 || 4.2;
+  const moisRegu = parseInt(document.getElementById('sel-regu')?.value || 12);
+
+  if (releves.length < 2) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--ink-3)">Minimum 2 relevés nécessaires pour calculer la régularisation.</div>';
+    return;
+  }
+
+  // Prendre les N derniers mois selon fréquence de régularisation
+  const dateRef = new Date();
+  dateRef.setMonth(dateRef.getMonth() - moisRegu);
+  const relevesPeriode = releves.filter(r => new Date(r.date) >= dateRef);
+
+  if (relevesPeriode.length < 2) {
+    el.innerHTML = `<div style="padding:20px;text-align:center;color:var(--ink-3)">Pas assez de relevés sur la période de ${moisRegu} mois.</div>`;
+    return;
+  }
+
+  const premier = relevesPeriode[0];
+  const dernier = relevesPeriode[relevesPeriode.length - 1];
+
+  let html = `<div style="font-size:13px;color:var(--ink-3);margin-bottom:16px">
+    Période : <strong>${formatDate(premier.date)}</strong> → <strong>${formatDate(dernier.date)}</strong> (${moisRegu} mois)
+  </div>`;
+
+  // Consommation générale
+  if (dernier.general != null && premier.general != null) {
+    const consoReelle = dernier.general - premier.general;
+    const montantReel = consoReelle * prixM3;
+    const lease = _leases.find(l => l.id === _currentLeaseId);
+    const charges = parseFloat(lease?.data?.formData?.charges || 0);
+    const provisionsVersees = charges * moisRegu;
+    const diff = provisionsVersees - montantReel;
+
+    html += `<div class="regu-card ${diff > 0 ? 'regu-credit' : diff < 0 ? 'regu-debit' : 'regu-neutral'}">
+      <div style="font-size:14px;font-weight:700;margin-bottom:12px">💧 Eau — Compteur général</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+        <div><div style="font-size:11px;color:var(--ink-3);text-transform:uppercase">Consommation réelle</div><div style="font-size:18px;font-weight:800">${consoReelle.toFixed(3)} m³</div></div>
+        <div><div style="font-size:11px;color:var(--ink-3);text-transform:uppercase">Montant réel</div><div style="font-size:18px;font-weight:800">${montantReel.toFixed(2)} €</div></div>
+        <div><div style="font-size:11px;color:var(--ink-3);text-transform:uppercase">Provisions versées</div><div style="font-size:18px;font-weight:800">${provisionsVersees.toFixed(2)} €</div></div>
+      </div>
+      <div style="font-size:16px;font-weight:700;padding:12px;background:rgba(255,255,255,.6);border-radius:8px;text-align:center">
+        ${diff > 0
+          ? `✅ Remboursement bailleur → locataire : <span style="color:var(--success)">${diff.toFixed(2)} €</span>`
+          : diff < 0
+          ? `⚠️ Complément locataire → bailleur : <span style="color:var(--danger)">${Math.abs(diff).toFixed(2)} €</span>`
+          : '✅ Parfaitement équilibré'}
+      </div>
+    </div>`;
+  }
+
+  // Sous-compteurs
+  sc.forEach((s, i) => {
+    const indexDebut = premier.sousCompteurs?.[i]?.index;
+    const indexFin = dernier.sousCompteurs?.[i]?.index;
+    if (indexDebut == null || indexFin == null) return;
+
+    const consoReelle = indexFin - indexDebut;
+    const consoTheorique = (s.occupants || 1) * (_config.consoRef || 54) / 12 * moisRegu;
+    const montantReel = consoReelle * prixM3;
+    const montantTheo = consoTheorique * prixM3;
+    const diff = montantTheo - montantReel;
+
+    html += `<div class="regu-card ${diff > 0 ? 'regu-credit' : diff < 0 ? 'regu-debit' : 'regu-neutral'}" style="margin-top:10px">
+      <div style="font-size:14px;font-weight:700;margin-bottom:12px">💧 ${escH(s.label || 'Sous-compteur ' + (i+1))}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+        <div><div style="font-size:11px;color:var(--ink-3);text-transform:uppercase">Conso réelle</div><div style="font-size:16px;font-weight:800">${consoReelle.toFixed(3)} m³</div></div>
+        <div><div style="font-size:11px;color:var(--ink-3);text-transform:uppercase">Conso théorique</div><div style="font-size:16px;font-weight:800">${consoTheorique.toFixed(1)} m³</div></div>
+        <div><div style="font-size:11px;color:var(--ink-3);text-transform:uppercase">Montant réel</div><div style="font-size:16px;font-weight:800">${montantReel.toFixed(2)} €</div></div>
+        <div><div style="font-size:11px;color:var(--ink-3);text-transform:uppercase">Provision versée</div><div style="font-size:16px;font-weight:800">${montantTheo.toFixed(2)} €</div></div>
+      </div>
+      <div style="font-size:15px;font-weight:700;padding:10px;background:rgba(255,255,255,.6);border-radius:8px;text-align:center">
+        ${diff > 0
+          ? `✅ Remboursement : <span style="color:var(--success)">${diff.toFixed(2)} €</span>`
+          : diff < 0
+          ? `⚠️ Complément dû : <span style="color:var(--danger)">${Math.abs(diff).toFixed(2)} €</span>`
+          : '✅ Équilibré'}
+      </div>
+    </div>`;
+  });
+
+  html += `<div style="margin-top:16px;display:flex;gap:8px">
+    <button class="btn btn-success" onclick="exportRegu()">📄 Générer document régularisation</button>
+  </div>`;
+
+  el.innerHTML = html;
+}
+
+// ============================================================
+// ALERTES
+// ============================================================
+function renderAlertes() {
+  const el = document.getElementById('alertes-list');
+  if (!_currentLeaseId) return;
+
+  const releves = _compteurs[_currentLeaseId]?.releves || [];
+  const sc = _compteurs[_currentLeaseId]?.sousCompteurs || [];
+  const alerts = [];
+
+  if (releves.length >= 2) {
+    for (let i = 1; i < releves.length; i++) {
+      const r = releves[i], prev = releves[i-1];
+
+      // Alerte eau générale
+      if (r.general != null && prev.general != null) {
+        const conso = r.general - prev.general;
+        const jours = (new Date(r.date) - new Date(prev.date)) / 86400000;
+        const consoJour = conso / jours;
+        const consoRef = (_config.consoRef || 54) / 365;
+        const totalOccupants = sc.reduce((s, c) => s + (c.occupants || 1), 0) || 1;
+
+        if (consoJour > consoRef * totalOccupants * 3) {
+          alerts.push({ type: 'danger', msg: `🚨 Consommation anormalement élevée entre ${formatDate(prev.date)} et ${formatDate(r.date)} : ${conso.toFixed(3)} m³ (${(consoJour * 1000).toFixed(0)} L/jour) — possible fuite !` });
+        } else if (consoJour > consoRef * totalOccupants * 1.5) {
+          alerts.push({ type: 'warning', msg: `⚠️ Consommation élevée entre ${formatDate(prev.date)} et ${formatDate(r.date)} : ${conso.toFixed(3)} m³ — à surveiller.` });
+        }
+      }
+
+      // Alertes sous-compteurs
+      sc.forEach((s, idx) => {
+        const ci = r.sousCompteurs?.[idx]?.index;
+        const pi = prev.sousCompteurs?.[idx]?.index;
+        if (ci == null || pi == null) return;
+        const conso = ci - pi;
+        const jours = (new Date(r.date) - new Date(prev.date)) / 86400000;
+        const consoJour = conso / jours;
+        const consoRef = (_config.consoRef || 54) / 365 * (s.occupants || 1);
+
+        if (consoJour > consoRef * 3) {
+          alerts.push({ type: 'danger', msg: `🚨 ${s.label || 'Sous-compteur ' + (idx+1)} : consommation anormale (${(consoJour*1000).toFixed(0)} L/jour) — possible fuite !` });
+        }
+      });
+    }
+  }
+
+  if (!alerts.length) {
+    el.innerHTML = '<div class="alert alert-success">✅ Aucune anomalie détectée sur la consommation.</div>';
+    return;
+  }
+
+  el.innerHTML = alerts.map(a => `<div class="alert alert-${a.type}">${a.msg}</div>`).join('');
+}
+
+// ============================================================
+// GRAPHIQUE
+// ============================================================
+function renderChart() {
+  const canvas = document.getElementById('chart-conso');
+  if (!canvas || !_currentLeaseId) return;
+
+  const releves = _compteurs[_currentLeaseId]?.releves || [];
+  if (releves.length < 2) { if (_chart) { _chart.destroy(); _chart = null; } return; }
+
+  const labels = releves.map(r => formatDate(r.date));
+  const consoG = releves.map((r, i) => {
+    if (i === 0 || r.general == null || releves[i-1].general == null) return 0;
+    return parseFloat((r.general - releves[i-1].general).toFixed(3));
+  });
+
+  const sc = _compteurs[_currentLeaseId]?.sousCompteurs || [];
+  const datasets = [
+    { label: 'Eau générale (m³)', data: consoG, borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.1)', tension: 0.3, fill: true }
+  ];
+
+  sc.forEach((s, idx) => {
+    const consoSC = releves.map((r, i) => {
+      if (i === 0) return 0;
+      const ci = r.sousCompteurs?.[idx]?.index;
+      const pi = releves[i-1].sousCompteurs?.[idx]?.index;
+      if (ci == null || pi == null) return 0;
+      return parseFloat((ci - pi).toFixed(3));
+    });
+    const colors = ['#16a34a','#d97706','#dc2626','#7c3aed'];
+    datasets.push({ label: s.label || 'Sous-cpt ' + (idx+1), data: consoSC, borderColor: colors[idx % colors.length], backgroundColor: colors[idx % colors.length] + '20', tension: 0.3, fill: true });
+  });
+
+  if (_chart) _chart.destroy();
+  _chart = new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top' } },
+      scales: { y: { beginAtZero: true, title: { display: true, text: 'm³' } } }
+    }
+  });
+}
+
+// ============================================================
+// EXPORT RÉGULARISATION
+// ============================================================
+function exportRegu() {
+  showToast('Fonctionnalité export PDF — bientôt disponible.');
+}
+
+// ============================================================
+// SAVE
+// ============================================================
+async function saveCompteurs() {
+  if (!_currentLeaseId) return;
+  const { data: lease } = await db.from('leases').select('data').eq('id', _currentLeaseId).single();
+  const leaseData = lease?.data || {};
+  leaseData.compteurs = _compteurs[_currentLeaseId];
+  await db.from('leases').update({ data: leaseData }).eq('id', _currentLeaseId);
+}
+
+// ============================================================
+// UI UTILS
+// ============================================================
+function showTab(tab) {
+  ['params','releves','regu','alertes'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === tab ? '' : 'none';
+  });
+  document.querySelectorAll('.tab').forEach((btn, i) => {
+    btn.classList.toggle('active', ['params','releves','regu','alertes'][i] === tab);
+  });
+  if (tab === 'releves') renderChart();
+}
+
+function formatDate(d) {
+  if (!d) return '—';
+  return new Intl.DateTimeFormat('fr-FR').format(new Date(d + 'T12:00:00'));
+}
+
+function escH(s) {
+  return (s || '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.style.display = 'none', 3000);
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
