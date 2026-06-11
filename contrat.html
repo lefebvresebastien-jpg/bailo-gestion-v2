@@ -621,6 +621,7 @@
     async function loadAndRender() {
       var params = new URLSearchParams(window.location.search);
       var leaseId = params.get('lease');
+      var modeLocataire = params.get('mode') === 'locataire';
 
       if (!leaseId) {
         document.getElementById('loading').innerHTML = '<p style="font-family:Inter,sans-serif;color:red">Aucun bail spécifié.</p>';
@@ -666,9 +667,72 @@
       initSignatureCanvas('sig-bailleur');
       initSignatureCanvas('sig-locataire');
 
+      // Mode locataire : masquer éléments bailleur-only + activer sauvegarde sig locataire
+      if (modeLocataire) {
+        // Masquer le canvas bailleur et le bloc signwell
+        var sigBailleurBlock = document.getElementById('sig-bailleur');
+        if (sigBailleurBlock) {
+          var parent = sigBailleurBlock.closest('.sig-block') || sigBailleurBlock.parentElement;
+          if (parent) parent.style.opacity = '0.4';
+        }
+        var signwellBlock = document.getElementById('signwell-block');
+        if (signwellBlock) signwellBlock.style.display = 'none';
+        var eligBlock = document.getElementById('eligibility-preview');
+        if (eligBlock) eligBlock.closest('section').style.display = 'none';
+
+        // Charger signature locataire existante
+        var sigExist = f.sig_locataire || (lease.data && lease.data.sig_locataire);
+        if (sigExist) {
+          var canvas = document.getElementById('sig-locataire');
+          if (canvas) {
+            var img = new Image();
+            img.onload = function() {
+              var ctx = canvas.getContext('2d');
+              ctx.clearRect(0,0,canvas.width,canvas.height);
+              ctx.drawImage(img,0,0);
+            };
+            img.src = sigExist;
+          }
+        }
+
+        // Bandeau info locataire
+        var banner = document.createElement('div');
+        banner.style.cssText = 'position:sticky;top:0;z-index:200;background:#1a1208;color:white;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;font-family:Inter,sans-serif;font-size:13px';
+        banner.innerHTML = '<span>📋 Votre contrat de bail — Lisez attentivement avant de signer</span>' +
+          '<button onclick="saveLocataireSig(&#39;' + leaseId + '&#39;)" style="background:#16a34a;color:white;border:none;padding:7px 16px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer">Signer le bail</button>';
+        document.body.insertBefore(banner, document.body.firstChild);
+      }
+
       // Afficher
       document.getElementById('loading').style.display = 'none';
       document.getElementById('page-wrapper').style.display = 'block';
+    }
+
+    // Sauvegarde signature locataire depuis le contrat
+    async function saveLocataireSig(leaseId) {
+      var canvas = document.getElementById('sig-locataire');
+      if (!canvas) return;
+      var blank = document.createElement('canvas');
+      blank.width = canvas.width; blank.height = canvas.height;
+      if (canvas.toDataURL() === blank.toDataURL()) {
+        alert('Veuillez signer dans la zone de signature du locataire avant de valider.');
+        canvas.scrollIntoView({behavior:'smooth', block:'center'});
+        return;
+      }
+      var sig = canvas.toDataURL('image/png');
+      // Charger le bail actuel
+      var resp = await db.from('leases').select('data').eq('id', leaseId).single();
+      if (!resp.data) { alert('Erreur : bail introuvable.'); return; }
+      var leaseData = resp.data.data || {};
+      var fd = leaseData.formData || {};
+      fd.sig_locataire = sig;
+      leaseData.formData = fd;
+      var res = await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
+      if (res.error) { alert('Erreur sauvegarde : ' + res.error.message); return; }
+      alert('✅ Votre signature a été enregistrée. Le bail est maintenant signé électroniquement.');
+      // Changer le bouton
+      var btn = document.querySelector('[onclick*="saveLocataireSig"]');
+      if (btn) { btn.textContent = '✅ Signé'; btn.style.background = '#6b7280'; btn.disabled = true; }
     }
 
     loadAndRender();
