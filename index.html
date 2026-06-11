@@ -742,6 +742,11 @@
               <button class="kind-filter" data-kind="Incident" onclick="setKindFilter('Incident', this)">🚨 Incidents</button>
               <button class="kind-filter" data-kind="Document" onclick="setKindFilter('Document', this)">📎 Docs</button>
             </div>
+            <div class="messages-kind-filters" style="border-top:1px solid var(--color-border);padding-top:6px;margin-top:2px">
+              <button class="kind-filter active" data-archive="actifs" onclick="setArchiveFilter('actifs', this)">📬 Actifs</button>
+              <button class="kind-filter" data-archive="archives" onclick="setArchiveFilter('archives', this)">🗄 Archivés</button>
+              <button class="kind-filter" data-archive="incidents" onclick="setArchiveFilter('incidents', this)">🔴 Incidents</button>
+            </div>
             <div style="padding:0 12px 8px">
               <select id="msg-tenant-filter" onchange="filterMessages()" style="width:100%;padding:7px 10px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);font-size:12px;background:var(--color-bg);color:var(--color-text)">
                 <option value="">Tous les locataires</option>
@@ -3821,29 +3826,63 @@ function populateTenantFilter() {
   sel.innerHTML = opts;
 }
 
+var _archiveFilter = 'actifs'; // actifs | archives | incidents
+
+function setArchiveFilter(val, btn) {
+  _archiveFilter = val;
+  document.querySelectorAll('[data-archive]').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  filterMessages();
+}
+
+const INCIDENT_STATUS_LABELS = {
+  'en-attente': { label: 'En attente', color: '#dc2626', bg: '#fee2e2' },
+  'en-cours':   { label: 'En cours',   color: '#d97706', bg: '#fef3c7' },
+  'resolu':     { label: 'Résolu',     color: '#16a34a', bg: '#dcfce7' },
+};
+
 function renderMessagesList(messages) {
   const el = document.getElementById('messages-list');
   if (!el) return;
-  if (!messages.length) { el.innerHTML = emptyState('Aucun message.'); return; }
 
-  el.innerHTML = messages.map(m => {
+  // Filtrer selon archive filter
+  let filtered = messages;
+  if (_archiveFilter === 'actifs') {
+    filtered = messages.filter(m => m.status !== 'archive');
+  } else if (_archiveFilter === 'archives') {
+    filtered = messages.filter(m => m.status === 'archive');
+  } else if (_archiveFilter === 'incidents') {
+    filtered = messages.filter(m => m.kind === 'Incident' && m.status !== 'archive');
+  }
+
+  if (!filtered.length) { el.innerHTML = emptyState('Aucun message.'); return; }
+
+  el.innerHTML = filtered.map(m => {
     const lease = _allLeases.find(l => l.id === m.lease_id);
     const tenant = lease ? leaseTenantName(lease) : 'Locataire inconnu';
     const icon = KIND_ICONS[m.kind] || '📌';
     const isUnread = m.status === 'en-attente' && m.sender === 'Locataire';
-
     const address = lease ? leaseAddress(lease) : '';
     const isIncident = m.kind === 'Incident';
-    return `<div class="conv-item${_currentMessage?.id === m.id ? ' active' : ''}" onclick="openMessage('${m.id}')" style="${isIncident && isUnread ? 'border-left:3px solid var(--color-danger)' : ''}">
+    const incSt = m.incident_status || 'en-attente';
+    const incLabel = INCIDENT_STATUS_LABELS[incSt] || INCIDENT_STATUS_LABELS['en-attente'];
+    const isArchived = m.status === 'archive';
+
+    let borderStyle = '';
+    if (isIncident && incSt === 'en-attente') borderStyle = 'border-left:3px solid var(--color-danger)';
+    else if (isIncident && incSt === 'en-cours') borderStyle = 'border-left:3px solid #d97706';
+    else if (isIncident && incSt === 'resolu') borderStyle = 'border-left:3px solid #16a34a';
+
+    return `<div class="conv-item${_currentMessage?.id === m.id ? ' active' : ''}${isArchived ? ' opacity-50' : ''}" onclick="openMessage('${m.id}')" style="${borderStyle}${isArchived ? ';opacity:.55' : ''}">
       <div class="conv-icon kind-${m.kind}">${icon}</div>
       <div class="conv-body">
         <div class="conv-tenant" style="font-weight:${isUnread?'700':'500'}">${tenant}${isUnread ? ' <span style="width:7px;height:7px;background:var(--color-danger);border-radius:50%;display:inline-block;margin-left:4px"></span>' : ''}</div>
         <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:2px">${address}</div>
-        <div class="conv-subject" style="color:${isIncident?'var(--color-danger)':'inherit'}">${m.subject || m.kind}</div>
+        <div class="conv-subject" style="color:${isIncident && incSt!=='resolu'?'var(--color-danger)':'inherit'}">${m.subject || m.kind}</div>
       </div>
       <div class="conv-meta">
         <div class="conv-date">${formatRelative(m.created_at)}</div>
-        <span class="conv-kind-badge kind-${m.kind}">${m.kind}</span>
+        ${isIncident ? `<span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:${incLabel.bg};color:${incLabel.color}">${incLabel.label}</span>` : `<span class="conv-kind-badge kind-${m.kind}">${m.kind}</span>`}
       </div>
     </div>`;
   }).join('');
@@ -3884,6 +3923,19 @@ function openMessage(id) {
       </div>
       <span style="font-size:12px;color:var(--color-text-tertiary)">${formatDate(_currentMessage.created_at)}</span>
     </div>
+    <!-- Actions statut + archivage -->
+    <div style="display:flex;gap:6px;padding:8px 16px;border-bottom:1px solid var(--color-border);flex-wrap:wrap;background:var(--color-surface)">
+      ${_currentMessage.kind === 'Incident' ? `
+        <span style="font-size:12px;font-weight:600;padding:4px 0;color:var(--color-text-secondary)">Statut :</span>
+        <button onclick="setIncidentStatus('${id}','en-attente')" style="padding:4px 10px;border-radius:6px;border:1.5px solid #fca5a5;background:${(_currentMessage.incident_status||'en-attente')==='en-attente'?'#fee2e2':'white'};color:#dc2626;font-size:12px;font-weight:600;cursor:pointer">🔴 En attente</button>
+        <button onclick="setIncidentStatus('${id}','en-cours')" style="padding:4px 10px;border-radius:6px;border:1.5px solid #fcd34d;background:${_currentMessage.incident_status==='en-cours'?'#fef3c7':'white'};color:#d97706;font-size:12px;font-weight:600;cursor:pointer">🟡 En cours</button>
+        <button onclick="setIncidentStatus('${id}','resolu')" style="padding:4px 10px;border-radius:6px;border:1.5px solid #86efac;background:${_currentMessage.incident_status==='resolu'?'#dcfce7':'white'};color:#16a34a;font-size:12px;font-weight:600;cursor:pointer">✅ Résolu</button>
+        <span style="flex:1"></span>
+      ` : ''}
+      <button onclick="archiverMessage('${id}')" style="padding:4px 10px;border-radius:6px;border:1.5px solid var(--color-border);background:${_currentMessage.status==='archive'?'#f1ede7':'white'};color:var(--color-text-secondary);font-size:12px;cursor:pointer">
+        ${_currentMessage.status === 'archive' ? '📬 Désarchiver' : '🗄 Archiver'}
+      </button>
+    </div>
     <div class="msg-detail-body">
       ${allBubbles.length ? allBubbles.map(b => `
         <div>
@@ -3899,6 +3951,41 @@ function openMessage(id) {
       <button class="btn-primary" onclick="sendReply('${id}')">Envoyer</button>
     </div>
   `;
+}
+
+async function setIncidentStatus(messageId, newStatus) {
+  const msg = _allMessages.find(m => m.id === messageId);
+  if (!msg) return;
+
+  const { error } = await db.from('messages')
+    .update({ incident_status: newStatus, status: newStatus === 'resolu' ? 'traité' : msg.status })
+    .eq('id', messageId);
+
+  if (error) { showToast('Erreur : ' + error.message, 'error'); return; }
+
+  msg.incident_status = newStatus;
+  if (newStatus === 'resolu') msg.status = 'traité';
+
+  const labels = { 'en-attente': 'En attente', 'en-cours': 'En cours', 'resolu': 'Résolu ✅' };
+  showToast('Statut : ' + (labels[newStatus] || newStatus), 'success');
+
+  openMessage(messageId);
+  renderMessagesList(_allMessages.filter(m => !_currentKindFilter || m.kind === _currentKindFilter));
+}
+
+async function archiverMessage(messageId) {
+  const msg = _allMessages.find(m => m.id === messageId);
+  if (!msg) return;
+
+  const newStatus = msg.status === 'archive' ? 'traité' : 'archive';
+  const { error } = await db.from('messages').update({ status: newStatus }).eq('id', messageId);
+  if (error) { showToast('Erreur : ' + error.message, 'error'); return; }
+
+  msg.status = newStatus;
+  showToast(newStatus === 'archive' ? 'Message archivé 🗄' : 'Message désarchivé 📬', 'success');
+
+  openMessage(messageId);
+  renderMessagesList(_allMessages.filter(m => !_currentKindFilter || m.kind === _currentKindFilter));
 }
 
 async function sendReply(messageId) {
