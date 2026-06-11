@@ -618,6 +618,72 @@
       canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
     }
 
+    var SIGNWELL_API_KEY = 'YWNjZXNzOmQyN2I5YzVhZjljZTdlYzU1MWViYWUyMGQ2MTQwYmNl';
+    var _currentLeaseId = null;
+    var _currentLeaseData = null;
+
+    async function envoyerSignatureSignWell() {
+      var btn = document.getElementById('btn-signwell');
+      var statusEl = document.getElementById('signwell-status');
+      function showStatus(msg, type) {
+        var colors = {info:'#1a3a6a',success:'#1a6a3a',error:'#6a1a1a'};
+        var bgs = {info:'#e8f0ff',success:'#e8f5e8',error:'#ffe8e8'};
+        statusEl.style.display='block'; statusEl.innerHTML=msg;
+        statusEl.style.color=colors[type]||'#333';
+        statusEl.style.background=bgs[type]||'#f5f5f5';
+        statusEl.style.border='1px solid '+(colors[type]||'#ccc');
+      }
+      var f = _currentLeaseData && _currentLeaseData.formData ? _currentLeaseData.formData : {};
+      if (!f.landlordEmail) { showStatus('Email bailleur manquant dans le bail.', 'error'); return; }
+      if (!f.tenantEmail)   { showStatus('Email locataire manquant dans le bail.', 'error'); return; }
+      btn.disabled=true; btn.textContent='Envoi...';
+      showStatus('Generation du document...', 'info');
+      try {
+        var bailEl = document.getElementById('print-area');
+        if (!bailEl) { showStatus('Bail introuvable.', 'error'); btn.disabled=false; return; }
+        var signers = [
+          {id:'bailleur', name:f.landlordName||'Bailleur', email:f.landlordEmail, order:1},
+          {id:'locataire', name:f.tenantName||'Locataire', email:f.tenantEmail, order:2}
+        ];
+        if (f.guarantorEmail) signers.push({id:'garant', name:f.guarantorName||'Garant', email:f.guarantorEmail, order:3});
+        var docName = 'Bail - '+(f.tenantName||'Locataire')+' - '+(f.propertyAddress||'')+' - '+new Date().toLocaleDateString('fr-FR');
+        var payload = {
+          name: docName,
+          subject: 'Signature du bail - '+(f.propertyAddress||'votre logement'),
+          message: 'Bonjour,\n\nVeuillez trouver ci-joint votre bail de location a signer.\n\nCordialement,\nBailo Pro',
+          test_mode: true, with_signature_page: true, apply_signing_order: true, reminders: true, language: 'fr',
+          recipients: signers.map(function(s){ return {id:'signer'+s.order, name:s.name, email:s.email, order:s.order}; }),
+          files: [{name:docName+'.html', file_base64:btoa(unescape(encodeURIComponent(bailEl.outerHTML)))}],
+          redirect_url: 'https://v2.gestion.bailo.pro'
+        };
+        showStatus('Envoi a SignWell...', 'info');
+        var resp = await fetch('https://www.signwell.com/api/v1/documents/', {
+          method:'POST', headers:{'X-Api-Key':SIGNWELL_API_KEY,'Content-Type':'application/json'},
+          body:JSON.stringify(payload)
+        });
+        var data = await resp.json();
+        if (!resp.ok) { showStatus('Erreur SignWell : '+(data.message||data.error||JSON.stringify(data)), 'error'); btn.disabled=false; btn.textContent='Reessayer'; return; }
+        if (_currentLeaseId) {
+          var ld = _currentLeaseData || {};
+          ld.signwellDocId = data.id;
+          ld.signwellSentAt = new Date().toISOString();
+          ld.signwellSigners = signers;
+          await db.from('leases').update({data:ld}).eq('id', _currentLeaseId);
+        }
+        showStatus('Bail envoye ! Chaque signataire a recu un email SignWell.', 'success');
+        btn.textContent='Renvoyer'; btn.disabled=false;
+        var signersEl = document.getElementById('signwell-signers');
+        if (signersEl) {
+          signersEl.style.display='';
+          signersEl.innerHTML = '<div style="font-size:12px;font-weight:700;margin-bottom:8px">Statut :</div>'+
+            signers.map(function(s){ return '<div style="padding:5px 10px;background:#f0f7ff;border-radius:6px;margin-bottom:4px;font-size:12px">En attente - '+s.name+' ('+s.email+')</div>'; }).join('');
+        }
+      } catch(err) {
+        showStatus('Erreur : '+err.message, 'error');
+        btn.disabled=false; btn.textContent='Reessayer';
+      }
+    }
+
     async function loadAndRender() {
       var params = new URLSearchParams(window.location.search);
       var leaseId = params.get('lease');
@@ -663,6 +729,10 @@
       document.getElementById('toolbar-title').textContent = f.tenantName || 'Contrat de bail';
       document.getElementById('toolbar-sub').textContent = f.propertyAddress || '';
 
+      // Stocker pour SignWell
+      _currentLeaseId = leaseId;
+      _currentLeaseData = lease.data || {};
+
       // Initialiser les canvas de signature
       initSignatureCanvas('sig-bailleur');
       initSignatureCanvas('sig-locataire');
@@ -676,7 +746,14 @@
           if (parent) parent.style.opacity = '0.4';
         }
         var signwellBlock = document.getElementById('signwell-block');
-        if (signwellBlock) signwellBlock.style.display = 'none';
+        if (signwellBlock) {
+          var swTitle = signwellBlock.querySelector('h4');
+          if (swTitle) swTitle.textContent = 'Signature electronique legale (eIDAS)';
+          var swDesc = signwellBlock.querySelector('p');
+          if (swDesc) swDesc.textContent = 'Signez ce bail electroniquement. Vous et votre bailleur recevrez un email de confirmation avec le document signe.';
+          var swBtn = document.getElementById('btn-signwell');
+          if (swBtn) { swBtn.textContent = 'Signer electroniquement (eIDAS)'; swBtn.style.background = '#16a34a'; }
+        }
         var eligBlock = document.getElementById('eligibility-preview');
         if (eligBlock) eligBlock.closest('section').style.display = 'none';
 
