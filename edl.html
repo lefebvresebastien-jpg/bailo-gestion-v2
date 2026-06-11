@@ -118,6 +118,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
 #edl-lightbox img { max-width: 90vw; max-height: 90vh; border-radius: 8px; }
 #edl-lightbox button { position: absolute; top: 16px; right: 16px; background: rgba(255,255,255,.2); border: none; color: white; font-size: 24px; cursor: pointer; border-radius: 50%; width: 40px; height: 40px; }
 
+/* Compteurs */
+.meter-section { background: var(--bg-card); border: 1.5px solid var(--border); border-radius: var(--r-md); padding: 18px; margin-top: 16px; }
+.meter-section h3 { font-size: 13px; font-weight: 700; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.meter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.meter-col-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
+.meter-col-label.entry { color: #16a34a; }
+.meter-col-label.exit { color: #d97706; }
+.meter-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: var(--bg); border-radius: 6px; margin-bottom: 6px; }
+.meter-row label { font-size: 12px; font-weight: 600; color: var(--ink-2); display: flex; align-items: center; gap: 6px; }
+.meter-row input { width: 130px; padding: 5px 8px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 13px; text-align: right; }
+.meter-diff { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 700; }
+.diff-ok { background: #dcfce7; color: #166534; }
+.diff-warn { background: #fee2e2; color: #991b1b; }
+
 /* Toast */
 #edl-toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1a1208; color: white; padding: 10px 20px; border-radius: 8px; font-size: 13px; display: none; z-index: 9998; white-space: nowrap; }
 
@@ -331,6 +345,7 @@ function renderEDL() {
       ${ROOM_TYPES.map(t => `<button class="room-type-btn" onclick="addRoom('${t}')">${t}</button>`).join('')}
     </div>
     ${_rooms.map((r, i) => renderRoom(r, i, isExit)).join('')}
+    ${renderMeters()}
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" onclick="saveEDL()">💾 Enregistrer l'EDL</button>
       <button class="btn btn-success" onclick="validateEDL()">✅ Valider et signer</button>
@@ -514,6 +529,102 @@ async function removePhoto(roomId, idx, side) {
   renderEDL();
   await saveEDL();
   showToast('Photo supprimée ✅');
+}
+
+// ============================================================
+// COMPTEURS
+// ============================================================
+const METERS = [
+  { key: 'eau',   label: 'Eau froide',   icon: '💧', unit: 'm³' },
+  { key: 'eauc',  label: 'Eau chaude',   icon: '🚿', unit: 'm³' },
+  { key: 'elec',  label: 'Électricité',  icon: '⚡', unit: 'kWh' },
+  { key: 'gaz',   label: 'Gaz',          icon: '🔥', unit: 'm³' },
+];
+
+function renderMeters() {
+  const d = _edlData || {};
+  const meters = d.meters || {};
+
+  const rows = METERS.map(m => {
+    const entry = meters[m.key + '_entry'] || '';
+    const exit  = meters[m.key + '_exit']  || '';
+    let diffHtml = '';
+    if (entry && exit) {
+      const diff = parseFloat(exit) - parseFloat(entry);
+      const cls = diff < 0 ? 'diff-warn' : 'diff-ok';
+      diffHtml = `<span class="meter-diff ${cls}">${diff >= 0 ? '+' : ''}${diff.toFixed(3)} ${m.unit}</span>`;
+    }
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:9px 10px;font-size:13px;font-weight:600">${m.icon} ${m.label}</td>
+      <td style="padding:9px 10px">
+        <input type="number" step="0.001" value="${entry}" placeholder="Index entrée"
+          onchange="updateMeter('${m.key}_entry', this.value)"
+          style="width:130px;padding:5px 8px;border:1.5px solid #d4c8b8;border-radius:6px;font-size:13px;text-align:right;background:#f0fdf4">
+        <span style="font-size:11px;color:#6a5a40;margin-left:4px">${m.unit}</span>
+      </td>
+      <td style="padding:9px 10px">
+        <input type="number" step="0.001" value="${exit}" placeholder="Index sortie"
+          onchange="updateMeter('${m.key}_exit', this.value)"
+          style="width:130px;padding:5px 8px;border:1.5px solid #d4c8b8;border-radius:6px;font-size:13px;text-align:right;background:#fff7ed">
+        <span style="font-size:11px;color:#6a5a40;margin-left:4px">${m.unit}</span>
+      </td>
+      <td style="padding:9px 10px">${diffHtml}</td>
+    </tr>`;
+  }).join('');
+
+  // Sous-compteurs eau depuis compteurs.html
+  const sc = _edlData?.compteurs?.sousCompteurs || [];
+  const scRows = sc.map((s, i) => {
+    const entryK = 'sc_' + i + '_entry';
+    const exitK  = 'sc_' + i + '_exit';
+    const entry = meters[entryK] || '';
+    const exit  = meters[exitK]  || '';
+    let diffHtml = '';
+    if (entry && exit) {
+      const diff = parseFloat(exit) - parseFloat(entry);
+      const cls = diff < 0 ? 'diff-warn' : 'diff-ok';
+      diffHtml = `<span class="meter-diff ${cls}">${diff >= 0 ? '+' : ''}${diff.toFixed(3)} m³</span>`;
+    }
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:9px 10px;font-size:13px;font-weight:600">💧 SC — ${escHtml(s.label || 'Sous-cpt ' + (i+1))}</td>
+      <td style="padding:9px 10px">
+        <input type="number" step="0.001" value="${entry}" placeholder="Index entrée"
+          onchange="updateMeter('${entryK}', this.value)"
+          style="width:130px;padding:5px 8px;border:1.5px solid #d4c8b8;border-radius:6px;font-size:13px;text-align:right;background:#f0fdf4">
+        <span style="font-size:11px;color:#6a5a40;margin-left:4px">m³</span>
+      </td>
+      <td style="padding:9px 10px">
+        <input type="number" step="0.001" value="${exit}" placeholder="Index sortie"
+          onchange="updateMeter('${exitK}', this.value)"
+          style="width:130px;padding:5px 8px;border:1.5px solid #d4c8b8;border-radius:6px;font-size:13px;text-align:right;background:#fff7ed">
+        <span style="font-size:11px;color:#6a5a40;margin-left:4px">m³</span>
+      </td>
+      <td style="padding:9px 10px">${diffHtml}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="meter-section">
+    <h3>🔢 Relevés de compteurs</h3>
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="background:#f1ede7">
+          <th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#6a5a40">Compteur</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#16a34a">📸 Index Entrée</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#d97706">📸 Index Sortie</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#6a5a40">Consommation</th>
+        </tr>
+      </thead>
+      <tbody>${rows}${scRows}</tbody>
+    </table>
+  </div>`;
+}
+
+function updateMeter(key, value) {
+  if (!_edlData.meters) _edlData.meters = {};
+  _edlData.meters[key] = value ? parseFloat(value) : null;
+  // Re-render seulement le tableau compteurs pour éviter de perdre le focus
+  const section = document.querySelector('.meter-section');
+  if (section) section.outerHTML = renderMeters();
 }
 
 async function saveEDL() {
