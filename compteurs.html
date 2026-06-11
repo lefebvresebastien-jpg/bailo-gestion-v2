@@ -161,7 +161,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
           <input type="number" id="p-index-general" step="0.001" placeholder="ex: 1234.567" />
         </div>
       </div>
-      <button class="btn btn-primary" onclick="saveParams()">💾 Enregistrer les paramètres</button>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Date de référence (début de période)</label>
+          <input type="date" id="p-date-ref" />
+          <span style="font-size:11px;color:var(--ink-3);margin-top:3px">Les graphiques ne comptent que depuis cette date. A mettre a jour chaque annee.</span>
+        </div>
+        <div class="form-group" style="display:flex;align-items:flex-end">
+          <button class="btn btn-secondary btn-sm" onclick="resetDateRef()">Remettre a aujourd'hui</button>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="saveParams()">Enregistrer les parametres</button>
     </div>
 
     <!-- Sous-compteurs par lot -->
@@ -297,6 +307,8 @@ async function init() {
   if (_config.indexGaz) document.getElementById('p-index-gaz').value = _config.indexGaz;
   if (_config.freq) document.getElementById('sel-freq').value = _config.freq;
   if (_config.regu) document.getElementById('sel-regu').value = _config.regu;
+  var pdr = document.getElementById('p-date-ref');
+  if (pdr) pdr.value = _config.dateRef || (new Date().getFullYear() + '-01-01');
 
   // Lire param URL
   const params = new URLSearchParams(window.location.search);
@@ -350,6 +362,7 @@ async function saveParams() {
   _config.indexGaz = parseFloat(document.getElementById('p-index-gaz').value) || 0;
   _config.freq = document.getElementById('sel-freq').value;
   _config.regu = document.getElementById('sel-regu').value;
+  _config.dateRef = (document.getElementById('p-date-ref')||{}).value || '';
 
   await db.from('settings').upsert({ key: 'compteurs_config', value: JSON.stringify(_config) }, { onConflict: 'key' });
   showToast('Paramètres enregistrés ✅');
@@ -499,10 +512,26 @@ async function addReleve() {
   sc.forEach((s, i) => { const el = document.getElementById('r-sc-' + i); if (el) el.value = ''; });
 }
 
+function resetDateRef() {
+  var today = new Date().toISOString().split('T')[0];
+  var el = document.getElementById('p-date-ref');
+  if (el) el.value = today;
+  showToast('Date remise a aujourd&#39;hui - pensez a Enregistrer');
+}
+
+function getRelevesFiltered() {
+  var releves = _compteurs[_currentLeaseId]?.releves || [];
+  var dateRef = _config.dateRef;
+  if (!dateRef) return releves;
+  var idx = releves.findIndex(function(r){ return r.date >= dateRef; });
+  if (idx <= 0) return releves;
+  return releves.slice(idx - 1);
+}
+
 function renderHistory() {
   const el = document.getElementById('releves-history');
   if (!_currentLeaseId) return;
-  const releves = _compteurs[_currentLeaseId]?.releves || [];
+  const releves = getRelevesFiltered();
   if (!releves.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--ink-3)">Aucun relevé.</div>'; return; }
 
   el.innerHTML = `<table class="releves-table">
@@ -542,7 +571,7 @@ function renderRegu() {
   const el = document.getElementById('regu-content');
   if (!_currentLeaseId) return;
 
-  const releves = _compteurs[_currentLeaseId]?.releves || [];
+  const releves = getRelevesFiltered();
   const sc = _compteurs[_currentLeaseId]?.sousCompteurs || [];
   const prixM3 = _config.prixM3 || 4.2;
   const moisRegu = parseInt(document.getElementById('sel-regu')?.value || 12);
@@ -565,9 +594,21 @@ function renderRegu() {
   const premier = relevesPeriode[0];
   const dernier = relevesPeriode[relevesPeriode.length - 1];
 
-  let html = `<div style="font-size:13px;color:var(--ink-3);margin-bottom:16px">
-    Période : <strong>${formatDate(premier.date)}</strong> → <strong>${formatDate(dernier.date)}</strong> (${moisRegu} mois)
-  </div>`;
+  const sc3 = _compteurs[_currentLeaseId]?.sousCompteurs || [];
+  let totalConsoSC = 0;
+  sc3.forEach(function(s, idx) {
+    var id = premier.sousCompteurs?.[idx]?.index;
+    var fd = dernier.sousCompteurs?.[idx]?.index;
+    if (id != null && fd != null) totalConsoSC += fd - id;
+  });
+  const dateRefLabel = _config.dateRef ? ' — depuis ' + formatDate(_config.dateRef) : '';
+
+  let html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">' +
+    '<div style="font-size:13px;color:var(--ink-3)">Période : <strong>' + formatDate(premier.date) + '</strong> → <strong>' + formatDate(dernier.date) + '</strong>' + dateRefLabel + '</div>' +
+    '<div style="background:#dbeafe;border:1px solid #93c5fd;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;color:#1e40af">' +
+    'Total : ' + totalConsoSC.toLocaleString('fr-FR',{maximumFractionDigits:3}) + ' m³ · ' +
+    (totalConsoSC * (_config.prixM3||4.2)).toLocaleString('fr-FR',{style:'currency',currency:'EUR'}) +
+    '</div></div>';
 
   // Consommation générale
   // Compteur général : affichage info seulement (pas de régularisation individuelle)
@@ -624,7 +665,7 @@ function renderAlertes() {
   const el = document.getElementById('alertes-list');
   if (!_currentLeaseId) return;
 
-  const releves = _compteurs[_currentLeaseId]?.releves || [];
+  const releves = getRelevesFiltered();
   const sc = _compteurs[_currentLeaseId]?.sousCompteurs || [];
   const alerts = [];
 
@@ -681,7 +722,7 @@ function renderChart() {
   const canvas = document.getElementById('chart-conso');
   if (!canvas || !_currentLeaseId) return;
 
-  const releves = _compteurs[_currentLeaseId]?.releves || [];
+  const releves = getRelevesFiltered();
   const sc = _compteurs[_currentLeaseId]?.sousCompteurs || [];
 
   if (releves.length < 2) {
