@@ -755,9 +755,14 @@
           if (swBtn) { swBtn.textContent = 'Signer electroniquement (eIDAS)'; swBtn.style.background = '#16a34a'; }
         }
 
-        // Masquer les lignes de signature vides (section .signatures du template)
-        document.querySelectorAll('.signatures .signature-line').forEach(function(el) {
-          el.closest('div') && (el.closest('div').style.display = 'none');
+        // Masquer toute la section signatures vides du template
+        document.querySelectorAll('.signatures').forEach(function(el) {
+          el.style.display = 'none';
+        });
+        // Masquer aussi les signature-line partout
+        document.querySelectorAll('.signature-line').forEach(function(el) {
+          var parent = el.closest('div');
+          if (parent) parent.style.display = 'none';
         });
 
         // Ajouter les checkboxes annexes avant le bloc signwell
@@ -770,6 +775,7 @@
           '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-dpe" onchange="checkAnnexes()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0"> Diagnostic de Performance Energétique (DPE)</label>',
           '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-erp" onchange="checkAnnexes()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0"> État des risques et pollutions (ERP)</label>',
           '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-repartition" onchange="checkAnnexes()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0"> Répartition des charges locatives (Décret 87-712)</label>',
+          '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-radon" onchange="checkAnnexes()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0"> Information sur le risque Radon (zones concernées selon arrêté préfectoral)</label>',
           '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:16px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-bail" onchange="checkAnnexes()" style="margin-top:2px;width:16px;height:16px;flex-shrink:0"> J&#39;ai lu et compris l&#39;intégralité du présent contrat de bail</label>',
           '<div id="annexes-warning" style="display:none;padding:8px 12px;background:#fee2e2;border:1px solid #fca5a5;border-radius:7px;font-size:12px;color:#dc2626;margin-bottom:10px">⚠️ Vous devez cocher toutes les cases pour pouvoir signer.</div>'
         ].join('');
@@ -813,7 +819,7 @@
 
     // Sauvegarde signature locataire depuis le contrat
     function checkAnnexes() {
-      var chks = ['chk-notice','chk-dpe','chk-erp','chk-repartition','chk-bail'];
+      var chks = ['chk-notice','chk-dpe','chk-erp','chk-repartition','chk-radon','chk-bail'];
       var allChecked = chks.every(function(id) {
         var el = document.getElementById(id);
         return el && el.checked;
