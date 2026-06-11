@@ -433,8 +433,12 @@
           <span class="nav-icon">🧾</span>
           <span class="nav-label">Quittances</span>
         </a>
-        <a href="#" class="nav-item" data-page="payments" onclick="navigate('payments',this)">
+        <a href="#" class="nav-item" data-page="loyers" onclick="navigate('loyers',this)">
           <span class="nav-icon">💶</span>
+          <span class="nav-label">Loyers</span>
+        </a>
+        <a href="#" class="nav-item" data-page="payments" onclick="navigate('payments',this)">
+          <span class="nav-icon">🏦</span>
           <span class="nav-label">Banques</span>
         </a>
 
@@ -506,7 +510,7 @@
               <span class="kpi-label">Baux actifs</span>
             </div>
           </div>
-          <div class="kpi-card" onclick="navigate('leases')" style="cursor:pointer" title="Voir mes baux">
+          <div class="kpi-card" onclick="navigate('loyers')" style="cursor:pointer" title="Suivi des loyers">
             <div class="kpi-icon purple">💶</div>
             <div class="kpi-body">
               <span class="kpi-value" id="kpi-loyers-val">—</span>
@@ -683,6 +687,23 @@
       </section>
 
       <!-- PAIEMENTS -->
+      <!-- PAGE LOYERS -->
+      <section id="page-loyers" class="page hidden">
+        <div class="page-header">
+          <div>
+            <h1>Loyers</h1>
+            <p class="page-sub" id="loyers-month-label">Suivi des encaissements</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="month" id="loyers-month-picker" onchange="loadLoyers()" style="padding:7px 10px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;background:var(--color-bg);color:var(--color-text)">
+            <div id="loyers-total" style="font-size:14px;font-weight:700;padding:8px 16px;background:var(--color-success-light);border:1px solid var(--color-success);border-radius:var(--radius-md);color:var(--color-success)"></div>
+          </div>
+        </div>
+        <div id="loyers-list" style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+          <div class="list-loading">Chargement…</div>
+        </div>
+      </section>
+
       <section id="page-payments" class="page hidden">
         <div class="page-header">
           <div><h1>Mes banques</h1><p class="page-sub">Accès rapide à vos espaces bancaires</p></div>
@@ -1129,6 +1150,7 @@ const PAGE_TITLES = {
   leases:     'Baux',
   tenants:    'Locataires',
   receipts:   'Quittances',
+  loyers:     'Loyers',
   payments:   'Mes banques',
   messages:   'Messages',
   documents:  'Documents',
@@ -1158,6 +1180,7 @@ function navigate(page, linkEl) {
   if (page === 'properties') loadProperties();
   if (page === 'tenants')    loadTenants();
   if (page === 'receipts')   loadReceipts();
+  if (page === 'loyers')    loadLoyers();
   if (page === 'payments')   loadBanks();
   if (page === 'documents')  loadDocuments();
   if (page === 'settings')   { loadSettings(); setTimeout(initSigCanvas, 100); loadBanks(); }
@@ -4344,6 +4367,163 @@ async function submitUploadDoc() {
 
   btn.disabled = false; btn.textContent = 'Enregistrer';
   _udocFile = null;
+}
+
+// ============================================================
+// LOYERS — Suivi mensuel des encaissements
+// ============================================================
+var _loyersStatus = {}; // { leaseId_YYYY-MM: 'paye' | 'attente' }
+
+async function loadLoyers() {
+  var el = document.getElementById('loyers-list');
+  if (!el) return;
+
+  // Mois courant par défaut
+  var picker = document.getElementById('loyers-month-picker');
+  if (!picker.value) {
+    var now = new Date();
+    picker.value = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  }
+  var month = picker.value;
+  var monthLabel = new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric'}).format(new Date(month+'-01T12:00:00'));
+  document.getElementById('loyers-month-label').textContent = 'Encaissements — ' + monthLabel;
+
+  // Charger baux actifs
+  if (!_allLeases.length) {
+    var lr = await db.from('leases').select('*');
+    _allLeases = lr.data || [];
+  }
+
+  // Charger statuts depuis Supabase settings
+  var res = await db.from('settings').select('value').eq('key','loyers_status').maybeSingle();
+  _loyersStatus = res.data ? JSON.parse(res.data.value) : {};
+
+  var leases = _allLeases.filter(function(l) {
+    var f = (l.data && l.data.formData) ? l.data.formData : {};
+    return f.tenantName && (parseFloat(f.rent||0) + parseFloat(f.charges||0)) > 0;
+  });
+
+  if (!leases.length) {
+    el.innerHTML = '<div style="padding:48px;text-align:center;color:var(--color-text-secondary)">Aucun bail actif avec loyer.</div>';
+    return;
+  }
+
+  // Calculer total payé
+  var totalAttendu = 0, totalPaye = 0;
+  leases.forEach(function(l) {
+    var f = l.data.formData;
+    var montant = parseFloat(f.rent||0) + parseFloat(f.charges||0);
+    totalAttendu += montant;
+    var key = l.id + '_' + month;
+    if (_loyersStatus[key] === 'paye') totalPaye += montant;
+  });
+
+  document.getElementById('loyers-total').textContent =
+    totalPaye.toLocaleString('fr-FR',{style:'currency',currency:'EUR'}) + ' / ' +
+    totalAttendu.toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
+
+  el.innerHTML = leases.map(function(l) {
+    var f = l.data.formData;
+    var montant = parseFloat(f.rent||0) + parseFloat(f.charges||0);
+    var key = l.id + '_' + month;
+    var paye = _loyersStatus[key] === 'paye';
+    var address = (f.propertyAddress || '').replace(/,.*$/,'').trim();
+
+    return '<div class="card" style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px">' +
+      '<div style="flex:1">' +
+        '<div style="font-size:14px;font-weight:700">' + (f.tenantName||'') + '</div>' +
+        '<div style="font-size:12px;color:var(--color-text-secondary);margin-top:2px">' + address + '</div>' +
+      '</div>' +
+      '<div style="text-align:right;margin-right:16px">' +
+        '<div style="font-size:16px;font-weight:800">' + montant.toLocaleString('fr-FR',{style:'currency',currency:'EUR'}) + '</div>' +
+        '<div style="font-size:11px;color:var(--color-text-secondary)">Loyer + charges</div>' +
+      '</div>' +
+      '<button onclick="toggleLoyer(&#39;' + l.id + '&#39;,&#39;' + month + '&#39;)" style="' +
+        'padding:8px 18px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;min-width:110px;' +
+        (paye ?
+          'background:var(--color-success);color:white;' :
+          'background:#fee2e2;color:#dc2626;') +
+      '">' + (paye ? '✅ Payé' : '⏳ En attente') + '</button>' +
+    '</div>';
+  }).join('');
+}
+
+async function toggleLoyer(leaseId, month) {
+  var key = leaseId + '_' + month;
+  var wasPaye = _loyersStatus[key] === 'paye';
+
+  if (!wasPaye) {
+    // Passer à Payé → demander si générer quittance
+    _loyersStatus[key] = 'paye';
+    await saveLoyersStatus();
+    loadLoyers();
+
+    // Demander génération quittance
+    if (confirm('Loyer marque comme paye ! Voulez-vous generer et envoyer la quittance au locataire ?')) {
+      await genererEtEnvoyerQuittance(leaseId, month);
+    }
+  } else {
+    // Repasser en attente
+    if (confirm('Remettre ce loyer en attente ?')) {
+      _loyersStatus[key] = 'attente';
+      await saveLoyersStatus();
+      loadLoyers();
+    }
+  }
+}
+
+async function saveLoyersStatus() {
+  await db.from('settings').upsert(
+    { key: 'loyers_status', value: JSON.stringify(_loyersStatus) },
+    { onConflict: 'key' }
+  );
+}
+
+async function genererEtEnvoyerQuittance(leaseId, month) {
+  var lease = _allLeases.find(function(l){ return l.id === leaseId; });
+  if (!lease) return;
+
+  // Récupérer profil bailleur + signature
+  var sigRes = await db.from('settings').select('value').eq('key','landlord_profile').maybeSingle();
+  var profile = sigRes.data ? JSON.parse(sigRes.data.value) : {};
+  var sigBailleur = profile.sig_bailleur || '';
+  var keyRes = await db.from('settings').select('value').eq('key','resend_api_key').maybeSingle();
+  var resendKey = keyRes.data ? keyRes.data.value : '';
+
+  var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+  var rent = parseFloat(f.rent||0);
+  var charges = parseFloat(f.charges||0);
+  var total = rent + charges;
+
+  // Label mois
+  var moisLabel = new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric'}).format(new Date(month+'-01T12:00:00'));
+  var subject = 'Quittance de loyer — ' + moisLabel;
+  var body = genQuittanceHTML(f, moisLabel, rent, charges, total, sigBailleur, profile);
+
+  // Enregistrer dans messages
+  await db.from('messages').insert({
+    lease_id: leaseId,
+    sender: 'Bailleur',
+    kind: 'Quittance',
+    subject: subject,
+    body: body
+  });
+
+  // Envoyer par email
+  if (f.tenantEmail && resendKey) {
+    var sendRes = await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0' },
+      body: JSON.stringify({ to: [f.tenantEmail], subject: subject, html: body, resend_key: resendKey })
+    });
+    if (sendRes.ok) {
+      showToast('Quittance envoyée à ' + f.tenantEmail + ' ✅', 'success');
+    } else {
+      showToast('Quittance enregistrée mais erreur email.', 'error');
+    }
+  } else {
+    showToast('Quittance enregistrée (email locataire manquant).', 'info');
+  }
 }
 
 // ============================================================
