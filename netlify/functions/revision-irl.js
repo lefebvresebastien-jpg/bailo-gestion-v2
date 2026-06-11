@@ -93,8 +93,9 @@ exports.handler = async (event) => {
       if (anniv < today) anniv.setFullYear(today.getFullYear() + 1);
       const joursAvant = Math.round((anniv - today) / 86400000);
 
-      // Déclencher à J-30 et J-7
-      if (joursAvant !== 30 && joursAvant !== 7) continue;
+      // Déclencher à J-30 et J-7 (ou force=1 pour test)
+      const forceTest = params.force === '1';
+      if (!forceTest && joursAvant !== 30 && joursAvant !== 7) continue;
 
       // IRL ancien (référence du bail)
       const irlAncienStr = f.irlReference || 'T4 2024 — indice 143,51';
