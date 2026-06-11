@@ -412,6 +412,7 @@
             '<li>Diagnostic de Performance Énergétique (DPE) — Classe ' + (f.dpeClass || '—') + '</li>' +
             '<li>Etat des risques et pollutions (ERP) - a la date de signature</li>' +
             '<li>Grille de vetuste (si applicable)</li>' +
+            '<li>Information sur le risque Radon — zones de vigilance selon arrête préfectoral</li>' +
             (f.leaseType && f.leaseType.includes('meuble') ? '<li>Inventaire et etat du mobilier (bail meuble)</li>' : '') +
             (f.guarantorName ? '<li>Acte de cautionnement solidaire — ' + f.guarantorName + '</li>' : '') +
             '<li>' + (f.annexesProvided || 'Documents remis selon liste convenue') + '</li>' +
@@ -484,6 +485,40 @@
       out += '<p style="margin-top:8px">L etat des risques et pollutions a été etabli conformement aux informations mises à disposition par les services de l Etat. Ce document est joint au present contrat.</p>';
       out += '<p style="margin-top:8px"><strong>Risques à vérifier selon la commune :</strong> inondation, mouvement de terrain, sismique, radon, pollution des sols, risques technologiques.</p>';
       out += '<p style="margin-top:8px;font-style:italic;color:#8a7060">Document ERP complet disponible sur georisques.gouv.fr</p>';
+      out += '</div></div>';
+
+      // ── ANNEXE 3bis : RADON ──
+      // Déterminer le département depuis l'adresse (code postal)
+      var cpMatch = (f.propertyAddress || '').match(/(\d{2})\d{3}/);
+      var dept = cpMatch ? cpMatch[0].substring(0,2) : null;
+      // Départements à potentiel radon élevé (catégorie 3 - IRSN 2018)
+      var radonHigh = ['08','09','15','19','23','43','48','63','87','63','12','32','65','64','31','09','67','68','57','54','88'];
+      // Catégorie 2 (potentiel significatif)
+      var radonMed = ['02','04','05','06','07','10','11','13','14','16','17','18','21','22','24','25','26','27','28','29','30','33','34','35','36','37','38','39','40','41','42','44','45','46','47','49','50','51','52','53','55','56','58','59','60','61','62','69','70','71','72','73','74','75','76','77','78','79','80','81','82','83','84','85','86','89','90','91','92','93','94','95'];
+      var radonLevel = dept ? (radonHigh.indexOf(dept) >= 0 ? 3 : (radonMed.indexOf(dept) >= 0 ? 2 : 1)) : 1;
+      var radonColor = radonLevel === 3 ? '#dc2626' : radonLevel === 2 ? '#d97706' : '#16a34a';
+      var radonBg = radonLevel === 3 ? '#fee2e2' : radonLevel === 2 ? '#fef3c7' : '#dcfce7';
+      var radonLabel = radonLevel === 3 ? 'Catégorie 3 — Potentiel radon élevé' : radonLevel === 2 ? 'Catégorie 2 — Potentiel radon significatif' : 'Catégorie 1 — Potentiel radon faible';
+
+      out += '<div style="margin-bottom:32px;padding:20px;background:#fdfaf6;border:1px solid #e0d5c8;border-radius:10px;page-break-inside:avoid">';
+      out += '<h3 style="font-size:.9rem;font-family:Inter,sans-serif;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;color:#e8793a">Annexe 3bis — Information sur le risque Radon</h3>';
+      out += '<p style="font-size:.78rem;color:#8a7060;margin-bottom:12px">Art. R.125-26 du Code de l&#39;environnement — Décret n° 2018-434 du 4 juin 2018</p>';
+      out += '<div style="background:' + radonBg + ';border:2px solid ' + radonColor + ';border-radius:8px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px">';
+      out += '<div style="font-size:2rem">☢️</div>';
+      out += '<div><p style="font-size:.9rem;font-weight:700;color:' + radonColor + '">' + radonLabel + '</p>';
+      out += '<p style="font-size:.8rem;color:#3a2010;margin-top:4px">Logement situé : <strong>' + (f.propertyAddress || '') + '</strong>' + (dept ? ' (Département ' + dept + ')' : '') + '</p></div></div>';
+      out += '<div style="font-size:.82rem;line-height:1.7;color:#3a2010">';
+      out += '<p><strong>Qu&#39;est-ce que le radon ?</strong> Le radon est un gaz radioactif naturel, inodore et incolore. Son accumulation dans les batiments est un risque pour la sante (2eme cause de cancer du poumon en France).</p>';
+      out += '<p style="margin-top:8px"><strong>Risque pour la sante :</strong> Le radon est classe cancerigene certain par l&#39;OMS. Il est la 2eme cause de cancer du poumon en France apres le tabac.</p>';
+      out += '<p style="margin-top:8px"><strong>Obligations legales :</strong> Depuis le decret du 4 juin 2018, il est fortement recommande de mesurer la concentration en radon dans les logements en zones 2 et 3.</p>';
+      out += '<p style="margin-top:8px"><strong>Recommandations :</strong></p>';
+      out += '<ul style="padding-left:16px;margin:4px 0">';
+      out += '<li>Aérer quotidiennement le logement (10 à 15 minutes)</li>';
+      out += '<li>Vérifier et améliorer la ventilation des sous-sols et vides sanitaires</li>';
+      out += '<li>En cas de doute, faire mesurer la concentration (kits disponibles en pharmacie)</li>';
+      out += '<li>Seuil de référence : 300 Bq/m³ (action corrective recommandée au-delà)</li>';
+      out += '</ul>';
+      out += '<p style="margin-top:8px;font-style:italic;font-size:.78rem;color:#8a7060">Plus d&#39;informations : irsn.fr — radon.fr — georisques.gouv.fr</p>';
       out += '</div></div>';
 
       // ── LIEN DPE si disponible ──
