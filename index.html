@@ -612,6 +612,7 @@
             </button>
             <button class="btn-secondary" onclick="ouvrirEDL(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">📋 EDL</button>
             <button class="btn-secondary" onclick="ouvrirEspaceLocataire(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">👤 Espace locataire</button>
+            <button class="btn-success" onclick="envoyerLienSignature(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">📧 Envoyer le lien</button>
             <button class="btn-primary" id="btn-voir-contrat" onclick="ouvrirContratV1(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
               📄 Voir le contrat
             </button>
@@ -658,6 +659,11 @@
             <div class="section-card">
               <div class="section-title">🧾 Quittances récentes</div>
               <div id="detail-quittances" class="item-list"><div class="list-loading">Chargement…</div></div>
+            </div>
+
+            <div class="section-card" id="detail-signatures-card">
+              <div class="section-title">✍️ Signatures du bail</div>
+              <div id="detail-signatures"></div>
             </div>
 
           </div>
@@ -1546,6 +1552,119 @@ function ouvrirEspaceLocataire(leaseId) {
   window.open('locataire.html?id=' + leaseId, '_blank');
 }
 
+// ============================================================
+// SIGNATURES — envoi lien + statut + alertes
+// ============================================================
+async function envoyerLienSignature(leaseId) {
+  const lease = _allLeases.find(l => l.id === leaseId);
+  if (!lease) return;
+  const f = lease.data?.formData || {};
+
+  if (!f.tenantEmail) { showToast('Email locataire manquant dans le bail.', 'error'); return; }
+
+  // Charger resend key + profil bailleur
+  const [keyRes, profRes] = await Promise.all([
+    db.from('settings').select('value').eq('key','resend_api_key').maybeSingle(),
+    db.from('settings').select('value').eq('key','landlord_profile').maybeSingle()
+  ]);
+  const resendKey = keyRes.data?.value || '';
+  const profile = profRes.data ? JSON.parse(profRes.data.value) : {};
+
+  const lienLocataire = 'https://v2.gestion.bailo.pro/locataire.html?id=' + leaseId;
+  const lienContrat = 'https://v2.gestion.bailo.pro/contrat.html?lease=' + leaseId + '&mode=locataire';
+
+  // Email locataire
+  const htmlLocataire = '<div style="font-family:sans-serif;max-width:560px;color:#1a1208">' +
+    '<div style="background:#1a1208;padding:16px 20px;border-radius:8px 8px 0 0"><span style="color:#e8793a;font-weight:700;font-size:16px">Bailo Gestion</span></div>' +
+    '<div style="background:#fff;padding:24px;border:1px solid #e0d5c8;border-radius:0 0 8px 8px">' +
+    '<h2 style="font-size:18px;margin-bottom:12px">Votre bail est prêt à signer</h2>' +
+    '<p style="margin-bottom:12px">Bonjour ' + (f.tenantName||'') + ',</p>' +
+    '<p style="margin-bottom:12px">Votre bailleur <strong>' + (profile.landlordName||f.landlordName||'') + '</strong> vous a préparé votre contrat de bail pour le logement situé au :</p>' +
+    '<p style="font-weight:700;margin-bottom:16px">' + (f.propertyAddress||'') + '</p>' +
+    '<p style="margin-bottom:16px">Veuillez lire attentivement le bail et les annexes, puis signer électroniquement.</p>' +
+    '<a href="' + lienContrat + '" style="display:inline-block;background:#2563eb;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;margin-bottom:12px">📋 Lire et signer mon bail</a><br>' +
+    '<a href="' + lienLocataire + '" style="display:inline-block;background:#f8f4ee;color:#1a1208;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:13px;border:1px solid #e0d5c8">👤 Accéder à mon espace locataire</a>' +
+    '<p style="font-size:12px;color:#6a5a40;margin-top:20px">Ce lien vous est personnel. Ne le partagez pas.</p>' +
+    '</div></div>';
+
+  await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0' },
+    body: JSON.stringify({ to: [f.tenantEmail], subject: 'Votre bail est prêt à signer — ' + (f.propertyAddress||''), html: htmlLocataire, resend_key: resendKey })
+  });
+
+  // Email garant si présent
+  if (f.guarantorEmail) {
+    const lienGarant = 'https://v2.gestion.bailo.pro/contrat.html?lease=' + leaseId + '&mode=garant';
+    const htmlGarant = '<div style="font-family:sans-serif;max-width:560px;color:#1a1208">' +
+      '<div style="background:#1a1208;padding:16px 20px;border-radius:8px 8px 0 0"><span style="color:#e8793a;font-weight:700;font-size:16px">Bailo Gestion</span></div>' +
+      '<div style="background:#fff;padding:24px;border:1px solid #e0d5c8;border-radius:0 0 8px 8px">' +
+      '<h2 style="font-size:18px;margin-bottom:12px">Acte de caution à signer</h2>' +
+      '<p style="margin-bottom:12px">Bonjour ' + (f.guarantorName||'') + ',</p>' +
+      '<p style="margin-bottom:12px">Vous êtes désigné(e) comme garant(e) pour le bail de <strong>' + (f.tenantName||'') + '</strong> au <strong>' + (f.propertyAddress||'') + '</strong>.</p>' +
+      '<p style="margin-bottom:16px">Veuillez lire et signer l&#39;acte de caution solidaire.</p>' +
+      '<a href="' + lienGarant + '" style="display:inline-block;background:#7c3aed;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Lire et signer l&#39;acte de caution</a>' +
+      '<p style="font-size:12px;color:#6a5a40;margin-top:20px">Ce lien vous est personnel. Ne le partagez pas.</p>' +
+      '</div></div>';
+
+    await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0' },
+      body: JSON.stringify({ to: [f.guarantorEmail], subject: 'Acte de caution à signer — ' + (f.tenantName||''), html: htmlGarant, resend_key: resendKey })
+    });
+    showToast('Lien envoyé au locataire et au garant ✅');
+  } else {
+    showToast('Lien envoyé à ' + f.tenantEmail + ' ✅');
+  }
+
+  // Marquer comme "lien envoyé" dans Supabase
+  const leaseData = lease.data || {};
+  leaseData.linkSentAt = new Date().toISOString();
+  await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
+  renderSignatureStatus(leaseId);
+}
+
+async function renderSignatureStatus(leaseId) {
+  const el = document.getElementById('detail-signatures');
+  if (!el) return;
+
+  const { data: lease } = await db.from('leases').select('data').eq('id', leaseId).single();
+  const f = lease?.data?.formData || {};
+  const sigB = f.sig_bailleur;
+  const sigL = f.sig_locataire;
+  const sigG = f.sig_garant;
+  const linkSent = lease?.data?.linkSentAt;
+  const signwellDocId = lease?.data?.signwellDocId;
+
+  const sigRow = (label, sig, email, icon) => {
+    if (sig) return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--color-border)">' +
+      '<div><span style="font-size:13px;font-weight:600">' + icon + ' ' + label + '</span>' +
+      (email ? '<div style="font-size:11px;color:var(--color-text-secondary)">' + email + '</div>' : '') + '</div>' +
+      '<div style="display:flex;align-items:center;gap:8px"><img src="' + sig + '" style="height:32px;border:1px solid var(--color-border);border-radius:4px;background:white;padding:2px">' +
+      '<span style="font-size:11px;font-weight:700;color:#16a34a;background:#dcfce7;padding:2px 8px;border-radius:4px">✅ Signé</span></div></div>';
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--color-border)">' +
+      '<div><span style="font-size:13px;font-weight:600">' + icon + ' ' + label + '</span>' +
+      (email ? '<div style="font-size:11px;color:var(--color-text-secondary)">' + email + '</div>' : '') + '</div>' +
+      '<span style="font-size:11px;font-weight:700;color:#d97706;background:#fef3c7;padding:2px 8px;border-radius:4px">⏳ En attente</span></div>';
+  };
+
+  let html = sigRow('Bailleur', sigB, f.landlordEmail, '🏠');
+  html += sigRow('Locataire', sigL, f.tenantEmail, '👤');
+  if (f.guarantorName) html += sigRow('Garant — ' + (f.guarantorName||''), sigG, f.guarantorEmail, '🤝');
+
+  // Statut global
+  const allSigned = sigB && sigL && (!f.guarantorName || sigG);
+  html += '<div style="margin-top:12px;padding:10px 14px;border-radius:8px;text-align:center;font-size:13px;font-weight:700;' +
+    (allSigned ? 'background:#dcfce7;color:#166534' : 'background:#f1ede7;color:#6a5a40') + '">' +
+    (allSigned ? '✅ Bail signé par toutes les parties' : '⏳ En attente de signature(s)') + '</div>';
+
+  if (linkSent) html += '<div style="font-size:11px;color:var(--color-text-secondary);margin-top:8px;text-align:center">Lien envoyé le ' + formatDate(linkSent) + '</div>';
+
+  if (signwellDocId) html += '<div style="font-size:11px;color:#2563eb;margin-top:4px;text-align:center">📧 Document SignWell n° ...' + signwellDocId.slice(-8) + '</div>';
+
+  el.innerHTML = html;
+}
+
 function ouvrirContratV1(leaseId) {
   if (!leaseId) { showToast('Bail introuvable.', 'error'); return; }
   window.open('/contrat.html?lease=' + leaseId, '_blank');
@@ -1624,6 +1743,56 @@ function renderLeaseDetail(lease) {
 
   // Quittances
   loadDetailQuittances(lease.id);
+
+  // Signatures
+  renderSignatureStatus(lease.id);
+
+  // Polling toutes les 30s pour détecter signature locataire
+  if (window._sigPollingInterval) clearInterval(window._sigPollingInterval);
+  window._sigPollingInterval = setInterval(async function() {
+    const currentPage = document.getElementById('page-lease-detail');
+    if (!currentPage || currentPage.classList.contains('hidden')) {
+      clearInterval(window._sigPollingInterval);
+      return;
+    }
+    const { data: leaseData } = await db.from('leases').select('data').eq('id', lease.id).single();
+    const f = leaseData?.data?.formData || {};
+    const prevSig = lease.data?.formData?.sig_locataire;
+    if (!prevSig && f.sig_locataire) {
+      // Nouvelle signature locataire détectée !
+      lease.data = leaseData.data;
+      renderSignatureStatus(lease.id);
+      // Alerte email au bailleur
+      alerterBailleurSignature(lease, f);
+    }
+  }, 30000);
+}
+
+async function alerterBailleurSignature(lease, f) {
+  const keyRes = await db.from('settings').select('value').eq('key','resend_api_key').maybeSingle();
+  const resendKey = keyRes.data?.value || '';
+  const profRes = await db.from('settings').select('value').eq('key','landlord_profile').maybeSingle();
+  const profile = profRes.data ? JSON.parse(profRes.data.value) : {};
+  const baillleurEmail = profile.landlordEmail || f.landlordEmail;
+  if (!baillleurEmail) return;
+
+  const html = '<div style="font-family:sans-serif;max-width:560px;color:#1a1208">' +
+    '<div style="background:#1a1208;padding:16px 20px;border-radius:8px 8px 0 0"><span style="color:#e8793a;font-weight:700;font-size:16px">Bailo Gestion</span></div>' +
+    '<div style="background:#fff;padding:24px;border:1px solid #e0d5c8;border-radius:0 0 8px 8px">' +
+    '<div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:14px 16px;margin-bottom:16px">' +
+    '<p style="font-size:16px;font-weight:700;color:#166534">✅ Bail signé par votre locataire !</p></div>' +
+    '<p style="margin-bottom:12px"><strong>' + (f.tenantName||'Votre locataire') + '</strong> vient de signer électroniquement le bail pour le logement :</p>' +
+    '<p style="font-weight:700;margin-bottom:16px">' + (f.propertyAddress||'') + '</p>' +
+    '<p style="margin-bottom:16px">Connectez-vous à votre espace Bailo Gestion pour consulter le bail signé.</p>' +
+    '<a href="https://v2.gestion.bailo.pro" style="display:inline-block;background:#2563eb;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Voir le bail signé</a>' +
+    '</div></div>';
+
+  await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0' },
+    body: JSON.stringify({ to: [baillleurEmail], subject: (f.tenantName||'Votre locataire') + ' a signé le bail — ' + (f.propertyAddress||''), html, resend_key: resendKey })
+  });
+  showToast('✅ ' + (f.tenantName||'Locataire') + ' a signé ! Email de confirmation envoyé.', 'success');
 }
 
 async function loadDetailQuittances(leaseId) {
