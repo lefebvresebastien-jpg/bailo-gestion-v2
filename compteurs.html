@@ -570,28 +570,13 @@ function renderRegu() {
   </div>`;
 
   // Consommation générale
+  // Compteur général : affichage info seulement (pas de régularisation individuelle)
   if (dernier.general != null && premier.general != null) {
     const consoReelle = dernier.general - premier.general;
-    const montantReel = consoReelle * prixM3;
-    const lease = _leases.find(l => l.id === _currentLeaseId);
-    const charges = parseFloat(lease?.data?.formData?.charges || 0);
-    const provisionsVersees = charges * moisRegu;
-    const diff = provisionsVersees - montantReel;
-
-    html += `<div class="regu-card ${diff > 0 ? 'regu-credit' : diff < 0 ? 'regu-debit' : 'regu-neutral'}">
-      <div style="font-size:14px;font-weight:700;margin-bottom:12px">💧 Eau — Compteur général</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
-        <div><div style="font-size:11px;color:var(--ink-3);text-transform:uppercase">Consommation réelle</div><div style="font-size:18px;font-weight:800">${consoReelle.toFixed(3)} m³</div></div>
-        <div><div style="font-size:11px;color:var(--ink-3);text-transform:uppercase">Montant réel</div><div style="font-size:18px;font-weight:800">${montantReel.toFixed(2)} €</div></div>
-        <div><div style="font-size:11px;color:var(--ink-3);text-transform:uppercase">Provisions versées</div><div style="font-size:18px;font-weight:800">${provisionsVersees.toFixed(2)} €</div></div>
-      </div>
-      <div style="font-size:16px;font-weight:700;padding:12px;background:rgba(255,255,255,.6);border-radius:8px;text-align:center">
-        ${diff > 0
-          ? `✅ Remboursement bailleur → locataire : <span style="color:var(--success)">${diff.toFixed(2)} €</span>`
-          : diff < 0
-          ? `⚠️ Complément locataire → bailleur : <span style="color:var(--danger)">${Math.abs(diff).toFixed(2)} €</span>`
-          : '✅ Parfaitement équilibré'}
-      </div>
+    html += `<div style="background:#f1ede7;border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:12px;font-size:13px">
+      <span style="font-weight:700">💧 Compteur général</span>
+      <span style="color:var(--ink-3);margin-left:8px">(référence bailleur — hors régularisation individuelle)</span>
+      <div style="margin-top:6px">Consommation totale sur la période : <strong>${consoReelle.toFixed(3)} m³</strong></div>
     </div>`;
   }
 
