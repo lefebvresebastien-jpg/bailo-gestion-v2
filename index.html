@@ -1650,10 +1650,11 @@ async function renderSignatureStatus(leaseId) {
 
   let html = sigRow('Bailleur', sigB, f.landlordEmail, '🏠');
   html += sigRow('Locataire', sigL, f.tenantEmail, '👤');
-  if (f.guarantorName) html += sigRow('Garant — ' + (f.guarantorName||''), sigG, f.guarantorEmail, '🤝');
+  if (hasGarant) html += sigRow('Garant — ' + (f.guarantorName||''), sigG, f.guarantorEmail, '🤝');
 
   // Statut global
-  const allSigned = sigB && sigL && (!f.guarantorName || sigG);
+  const hasGarant = !!(f.guarantorName && f.guarantorName.trim() && f.guarantorName !== 'Aucun garant renseigné');
+  const allSigned = sigB && sigL && (!hasGarant || sigG);
   html += '<div style="margin-top:12px;padding:10px 14px;border-radius:8px;text-align:center;font-size:13px;font-weight:700;' +
     (allSigned ? 'background:#dcfce7;color:#166534' : 'background:#f1ede7;color:#6a5a40') + '">' +
     (allSigned ? '✅ Bail signé par toutes les parties' : '⏳ En attente de signature(s)') + '</div>';
@@ -1757,18 +1758,22 @@ function renderLeaseDetail(lease) {
     }
     const { data: leaseData } = await db.from('leases').select('data').eq('id', lease.id).single();
     const f = leaseData?.data?.formData || {};
-    const prevSig = lease.data?.formData?.sig_locataire;
-    if (!prevSig && f.sig_locataire) {
-      // Nouvelle signature locataire détectée !
+    const prevSigL = lease.data?.formData?.sig_locataire;
+    const prevSigG = lease.data?.formData?.sig_garant;
+    if (!prevSigL && f.sig_locataire) {
       lease.data = leaseData.data;
       renderSignatureStatus(lease.id);
-      // Alerte email au bailleur
-      alerterBailleurSignature(lease, f);
+      alerterBailleurSignature(lease, f, 'locataire');
+    } else if (!prevSigG && f.sig_garant) {
+      lease.data = leaseData.data;
+      renderSignatureStatus(lease.id);
+      alerterBailleurSignature(lease, f, 'garant');
     }
   }, 30000);
 }
 
-async function alerterBailleurSignature(lease, f) {
+async function alerterBailleurSignature(lease, f, qui) {
+  qui = qui || 'locataire';
   const keyRes = await db.from('settings').select('value').eq('key','resend_api_key').maybeSingle();
   const resendKey = keyRes.data?.value || '';
   const profRes = await db.from('settings').select('value').eq('key','landlord_profile').maybeSingle();
@@ -1780,8 +1785,8 @@ async function alerterBailleurSignature(lease, f) {
     '<div style="background:#1a1208;padding:16px 20px;border-radius:8px 8px 0 0"><span style="color:#e8793a;font-weight:700;font-size:16px">Bailo Gestion</span></div>' +
     '<div style="background:#fff;padding:24px;border:1px solid #e0d5c8;border-radius:0 0 8px 8px">' +
     '<div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:14px 16px;margin-bottom:16px">' +
-    '<p style="font-size:16px;font-weight:700;color:#166534">✅ Bail signé par votre locataire !</p></div>' +
-    '<p style="margin-bottom:12px"><strong>' + (f.tenantName||'Votre locataire') + '</strong> vient de signer électroniquement le bail pour le logement :</p>' +
+    '<p style="font-size:16px;font-weight:700;color:#166534">' + (qui==='garant' ? '🤝 Acte de caution signé par le garant !' : '✅ Bail signé par votre locataire !') + '</p></div>' +
+    '<p style="margin-bottom:12px"><strong>' + (qui==='garant' ? (f.guarantorName||'Le garant') : (f.tenantName||'Votre locataire')) + '</strong> vient de signer ' + (qui==='garant' ? 'l&#39;acte de caution' : 'électroniquement le bail') + ' pour le logement :</p>' +
     '<p style="font-weight:700;margin-bottom:16px">' + (f.propertyAddress||'') + '</p>' +
     '<p style="margin-bottom:16px">Connectez-vous à votre espace Bailo Gestion pour consulter le bail signé.</p>' +
     '<a href="https://v2.gestion.bailo.pro" style="display:inline-block;background:#2563eb;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Voir le bail signé</a>' +
@@ -1790,9 +1795,9 @@ async function alerterBailleurSignature(lease, f) {
   await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0' },
-    body: JSON.stringify({ to: [baillleurEmail], subject: (f.tenantName||'Votre locataire') + ' a signé le bail — ' + (f.propertyAddress||''), html, resend_key: resendKey })
+    body: JSON.stringify({ to: [baillleurEmail], subject: (qui==='garant' ? (f.guarantorName||'Le garant') + ' a signé l\'acte de caution' : (f.tenantName||'Votre locataire') + ' a signé le bail') + ' — ' + (f.propertyAddress||''), html, resend_key: resendKey })
   });
-  showToast('✅ ' + (f.tenantName||'Locataire') + ' a signé ! Email de confirmation envoyé.', 'success');
+  showToast('✅ ' + (qui==='garant' ? (f.guarantorName||'Garant') : (f.tenantName||'Locataire')) + ' a signé ! Email envoyé.', 'success');
 }
 
 async function loadDetailQuittances(leaseId) {
