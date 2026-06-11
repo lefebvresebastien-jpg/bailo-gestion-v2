@@ -755,15 +755,32 @@
           if (swBtn) { swBtn.textContent = 'Signer electroniquement (eIDAS)'; swBtn.style.background = '#16a34a'; }
         }
 
-        // Masquer toute la section signatures vides du template
-        document.querySelectorAll('.signatures').forEach(function(el) {
-          el.style.display = 'none';
-        });
-        // Masquer aussi les signature-line partout
-        document.querySelectorAll('.signature-line').forEach(function(el) {
-          var parent = el.closest('div');
-          if (parent) parent.style.display = 'none';
-        });
+        // Masquer les cases de signature vides après rendu du template
+        function maskSigBlocks() {
+          // Masquer la section signatures du template (les 2 canvas bailleur/locataire du contrat)
+          document.querySelectorAll('.signature-section').forEach(function(el) {
+            el.style.display = 'none';
+          });
+          // Masquer les sections avec signature-line (lignes pointillées)
+          document.querySelectorAll('.signature-line').forEach(function(el) {
+            var block = el.closest('.signatures') || el.closest('section') || el.parentElement;
+            if (block) block.style.display = 'none';
+          });
+          // Masquer les divs contenant "Signature Bailleur" et "Signature Locataire" en texte
+          document.querySelectorAll('h4, h5, strong, label').forEach(function(el) {
+            if (el.textContent.trim() === 'Signature Bailleur' || el.textContent.trim() === 'Signature Locataire' || el.textContent.trim() === 'Le Bailleur' || el.textContent.trim() === 'Le Locataire' || el.textContent.trim() === 'Le Garant') {
+              var container = el.closest('div');
+              if (container && container.querySelector('canvas, .signature-line, .sig-canvas')) {
+                container.style.display = 'none';
+              }
+            }
+          });
+          // Cibler directement la grille de signatures
+          document.querySelectorAll('.signature-grid').forEach(function(el) {
+            el.style.display = 'none';
+          });
+        }
+        setTimeout(maskSigBlocks, 300);
 
         // Ajouter les checkboxes annexes avant le bloc signwell
         var annexesCheck = document.createElement('div');
