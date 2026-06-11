@@ -538,6 +538,9 @@
             </div>
           </div>
         </div>
+        <!-- Bloc alertes -->
+        <div id="dashboard-alertes" style="margin-bottom:16px"></div>
+
         <div class="dashboard-sections">
           <div class="section-card">
             <div class="section-title">Baux récents</div>
@@ -1298,7 +1301,151 @@ async function loadDashboard() {
       weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
     }).format(new Date());
   }
-  await Promise.all([loadKPIs(), loadRecentLeases(), loadRecentActivity()]);
+  await Promise.all([loadKPIs(), loadRecentLeases(), loadRecentActivity(), loadAlertes()]);
+}
+
+// ============================================================
+// ALERTES DASHBOARD
+// ============================================================
+async function loadAlertes() {
+  const el = document.getElementById('dashboard-alertes');
+  if (!el) return;
+
+  if (!_allLeases.length) {
+    const { data } = await db.from('leases').select('id, data');
+    _allLeases = data || [];
+  }
+
+  const today = new Date();
+  const alertes = [];
+
+  _allLeases.forEach(function(lease) {
+    const f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+    if (!f.tenantName) return;
+    const nom = f.tenantName;
+    const adresse = (f.propertyAddress || '').split(',')[0];
+
+    // ── 1. Révision IRL (date anniversaire du bail)
+    if (f.effectiveDate) {
+      const effet = new Date(f.effectiveDate);
+      const anniv = new Date(today.getFullYear(), effet.getMonth(), effet.getDate());
+      if (anniv < today) anniv.setFullYear(today.getFullYear() + 1);
+      const joursAvant = Math.round((anniv - today) / 86400000);
+      if (joursAvant <= 60) {
+        alertes.push({
+          type: joursAvant <= 14 ? 'danger' : 'warning',
+          icon: '📊',
+          titre: 'Révision IRL — ' + nom,
+          detail: 'Date anniversaire du bail dans ' + joursAvant + ' jour(s) (' + anniv.toLocaleDateString('fr-FR') + '). Pensez à calculer la révision de loyer.',
+          action: function() { openLeaseDetail(lease.id); },
+          leaseId: lease.id
+        });
+      }
+    }
+
+    // ── 2. Fin de bail imminente
+    if (f.effectiveDate && f.duration) {
+      const effet = new Date(f.effectiveDate);
+      const dureeAns = f.duration.includes('3 ans') ? 3 : f.duration.includes('2 ans') ? 2 : 1;
+      const finBail = new Date(effet);
+      finBail.setFullYear(finBail.getFullYear() + dureeAns);
+      const joursFinBail = Math.round((finBail - today) / 86400000);
+      if (joursFinBail > 0 && joursFinBail <= 90) {
+        alertes.push({
+          type: joursFinBail <= 30 ? 'danger' : 'warning',
+          icon: '📅',
+          titre: 'Fin de bail — ' + nom,
+          detail: 'Le bail se termine dans ' + joursFinBail + ' jour(s) le ' + finBail.toLocaleDateString('fr-FR') + '. Délai de préavis : ' + (f.noticePeriodLandlord || '6 mois') + '.',
+          action: function() { openLeaseDetail(lease.id); },
+          leaseId: lease.id
+        });
+      }
+    }
+
+    // ── 3. Assurance habitation (relance annuelle)
+    if (f.effectiveDate) {
+      const effet = new Date(f.effectiveDate);
+      // Date anniversaire assurance = même mois/jour que entrée
+      const annivAssur = new Date(today.getFullYear(), effet.getMonth(), effet.getDate());
+      if (annivAssur < today) annivAssur.setFullYear(today.getFullYear() + 1);
+      const joursAssur = Math.round((annivAssur - today) / 86400000);
+      if (joursAssur <= 30) {
+        alertes.push({
+          type: 'info',
+          icon: '🛡',
+          titre: 'Attestation assurance — ' + nom,
+          detail: 'Demandez le renouvellement de l&#39;attestation assurance habitation (echeance dans ' + joursAssur + ' jour(s)).',
+          action: function() { navigate('messages'); },
+          leaseId: lease.id
+        });
+      }
+    }
+
+    // ── 4. Dépôt de garantie à restituer
+    if (lease.data && lease.data.exitDate) {
+      const sortie = new Date(lease.data.exitDate);
+      const delaiRestitution = new Date(sortie);
+      delaiRestitution.setMonth(delaiRestitution.getMonth() + (lease.data.edlExit ? 2 : 1));
+      const joursRestitution = Math.round((delaiRestitution - today) / 86400000);
+      if (joursRestitution >= 0 && joursRestitution <= 30) {
+        alertes.push({
+          type: joursRestitution <= 7 ? 'danger' : 'warning',
+          icon: '💰',
+          titre: 'Dépôt de garantie — ' + nom,
+          detail: 'Délai de restitution du dépôt de garantie (' + (f.deposit ? formatCurrency(f.deposit) : '—') + ') : ' + joursRestitution + ' jour(s) restant(s).',
+          action: function() { openLeaseDetail(lease.id); },
+          leaseId: lease.id
+        });
+      }
+    }
+
+    // ── 5. DPE classe F ou G
+    if (f.dpeClass === 'F' || f.dpeClass === 'G') {
+      alertes.push({
+        type: 'warning',
+        icon: '⚡',
+        titre: 'DPE ' + f.dpeClass + ' — ' + adresse,
+        detail: 'Logement classé ' + f.dpeClass + '. Obligation de rénovation énergétique en cours (loi Climat). Gel des loyers applicable.',
+        action: function() { openLeaseDetail(lease.id); },
+        leaseId: lease.id
+      });
+    }
+
+    // ── 6. Loyer impayé (statut loyers)
+    const now = new Date();
+    const monthKey = lease.id + '_' + now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+    // Vérifié via _loyersStatus (chargé dans page Loyers)
+  });
+
+  if (!alertes.length) {
+    el.innerHTML = '';
+    return;
+  }
+
+  const colors = {
+    danger:  { bg: '#fee2e2', border: '#fca5a5', color: '#991b1b', dot: '#dc2626' },
+    warning: { bg: '#fef3c7', border: '#fcd34d', color: '#92400e', dot: '#d97706' },
+    info:    { bg: '#dbeafe', border: '#93c5fd', color: '#1e40af', dot: '#2563eb' },
+  };
+
+  el.innerHTML =
+    '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px 18px;margin-bottom:4px">' +
+    '<div style="font-size:13px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:6px">' +
+    '<span style="width:8px;height:8px;background:#dc2626;border-radius:50%;display:inline-block"></span>' +
+    alertes.length + ' alerte' + (alertes.length > 1 ? 's' : '') + ' en attente' +
+    '</div>' +
+    alertes.map(function(a) {
+      const c = colors[a.type] || colors.info;
+      return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:' + c.bg + ';border:1px solid ' + c.border + ';border-radius:8px;margin-bottom:8px;cursor:pointer" onclick="openLeaseDetail(&#39;' + a.leaseId + '&#39;)">' +
+        '<span style="font-size:18px;flex-shrink:0">' + a.icon + '</span>' +
+        '<div style="flex:1">' +
+        '<div style="font-size:13px;font-weight:700;color:' + c.color + '">' + a.titre + '</div>' +
+        '<div style="font-size:12px;color:' + c.color + ';margin-top:3px;opacity:.85">' + a.detail + '</div>' +
+        '</div>' +
+        '<span style="font-size:11px;color:' + c.color + ';opacity:.6;flex-shrink:0">→</span>' +
+        '</div>';
+    }).join('') +
+    '</div>';
 }
 
 async function loadKPIs() {
