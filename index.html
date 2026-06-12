@@ -3881,7 +3881,8 @@ const WIZARD_STEPS_CONTENT = {
         ) +
         '</select></div>' +
         '<div class="form-group"><label>' + (isCommercialOrPro ? 'Reference ILC/ILAT' : 'Reference IRL') + '</label>' +
-        '<input type="text" id="w-irlReference" value="' + (d.irlReference || (isCommercial ? 'ILC T4 2024 - indice 130,12' : isPro ? 'ILAT T4 2024 - indice 138,50' : 'IRL T4 2025 - indice 145,73')) + '" /></div>' +
+        '<input type="text" id="w-irlReference" value="' + (d.irlReference || '') + '" placeholder="Auto-calcule depuis la date de prise d\'effet" /></div>' +
+        '<div id="w-irl-hint" style="font-size:11px;color:var(--color-text-secondary);margin-top:4px"></div>' +
       '</div>' +
       '<div class="form-group"><label>Mode de paiement</label>' +
       '<input type="text" id="w-paymentTerms" value="' + (d.paymentTerms||'Par virement bancaire') + '" /></div>' +
@@ -4092,6 +4093,34 @@ function renderWizardStep() {
   setTimeout(function() {
     var dpeZone = document.getElementById('w-dpe-zone');
     if (dpeZone) dpeZone.onclick = function() { document.getElementById('w-dpe-input').click(); };
+
+    // Auto-remplir IRL/ILC depuis date de prise d'effet (step 3)
+    if (_wizardStep === 3) {
+      var irlInput = document.getElementById('w-irlReference');
+      var hintEl = document.getElementById('w-irl-hint');
+      if (irlInput && !irlInput.value && _wizardData.effectiveDate) {
+        var isComm = (_wizardData.leaseType||'').toLowerCase().includes('commercial');
+        var isPro2 = (_wizardData.leaseType||'').toLowerCase().includes('professionnel');
+        var autoIrl = getIRLForDate(_wizardData.effectiveDate);
+        var ref = null;
+        var label = '';
+        if (isComm) {
+          ref = ILC_DATA[ILC_DATA.length - 1];
+          label = 'ILC';
+        } else {
+          ref = autoIrl;
+          label = 'IRL';
+        }
+        if (ref) {
+          irlInput.value = label + ' ' + ref.trimestre + ' - indice ' + ref.indice.toFixed(2).replace('.', ',');
+          if (hintEl) hintEl.textContent = 'Auto-calcule depuis la date de prise d\'effet (' + new Date(_wizardData.effectiveDate).toLocaleDateString('fr-FR') + ')';
+        }
+      } else if (irlInput && irlInput.value && hintEl) {
+        hintEl.textContent = '';
+      }
+      // Marquer comme manuel si l'utilisateur modifie
+      if (irlInput) irlInput.addEventListener('input', function() { this.dataset.manual = '1'; if (hintEl) hintEl.textContent = ''; }, { once: true });
+    }
   }, 50);
 
   // Buttons
@@ -4113,6 +4142,19 @@ function collectStepData() {
       _wizardData.signatureCity = g('w-signatureCity');
       _wizardData.signatureDate = g('w-signatureDate');
       _wizardData.effectiveDate = g('w-effectiveDate');
+      // Auto-remplir IRL depuis date de prise d'effet si pas encore renseigné manuellement
+      var irlInput = document.getElementById('w-irlReference');
+      if (irlInput && !irlInput.dataset.manual) {
+        var autoIrl = getIRLForDate(_wizardData.effectiveDate);
+        if (autoIrl) {
+          var isComm = (_wizardData.leaseType||'').toLowerCase().includes('commercial');
+          var ilcAuto = isComm ? ILC_DATA[ILC_DATA.length-1] : null;
+          var ref = isComm ? ilcAuto : autoIrl;
+          if (ref) {
+            _wizardData.irlReference = (isComm ? 'ILC ' : 'IRL ') + ref.trimestre + ' - indice ' + ref.indice.toFixed(2).replace('.', ',');
+          }
+        }
+      }
       break;
     case 2:
       _wizardData.propertyAddress = g('w-propertyAddress');
