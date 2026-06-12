@@ -990,6 +990,32 @@
       }
 
       // Afficher
+      // Avertissement bail commercial
+      const leaseType = f.leaseType || '';
+      const isCommercial = leaseType.includes('commercial') || leaseType.includes('Commercial') || leaseType.includes('professionnel');
+      if (isCommercial && !modeLocataire && !modeGarant) {
+        var warn = document.createElement('div');
+        warn.style.cssText = 'max-width:800px;margin:16px auto;padding:0 16px';
+        warn.innerHTML =
+          '<div style="background:#fef3c7;border:2px solid #f59e0b;border-radius:12px;padding:20px 24px;font-family:Inter,sans-serif">' +
+          '<div style="display:flex;align-items:flex-start;gap:14px">' +
+          '<span style="font-size:32px;flex-shrink:0">⚠️</span>' +
+          '<div>' +
+          '<div style="font-size:15px;font-weight:700;color:#92400e;margin-bottom:8px">Bail commercial — Document indicatif uniquement</div>' +
+          '<p style="font-size:13px;color:#78350f;line-height:1.6;margin-bottom:10px">Ce document a ete genere sur la base d&#39;un modele residentiel et <strong>n&#39;est pas adapte</strong> a un bail commercial soumis au Code de Commerce (Art. L145-1 et suivants).</p>' +
+          '<p style="font-size:13px;color:#78350f;line-height:1.6;margin-bottom:10px">Un bail commercial doit prevoir : destination des locaux, droit au renouvellement, indemnite d&#39;eviction, conditions de cession et clauses specifiques a l&#39;activite.</p>' +
+          '<div style="background:#fff;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;font-size:13px;color:#92400e">' +
+          '<strong>Nous vous recommandons vivement</strong> de faire rédiger ce bail par un <strong>notaire ou un avocat spécialisé</strong> en droit commercial avant toute signature.' +
+          '</div>' +
+          '</div></div>' +
+          '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">' +
+          '<button onclick="this.parentElement.parentElement.style.display=&#39;none&#39;" style="padding:8px 16px;border:1.5px solid #f59e0b;border-radius:8px;font-size:12px;cursor:pointer;background:white;color:#92400e">J&#39;ai compris — continuer quand meme</button>' +
+          '</div>' +
+          '</div>';
+        var pw = document.getElementById('page-wrapper');
+        if (pw) pw.insertBefore(warn, pw.firstChild);
+      }
+
       document.getElementById('loading').style.display = 'none';
       document.getElementById('page-wrapper').style.display = 'block';
     }
