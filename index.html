@@ -1939,6 +1939,7 @@ function renderLeaseDetail(lease) {
   document.getElementById('detail-status-badge').innerHTML = leaseStatusBadge(leaseStatus(lease));
 
   // Alerte bail commercial
+  const isCommercialLease = (f.leaseType||'').toLowerCase().includes('commercial') || (f.leaseType||'').toLowerCase().includes('professionnel');
   var warnZone = document.getElementById('commercial-lease-warn');
   if (!warnZone) {
     warnZone = document.createElement('div');
