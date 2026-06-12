@@ -851,7 +851,160 @@ function renderChart() {
 // EXPORT RÉGULARISATION
 // ============================================================
 function exportRegu() {
-  showToast('Fonctionnalité export PDF — bientôt disponible.');
+  const releves = getRelevesFiltered();
+  const sc = _compteurs[_currentLeaseId]?.sousCompteurs || [];
+  const prixM3 = _config.prixM3 || 4.2;
+  const moisRegu = parseInt(document.getElementById('sel-regu')?.value || 12);
+  if (releves.length < 2) { showToast('Pas assez de relevés.'); return; }
+
+  const dateRef = new Date();
+  dateRef.setMonth(dateRef.getMonth() - moisRegu);
+  const relevesPeriode = releves.filter(r => new Date(r.date) >= dateRef);
+  if (relevesPeriode.length < 2) { showToast('Pas assez de relevés sur la période.'); return; }
+
+  const premier = relevesPeriode[0];
+  const dernier = relevesPeriode[relevesPeriode.length - 1];
+
+  // Récupérer infos bail
+  const lease = _allLeases?.find(l => l.id === _currentLeaseId);
+  const f = lease?.data?.formData || {};
+  const today = new Intl.DateTimeFormat('fr-FR', {day:'numeric',month:'long',year:'numeric'}).format(new Date());
+  const periodeLabel = formatDate(premier.date) + ' au ' + formatDate(dernier.date);
+
+  // Calculer données sous-compteurs
+  let totalConso = 0, totalMontantReel = 0, totalMontantTheo = 0;
+  const lignesSC = [];
+
+  sc.forEach(function(s, i) {
+    const idxD = premier.sousCompteurs?.[i]?.index;
+    const idxF = dernier.sousCompteurs?.[i]?.index;
+    if (idxD == null || idxF == null) return;
+
+    const conso = idxF - idxD;
+    const consoTheo = (s.occupants || 1) * (_config.consoRef || 54) / 12 * moisRegu;
+    const montantReel = conso * prixM3;
+    const montantTheo = consoTheo * prixM3;
+    const diff = montantTheo - montantReel;
+
+    totalConso += conso;
+    totalMontantReel += montantReel;
+    totalMontantTheo += montantTheo;
+
+    lignesSC.push({
+      label: s.label || ('Sous-compteur ' + (i+1)),
+      lot: s.lot || '—',
+      indexDebut: idxD,
+      indexFin: idxF,
+      conso, consoTheo, montantReel, montantTheo, diff
+    });
+  });
+
+  const totalDiff = totalMontantTheo - totalMontantReel;
+
+  // Générer HTML du PDF
+  const lignesHTML = lignesSC.map(function(l) {
+    const couleur = l.diff > 0 ? '#16a34a' : l.diff < 0 ? '#dc2626' : '#6b7280';
+    const statut = l.diff > 0
+      ? '✅ Remboursement : ' + l.diff.toFixed(2) + ' €'
+      : l.diff < 0
+      ? '⚠️ Complément dû : ' + Math.abs(l.diff).toFixed(2) + ' €'
+      : '✅ Équilibré';
+    return '<tr style="border-bottom:1px solid #e5e7eb">' +
+      '<td style="padding:10px 8px;font-weight:600">' + escH(l.label) + '<br><span style="font-size:11px;color:#6b7280;font-weight:400">Lot : ' + escH(l.lot) + '</span></td>' +
+      '<td style="padding:10px 8px;text-align:center">' + l.indexDebut.toFixed(3) + '</td>' +
+      '<td style="padding:10px 8px;text-align:center">' + l.indexFin.toFixed(3) + '</td>' +
+      '<td style="padding:10px 8px;text-align:center;font-weight:700">' + l.conso.toFixed(3) + ' m³</td>' +
+      '<td style="padding:10px 8px;text-align:center">' + l.montantReel.toFixed(2) + ' €</td>' +
+      '<td style="padding:10px 8px;text-align:center">' + l.montantTheo.toFixed(2) + ' €</td>' +
+      '<td style="padding:10px 8px;text-align:center;font-weight:700;color:' + couleur + '">' + statut + '</td>' +
+      '</tr>';
+  }).join('');
+
+  const totalCouleur = totalDiff > 0 ? '#16a34a' : totalDiff < 0 ? '#dc2626' : '#6b7280';
+  const totalStatut = totalDiff > 0
+    ? '✅ Total à rembourser : ' + totalDiff.toFixed(2) + ' €'
+    : totalDiff < 0
+    ? '⚠️ Total complément dû : ' + Math.abs(totalDiff).toFixed(2) + ' €'
+    : '✅ Régularisation équilibrée';
+
+  // Compteur général
+  let consoGeneraleHTML = '';
+  if (dernier.general != null && premier.general != null) {
+    const consoG = dernier.general - premier.general;
+    consoGeneraleHTML = '<div style="background:#f3f4f6;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px">' +
+      '<strong>💧 Compteur général (référence bailleur) :</strong> ' + consoG.toFixed(3) + ' m³ sur la période' +
+      '</div>';
+  }
+
+  const html = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">' +
+    '<title>Régularisation eau — ' + (f.tenantName||'') + '</title>' +
+    '<style>body{font-family:Georgia,serif;max-width:800px;margin:0 auto;padding:32px;color:#1a1208;font-size:13px}' +
+    'h1{font-size:20px;margin-bottom:4px}h2{font-size:15px;border-bottom:2px solid #1a1208;padding-bottom:6px;margin-top:24px}' +
+    'table{width:100%;border-collapse:collapse;margin-top:12px}' +
+    'th{background:#1a1208;color:white;padding:10px 8px;text-align:center;font-size:12px}' +
+    'tr:nth-child(even){background:#f9f7f4}' +
+    '.total-row{background:#1a1208!important;color:white;font-weight:700}' +
+    '.badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:700}' +
+    '@media print{body{padding:16px}.no-print{display:none}}' +
+    '</style></head><body>' +
+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px">' +
+    '<div><h1>Decompte de regularisation des charges d&#39;eau</h1>' +
+    '<p style="color:#6b7280;margin:4px 0">Document établi le ' + today + '</p></div>' +
+    '<div style="text-align:right;font-size:12px;color:#6b7280"><strong>Bailo Gestion</strong><br>Gestion locative</div>' +
+    '</div>' +
+
+    '<div style="background:#f3f4f6;border-radius:8px;padding:16px;margin-bottom:24px;display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+    '<div><div style="font-size:11px;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Logement</div>' +
+    '<div style="font-weight:700">' + escH(f.propertyAddress||'—') + '</div></div>' +
+    '<div><div style="font-size:11px;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Locataire</div>' +
+    '<div style="font-weight:700">' + escH(f.tenantName||'—') + '</div></div>' +
+    '<div><div style="font-size:11px;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Période</div>' +
+    '<div style="font-weight:700">' + periodeLabel + '</div></div>' +
+    '<div><div style="font-size:11px;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Prix du m³</div>' +
+    '<div style="font-weight:700">' + prixM3.toFixed(2) + ' €/m³</div></div>' +
+    '</div>' +
+
+    '<h2>Detail par sous-compteur</h2>' +
+    consoGeneraleHTML +
+    '<table><thead><tr>' +
+    '<th style="text-align:left">Lot / Sous-compteur</th>' +
+    '<th>Index début</th><th>Index fin</th><th>Conso réelle</th>' +
+    '<th>Montant réel</th><th>Provision versée</th><th>Résultat</th>' +
+    '</tr></thead><tbody>' +
+    lignesHTML +
+    '<tr class="total-row"><td style="padding:12px 8px">TOTAL</td>' +
+    '<td></td><td></td>' +
+    '<td style="padding:12px 8px;text-align:center">' + totalConso.toFixed(3) + ' m³</td>' +
+    '<td style="padding:12px 8px;text-align:center">' + totalMontantReel.toFixed(2) + ' €</td>' +
+    '<td style="padding:12px 8px;text-align:center">' + totalMontantTheo.toFixed(2) + ' €</td>' +
+    '<td style="padding:12px 8px;text-align:center;color:' + (totalDiff >= 0 ? '#86efac' : '#fca5a5') + '">' + totalStatut + '</td>' +
+    '</tr></tbody></table>' +
+
+    '<div style="margin-top:24px;padding:16px;background:' + (totalDiff >= 0 ? '#dcfce7' : '#fee2e2') + ';border-radius:10px;text-align:center">' +
+    '<div style="font-size:16px;font-weight:700;color:' + totalCouleur + '">' + totalStatut + '</div>' +
+    (totalDiff > 0
+      ? '<div style="font-size:12px;color:#166534;margin-top:4px">Montant à restituer au locataire dans un délai raisonnable</div>'
+      : totalDiff < 0
+      ? '<div style="font-size:12px;color:#991b1b;margin-top:4px">Montant à régler par le locataire</div>'
+      : '') +
+    '</div>' +
+
+    '<div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;text-align:center">' +
+    'Document généré par Bailo Gestion · ' + today + ' · À conserver avec le dossier locatif' +
+    '</div>' +
+
+    '<div class="no-print" style="margin-top:24px;text-align:center;display:flex;gap:12px;justify-content:center">' +
+    '<button onclick="window.print()" style="padding:12px 24px;background:#1a1208;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🖨 Imprimer / Sauvegarder PDF</button>' +
+    '<button onclick="window.close()" style="padding:12px 24px;background:white;color:#1a1208;border:1.5px solid #d4c8b8;border-radius:8px;font-size:14px;cursor:pointer">Fermer</button>' +
+    '</div>' +
+    '</body></html>';
+
+  // Ouvrir dans nouvelle fenêtre
+  const win = window.open('', '_blank', 'width=900,height=700');
+  win.document.write(html);
+  win.document.close();
+  win.focus();
 }
 
 // ============================================================
