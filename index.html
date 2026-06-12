@@ -3896,7 +3896,7 @@ function validateStep() {
       }
       break;
     case 3:
-      if (!document.getElementById('w-tenantName')?.value.trim()) {
+      if (!_wizardData.tenantName && !document.getElementById('w-tenantName')?.value.trim()) {
         showToast("Le nom du locataire est obligatoire.", 'error'); return false;
       }
       break;
