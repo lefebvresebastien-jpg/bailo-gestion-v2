@@ -3833,16 +3833,21 @@ function collectStepData() {
       // dpeFileUrl déjà stocké par handleDpeFile
       break;
     case 3:
-      _wizardData.tenantName = g('w-tenantName');
-      _wizardData.tenantDOB = g('w-tenantDOB');
-      _wizardData.tenantEmail = g('w-tenantEmail');
-      _wizardData.tenantPhone = g('w-tenantPhone');
-      _wizardData.tenantAddress = g('w-tenantAddress');
-      _wizardData.tenantIdDoc = g('w-tenantIdDoc');
-      _wizardData.guarantorName = g('w-guarantorName');
-      _wizardData.guarantorType = g('w-guarantorType');
-      _wizardData.guarantorAddress = g('w-guarantorAddress');
-      _wizardData.guarantorIncome = g('w-guarantorIncome');
+      // Si champ visible (nouveau locataire), on écrase. Sinon on garde _wizardData (locataire sélectionné via carte)
+      if (document.getElementById('w-tenantName')) {
+        _wizardData.tenantName = g('w-tenantName') || _wizardData.tenantName;
+        _wizardData.tenantDOB = g('w-tenantDOB') || _wizardData.tenantDOB;
+        _wizardData.tenantEmail = g('w-tenantEmail') || _wizardData.tenantEmail;
+        _wizardData.tenantPhone = g('w-tenantPhone') || _wizardData.tenantPhone;
+        _wizardData.tenantAddress = g('w-tenantAddress') || _wizardData.tenantAddress;
+        _wizardData.tenantIdDoc = g('w-tenantIdDoc') || _wizardData.tenantIdDoc;
+      }
+      if (document.getElementById('w-guarantorName')) {
+        _wizardData.guarantorName = g('w-guarantorName');
+        _wizardData.guarantorType = g('w-guarantorType');
+        _wizardData.guarantorAddress = g('w-guarantorAddress');
+        _wizardData.guarantorIncome = g('w-guarantorIncome');
+      }
       _wizardData.tenantLegalForm = g('w-tenantLegalForm');
       _wizardData.tenantSiret = g('w-tenantSiret');
       _wizardData.tenantRCS = g('w-tenantRCS');
