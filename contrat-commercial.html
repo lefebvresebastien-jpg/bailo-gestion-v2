@@ -396,6 +396,68 @@
     canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
   }
 
+  function checkCommAnnexes() {
+    var ids = ['chk-contrat', 'chk-erp-comm', 'chk-dest'];
+    var all = ids.every(function(id) { var el = document.getElementById(id); return el && el.checked; });
+    var btn = document.getElementById('btn-signer-comm');
+    if (btn) { btn.disabled = !all; btn.style.opacity = all ? '1' : '0.4'; btn.style.pointerEvents = all ? 'auto' : 'none'; }
+    var warn = document.getElementById('comm-warn');
+    if (warn) warn.style.display = all ? 'none' : 'block';
+  }
+
+  async function savePreneurMobile(leaseId) {
+    var canvas = document.getElementById('sig-preneur-mobile');
+    if (!canvas) return;
+    var blank = document.createElement('canvas'); blank.width = canvas.width; blank.height = canvas.height;
+    if (canvas.toDataURL() === blank.toDataURL()) { alert('Veuillez signer avant de valider.'); return; }
+    var sig = canvas.toDataURL('image/png');
+    var resp = await db.from('leases').select('data').eq('id', leaseId).single();
+    if (!resp.data) { alert('Bail introuvable.'); return; }
+    var ld = resp.data.data || {}; var fd = ld.formData || {};
+    fd.sig_locataire = sig; fd.sig_locataire_at = new Date().toISOString();
+    ld.formData = fd;
+    var res = await db.from('leases').update({ data: ld }).eq('id', leaseId);
+    if (res.error) { alert('Erreur : ' + res.error.message); return; }
+    var btn = document.getElementById('btn-signer-comm');
+    if (btn) { btn.textContent = 'Bail signe !'; btn.style.background = '#16a34a'; btn.disabled = true; btn.style.pointerEvents = 'none'; }
+    var ok = document.createElement('div');
+    ok.style.cssText = 'background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:16px;text-align:center;font-size:14px;font-weight:700;color:#166534;margin-top:12px';
+    ok.innerHTML = '&#10003; Bail signe le ' + new Intl.DateTimeFormat('fr-FR').format(new Date());
+    canvas.style.display = 'none';
+    canvas.parentElement.appendChild(ok);
+  }
+
+  function checkCommAnnexes() {
+    var ids = ['chk-contrat', 'chk-erp-comm', 'chk-dest'];
+    var all = ids.every(function(id) { var el = document.getElementById(id); return el && el.checked; });
+    var btn = document.getElementById('btn-signer-comm');
+    if (btn) { btn.disabled = !all; btn.style.opacity = all ? '1' : '0.4'; btn.style.pointerEvents = all ? 'auto' : 'none'; }
+    var warn = document.getElementById('comm-warn');
+    if (warn) warn.style.display = all ? 'none' : 'block';
+  }
+
+  async function savePreneurMobile(leaseId) {
+    var canvas = document.getElementById('sig-preneur-mobile');
+    if (!canvas) return;
+    var blank = document.createElement('canvas'); blank.width = canvas.width; blank.height = canvas.height;
+    if (canvas.toDataURL() === blank.toDataURL()) { alert('Veuillez signer avant de valider.'); return; }
+    var sig = canvas.toDataURL('image/png');
+    var resp = await db.from('leases').select('data').eq('id', leaseId).single();
+    if (!resp.data) { alert('Bail introuvable.'); return; }
+    var ld = resp.data.data || {}; var fd = ld.formData || {};
+    fd.sig_locataire = sig; fd.sig_locataire_at = new Date().toISOString();
+    ld.formData = fd;
+    var res = await db.from('leases').update({ data: ld }).eq('id', leaseId);
+    if (res.error) { alert('Erreur : ' + res.error.message); return; }
+    var btn = document.getElementById('btn-signer-comm');
+    if (btn) { btn.textContent = 'Bail signe !'; btn.style.background = '#16a34a'; btn.disabled = true; btn.style.pointerEvents = 'none'; }
+    var ok = document.createElement('div');
+    ok.style.cssText = 'background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:16px;text-align:center;font-size:14px;font-weight:700;color:#166534;margin-top:12px';
+    ok.innerHTML = '&#10003; Bail signe le ' + new Intl.DateTimeFormat('fr-FR').format(new Date());
+    canvas.style.display = 'none';
+    canvas.parentElement.appendChild(ok);
+  }
+
   async function saveBailleurSig() {
     var canvas = document.getElementById('sig-bailleur');
     if (!canvas) return;
@@ -446,53 +508,12 @@
     alert('Signature preneur enregistree.');
   }
 
-  async function saveBailleurSig() {
-    var canvas = document.getElementById('sig-bailleur');
-    if (!canvas) return;
-    var blank = document.createElement('canvas'); blank.width = canvas.width; blank.height = canvas.height;
-    if (canvas.toDataURL() === blank.toDataURL()) { alert('Veuillez signer avant de valider.'); return; }
-    var sig = canvas.toDataURL('image/png');
-    var leaseId = new URLSearchParams(window.location.search).get('lease');
-    var resp = await db.from('leases').select('data').eq('id', leaseId).single();
-    if (!resp.data) { alert('Bail introuvable.'); return; }
-    var ld = resp.data.data || {}; var fd = ld.formData || {};
-    fd.sig_bailleur = sig; fd.sig_bailleur_at = new Date().toISOString();
-    ld.formData = fd;
-    var res = await db.from('leases').update({ data: ld }).eq('id', leaseId);
-    if (res.error) { alert('Erreur : ' + res.error.message); return; }
-    var box = canvas.closest('.sig-box');
-    if (box) box.innerHTML = '<span class="sig-label">Le Bailleur</span>' +
-      '<div style="border:1px solid #d4c8b8;border-radius:8px;overflow:hidden;background:white;padding:4px">' +
-      '<img src="' + sig + '" style="width:100%;max-height:120px;object-fit:contain;display:block"></div>' +
-      '<div style="font-size:12px;color:#16a34a;font-weight:600;font-family:Inter,sans-serif;margin-top:4px">&#10003; Signe le ' + new Intl.DateTimeFormat('fr-FR').format(new Date()) + '</div>';
-    alert('Signature bailleur enregistree.');
-  }
 
-  async function savePreneurSig() {
-    var canvas = document.getElementById('sig-preneur');
-    if (!canvas) return;
-    var blank = document.createElement('canvas'); blank.width = canvas.width; blank.height = canvas.height;
-    if (canvas.toDataURL() === blank.toDataURL()) { alert('Veuillez signer avant de valider.'); return; }
-    var sig = canvas.toDataURL('image/png');
-    var leaseId = new URLSearchParams(window.location.search).get('lease');
-    var resp = await db.from('leases').select('data').eq('id', leaseId).single();
-    if (!resp.data) { alert('Bail introuvable.'); return; }
-    var ld = resp.data.data || {}; var fd = ld.formData || {};
-    fd.sig_locataire = sig; fd.sig_locataire_at = new Date().toISOString();
-    ld.formData = fd;
-    var res = await db.from('leases').update({ data: ld }).eq('id', leaseId);
-    if (res.error) { alert('Erreur : ' + res.error.message); return; }
-    var box = canvas.closest('.sig-box');
-    if (box) box.innerHTML = '<span class="sig-label">Le Preneur</span>' +
-      '<div style="border:1px solid #d4c8b8;border-radius:8px;overflow:hidden;background:white;padding:4px">' +
-      '<img src="' + sig + '" style="width:100%;max-height:120px;object-fit:contain;display:block"></div>' +
-      '<div style="font-size:12px;color:#16a34a;font-weight:600;font-family:Inter,sans-serif;margin-top:4px">&#10003; Signe le ' + new Intl.DateTimeFormat('fr-FR').format(new Date()) + '</div>';
-    alert('Signature preneur enregistree.');
-  }
 
   async function init() {
     var params = new URLSearchParams(window.location.search);
     var leaseId = params.get('lease');
+    var modePreneur = params.get('mode') === 'preneur';
     if (!leaseId) {
       document.getElementById('loading').innerHTML = '<p style="color:#c0392b;font-family:Inter,sans-serif">Parametre lease manquant.</p>';
       return;
@@ -518,6 +539,76 @@
     document.getElementById('page-wrapper').style.display = '';
 
     ['sig-bailleur', 'sig-preneur', 'sig-caution'].forEach(initSignatureCanvas);
+
+    if (modePreneur) {
+      var btnPrint = document.querySelector('.btn-print');
+      if (btnPrint) btnPrint.style.display = 'none';
+      var alreadySigned = !!f.sig_locataire;
+      var pw = document.getElementById('page-wrapper');
+      var bloc = document.createElement('div');
+      bloc.style.cssText = 'max-width:860px;margin:24px auto;padding:0 24px 48px;font-family:Inter,sans-serif';
+      var checkboxesHtml = '<label style="display:flex;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-contrat" onchange="checkCommAnnexes()"' + (alreadySigned ? ' checked' : '') + '> J&#39;ai lu et compris le contrat de bail commercial</label>' +
+        '<label style="display:flex;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-erp-comm" onchange="checkCommAnnexes()"' + (alreadySigned ? ' checked' : '') + '> Etat des risques et pollutions fourni</label>' +
+        '<label style="display:flex;gap:10px;margin-bottom:16px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-dest" onchange="checkCommAnnexes()"' + (alreadySigned ? ' checked' : '') + '> J&#39;accepte la destination contractuelle et les conditions financieres</label>';
+      var sigHtml = alreadySigned ?
+        '<div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:14px;text-align:center;font-size:14px;font-weight:700;color:#166534">&#10003; Vous avez deja signe ce bail</div>' :
+        '<canvas id="sig-preneur-mobile" style="width:100%;height:140px;border:2px solid #d4c8b8;border-radius:8px;touch-action:none;background:white;cursor:crosshair;display:block" width="700" height="140"></canvas>' +
+        '<div style="display:flex;gap:8px;margin-top:10px">' +
+        '<button id="btn-effacer-comm" style="padding:8px 16px;border:1.5px solid #d4c8b8;border-radius:7px;font-size:13px;cursor:pointer;background:white">Effacer</button>' +
+        '<button id="btn-signer-comm" style="flex:1;padding:10px 20px;background:#e8793a;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;opacity:.4;pointer-events:none" disabled>Signer le bail</button>' +
+        '</div>';
+      bloc.innerHTML = '<div style="background:#fffdf8;border:2px solid #d4c8b8;border-radius:12px;padding:24px">' +
+        '<div style="font-size:15px;font-weight:700;margin-bottom:16px;color:#1a1208;border-bottom:1px solid #e0d5c8;padding-bottom:10px">Signature du Preneur</div>' +
+        '<p style="font-size:13px;color:#3a2a18;margin-bottom:16px">Confirmez avoir lu et accepte les documents suivants :</p>' +
+        checkboxesHtml +
+        '<div id="comm-warn" style="display:none;padding:8px 12px;background:#fee2e2;border:1px solid #fca5a5;border-radius:7px;font-size:12px;color:#dc2626;margin-bottom:12px">Cochez toutes les cases pour activer la signature.</div>' +
+        sigHtml + '</div>';
+      if (pw) pw.appendChild(bloc);
+      setTimeout(function() {
+        var btnEff = document.getElementById('btn-effacer-comm');
+        if (btnEff) btnEff.addEventListener('click', function() {
+          var c = document.getElementById('sig-preneur-mobile');
+          if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height);
+        });
+        var btnSign = document.getElementById('btn-signer-comm');
+        if (btnSign) btnSign.addEventListener('click', function() { savePreneurMobile(leaseId); });
+        var cm = document.getElementById('sig-preneur-mobile');
+        if (!cm) return;
+        var ctx = cm.getContext('2d'); var drawing = false;
+        function pos(e) { var r = cm.getBoundingClientRect(); var src = e.touches ? e.touches[0] : e; return { x: (src.clientX - r.left) * (700 / r.width), y: (src.clientY - r.top) * (140 / r.height) }; }
+        cm.addEventListener('mousedown', function(e) { drawing = true; var p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); });
+        cm.addEventListener('mousemove', function(e) { if (!drawing) return; var p = pos(e); ctx.lineTo(p.x, p.y); ctx.strokeStyle = '#1a1208'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke(); });
+        cm.addEventListener('mouseup', function() { drawing = false; });
+        cm.addEventListener('mouseleave', function() { drawing = false; });
+        cm.addEventListener('touchstart', function(e) { e.preventDefault(); drawing = true; var p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }, { passive: false });
+        cm.addEventListener('touchmove', function(e) { e.preventDefault(); if (!drawing) return; var p = pos(e); ctx.lineTo(p.x, p.y); ctx.strokeStyle = '#1a1208'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke(); }, { passive: false });
+        cm.addEventListener('touchend', function() { drawing = false; });
+        checkCommAnnexes();
+      }, 300);
+    }
+
+    if (!modePreneur) {
+      var lienPreneur = window.location.origin + '/contrat-commercial.html?lease=' + leaseId + '&mode=preneur';
+      var pw2 = document.getElementById('page-wrapper');
+      var sendBloc = document.createElement('div');
+      sendBloc.style.cssText = 'max-width:860px;margin:0 auto 16px;padding:0 24px;font-family:Inter,sans-serif';
+      sendBloc.innerHTML = '<div style="background:#f0f7ff;border:1.5px solid #b0d0f0;border-radius:12px;padding:16px 20px">' +
+        '<div style="font-size:13px;font-weight:700;color:#1a3a6a;margin-bottom:8px">Envoyer au Preneur pour signature</div>' +
+        '<div style="display:flex;gap:8px;align-items:center">' +
+        '<input id="lien-preneur" readonly style="flex:1;padding:7px 10px;border:1px solid #b0d0f0;border-radius:7px;font-size:11px;font-family:monospace;background:#fff;color:#1a3a6a">' +
+        '<button id="btn-copier-lien" style="padding:7px 14px;background:#1a3a6a;color:white;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">Copier</button>' +
+        '</div></div>';
+      if (pw2) pw2.insertBefore(sendBloc, pw2.firstChild);
+      setTimeout(function() {
+        var inp = document.getElementById('lien-preneur');
+        if (inp) inp.value = lienPreneur;
+        var btnCopy = document.getElementById('btn-copier-lien');
+        if (btnCopy) btnCopy.addEventListener('click', function() {
+          var i = document.getElementById('lien-preneur'); if (i) { i.select(); document.execCommand('copy'); }
+          btnCopy.textContent = 'Copie !'; setTimeout(function() { btnCopy.textContent = 'Copier'; }, 2000);
+        });
+      }, 100);
+    }
   }
 
   init();
