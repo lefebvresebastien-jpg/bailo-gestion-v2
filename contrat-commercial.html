@@ -405,7 +405,7 @@
     var today = new Intl.DateTimeFormat('fr-FR').format(new Date());
     var entryDate = f.effectiveDate ? formatDate(f.effectiveDate) : today;
     var surface = f.surface || 'NC';
-    var dest = f.commercialDestination || f.leaseType || 'Usage commercial';
+    var dest = f.commercialDestination || (f.leaseType && !f.leaseType.includes('3-6-9') && !f.leaseType.includes('commercial') ? f.leaseType : 'Usage commercial');
     var optHtml = ['Bon','Moyen','Mauvais','N/A'].map(function(o){return '<option>'+o+'</option>';}).join('');
     var zones = [
       { nom: 'Entree et acces', items: ['Porte entree (etat, fermeture, vitrage)', 'Sol (revetement, etat)', 'Murs et plafond', 'Eclairage'] },
