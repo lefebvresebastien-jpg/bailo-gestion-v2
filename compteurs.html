@@ -850,7 +850,7 @@ function renderChart() {
 // ============================================================
 // EXPORT RÉGULARISATION
 // ============================================================
-function exportRegu() {
+async function exportRegu() {
   const releves = getRelevesFiltered();
   const sc = _compteurs[_currentLeaseId]?.sousCompteurs || [];
   const prixM3 = _config.prixM3 || 4.2;
@@ -866,8 +866,12 @@ function exportRegu() {
   const dernier = relevesPeriode[relevesPeriode.length - 1];
 
   // Récupérer infos bail
-  const lease = _allLeases?.find(l => l.id === _currentLeaseId);
-  const f = lease?.data?.formData || {};
+  // Charger le bail depuis Supabase (compteurs.html est une page autonome)
+  let f = {};
+  try {
+    const { data: leaseData } = await db.from('leases').select('data').eq('id', _currentLeaseId).single();
+    f = leaseData?.data?.formData || {};
+  } catch(e) {}
   const today = new Intl.DateTimeFormat('fr-FR', {day:'numeric',month:'long',year:'numeric'}).format(new Date());
   const periodeLabel = formatDate(premier.date) + ' au ' + formatDate(dernier.date);
 
