@@ -649,6 +649,9 @@
             <button class="btn-secondary" onclick="ouvrirEDL(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">📋 EDL</button>
             <button class="btn-secondary" onclick="ouvrirEspaceLocataire(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">👤 Espace locataire</button>
             <button class="btn-success" onclick="envoyerLienSignature(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">📧 Envoyer le lien</button>
+            <button class="btn-secondary" onclick="ouvrirPanneauIRL(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px;background:var(--color-warning-light);border-color:var(--color-warning);color:#92400e">
+              📈 Révision IRL
+            </button>
             <button class="btn-primary" id="btn-voir-contrat" onclick="ouvrirContratV1(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
               📄 Voir le contrat
             </button>
@@ -1254,6 +1257,305 @@ function toggleSidebar() {
 
 // ---- Toast ----
 let _toastTimer = null;
+
+// ══════════════════════════════════════════════════════════════
+//  MODULE IRL — Révision loyer (art. 17-1 loi 89-462)
+// ══════════════════════════════════════════════════════════════
+
+var IRL_DATA = [
+  { trimestre: 'T1 2017', indice: 125.90 }, { trimestre: 'T2 2017', indice: 126.19 },
+  { trimestre: 'T3 2017', indice: 126.47 }, { trimestre: 'T4 2017', indice: 126.82 },
+  { trimestre: 'T1 2018', indice: 127.22 }, { trimestre: 'T2 2018', indice: 127.77 },
+  { trimestre: 'T3 2018', indice: 128.45 }, { trimestre: 'T4 2018', indice: 128.94 },
+  { trimestre: 'T1 2019', indice: 129.38 }, { trimestre: 'T2 2019', indice: 129.72 },
+  { trimestre: 'T3 2019', indice: 130.26 }, { trimestre: 'T4 2019', indice: 130.52 },
+  { trimestre: 'T1 2020', indice: 130.57 }, { trimestre: 'T2 2020', indice: 130.57 },
+  { trimestre: 'T3 2020', indice: 130.59 }, { trimestre: 'T4 2020', indice: 130.52 },
+  { trimestre: 'T1 2021', indice: 130.69 }, { trimestre: 'T2 2021', indice: 131.12 },
+  { trimestre: 'T3 2021', indice: 131.67 }, { trimestre: 'T4 2021', indice: 132.63 },
+  { trimestre: 'T1 2022', indice: 133.93 }, { trimestre: 'T2 2022', indice: 135.84 },
+  { trimestre: 'T3 2022', indice: 137.26 }, { trimestre: 'T4 2022', indice: 138.14 },
+  { trimestre: 'T1 2023', indice: 139.57 }, { trimestre: 'T2 2023', indice: 141.42 },
+  { trimestre: 'T3 2023', indice: 142.37 }, { trimestre: 'T4 2023', indice: 142.76 },
+  { trimestre: 'T1 2024', indice: 143.46 }, { trimestre: 'T2 2024', indice: 143.97 },
+  { trimestre: 'T3 2024', indice: 143.69 }, { trimestre: 'T4 2024', indice: 143.81 },
+  { trimestre: 'T1 2025', indice: 144.56 }, { trimestre: 'T2 2025', indice: 145.18 },
+  { trimestre: 'T3 2025', indice: 145.51 }, { trimestre: 'T4 2025', indice: 145.73 }
+];
+
+// ILC (baux commerciaux)
+var ILC_DATA = [
+  { trimestre: 'T1 2022', indice: 118.17 }, { trimestre: 'T2 2022', indice: 120.69 },
+  { trimestre: 'T3 2022', indice: 122.51 }, { trimestre: 'T4 2022', indice: 123.09 },
+  { trimestre: 'T1 2023', indice: 124.28 }, { trimestre: 'T2 2023', indice: 126.37 },
+  { trimestre: 'T3 2023', indice: 127.12 }, { trimestre: 'T4 2023', indice: 127.42 },
+  { trimestre: 'T1 2024', indice: 127.96 }, { trimestre: 'T2 2024', indice: 128.78 },
+  { trimestre: 'T3 2024', indice: 129.17 }, { trimestre: 'T4 2024', indice: 129.52 },
+  { trimestre: 'T1 2025', indice: 130.12 }, { trimestre: 'T2 2025', indice: 130.89 },
+  { trimestre: 'T3 2025', indice: 131.45 }, { trimestre: 'T4 2025', indice: 131.78 }
+];
+
+function getIRL(trimestre) {
+  var found = IRL_DATA.find(function(d) { return d.trimestre === trimestre; });
+  return found ? found.indice : null;
+}
+function getILC(trimestre) {
+  var found = ILC_DATA.find(function(d) { return d.trimestre === trimestre; });
+  return found ? found.indice : null;
+}
+function getLatestIRL() { return IRL_DATA[IRL_DATA.length - 1]; }
+function getLatestILC() { return ILC_DATA[ILC_DATA.length - 1]; }
+
+function parseIRLReference(ref) {
+  if (!ref) return null;
+  var m = ref.match(/T([1-4])\s+(\d{4})/);
+  if (!m) return null;
+  var trimestre = 'T' + m[1] + ' ' + m[2];
+  var mIndice = ref.match(/(\d+)[,.](\d+)/);
+  var indice = mIndice ? parseFloat(mIndice[1] + '.' + mIndice[2]) : null;
+  return { trimestre: trimestre, indice: indice };
+}
+
+function getIRLForDate(dateStr) {
+  if (!dateStr) return getLatestIRL();
+  var d = new Date(dateStr);
+  var year = d.getFullYear();
+  var month = d.getMonth() + 1;
+  var q = Math.ceil(month / 3);
+  var refQ = q - 1;
+  var refYear = year;
+  if (refQ < 1) { refQ = 4; refYear = year - 1; }
+  var trimestre = 'T' + refQ + ' ' + refYear;
+  var found = IRL_DATA.find(function(d) { return d.trimestre === trimestre; });
+  return found || getLatestIRL();
+}
+
+function dateToTrimestre(dateStr) {
+  var d = new Date(dateStr);
+  var month = d.getMonth() + 1;
+  var year = d.getFullYear();
+  var q = Math.ceil(month / 3);
+  return 'T' + q + ' ' + year;
+}
+
+function checkAnniversaireBail(effectiveDate) {
+  if (!effectiveDate) return null;
+  var dateEffet = new Date(effectiveDate);
+  var today = new Date();
+  var anniversaire = new Date(today.getFullYear(), dateEffet.getMonth(), dateEffet.getDate());
+  if (anniversaire < today) anniversaire.setFullYear(today.getFullYear() + 1);
+  var joursRestants = Math.ceil((anniversaire - today) / (1000 * 60 * 60 * 24));
+  return { date: anniversaire, joursRestants: joursRestants };
+}
+
+function calculerRevision(loyerActuel, indiceRef, indiceNouvel) {
+  if (!loyerActuel || !indiceRef || !indiceNouvel) return null;
+  var ratio = indiceNouvel / indiceRef;
+  var nouveauLoyer = Math.round(loyerActuel * ratio * 100) / 100;
+  var augmentation = Math.round((nouveauLoyer - loyerActuel) * 100) / 100;
+  var pct = Math.round((ratio - 1) * 10000) / 100;
+  return { nouveauLoyer: nouveauLoyer, augmentation: augmentation, pourcentage: pct, ratio: ratio };
+}
+
+async function ouvrirPanneauIRL(leaseId) {
+  var lease = _allLeases.find(function(l) { return l.id === leaseId; });
+  if (!lease) return;
+  var f = (lease.data && lease.data.formData) ? lease.data.formData : lease.data || {};
+  var isCommercial = (f.leaseType || '').toLowerCase().includes('commercial');
+  var loyerActuel = parseFloat(f.rent) || 0;
+
+  // Determiner indice de reference
+  var refParsed = parseIRLReference(f.irlReference);
+  var DATA = isCommercial ? ILC_DATA : IRL_DATA;
+  var getLatest = isCommercial ? getLatestILC : getLatestIRL;
+  var getIndice = isCommercial ? getILC : getIRL;
+  var indiceRef = refParsed ? (refParsed.indice || getIndice(refParsed.trimestre)) : null;
+  if (!indiceRef && f.effectiveDate) {
+    var autoIRL = getIRLForDate(f.effectiveDate);
+    indiceRef = autoIRL ? autoIRL.indice : null;
+    if (!refParsed && autoIRL) refParsed = { trimestre: autoIRL.trimestre, indice: autoIRL.indice };
+  }
+  var latest = getLatest();
+  var anniversaire = checkAnniversaireBail(f.effectiveDate);
+  var trimestreNouvel = latest.trimestre;
+  var indiceNouvel = latest.indice;
+  var revision = calculerRevision(loyerActuel, indiceRef, indiceNouvel);
+
+  var augColor = revision && revision.augmentation >= 0 ? '#c84b00' : '#166534';
+  var annivHtml = anniversaire ? (
+    '<div style="background:#fff8ed;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#92400e">' +
+    'Date anniversaire : <strong>' + anniversaire.date.toLocaleDateString('fr-FR') + '</strong>' +
+    ' &mdash; dans <strong>' + anniversaire.joursRestants + ' jours</strong>' +
+    (anniversaire.joursRestants <= 30 ? ' <span style="color:#c84b00;font-weight:700">&#9888; Revision imminente !</span>' : '') +
+    '</div>'
+  ) : '';
+
+  var html = '<div id="irl-overlay" style="position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px">' +
+    '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:16px;padding:28px;width:480px;max-width:100%;box-shadow:0 8px 32px rgba(0,0,0,.2)">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">' +
+    '<h3 style="font-size:1.1rem;font-weight:700;color:var(--color-text)">📈 Révision ' + (isCommercial ? 'ILC' : 'IRL') + ' du loyer</h3>' +
+    '<button onclick="document.getElementById(\'irl-overlay\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--color-text-secondary)">×</button>' +
+    '</div>' +
+    '<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:20px">' + (isCommercial ? 'Art. L.145-38 Code de commerce' : 'Art. 17-1 loi 89-462 du 6 juillet 1989') + '</p>' +
+    annivHtml +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">' +
+    '<div style="background:var(--color-bg-secondary);border-radius:10px;padding:14px">' +
+    '<div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">Loyer actuel</div>' +
+    '<div style="font-size:1.5rem;font-weight:700;color:var(--color-text)">' + loyerActuel.toFixed(2) + ' €</div>' +
+    '</div>' +
+    '<div style="background:var(--color-warning-light);border:1px solid var(--color-warning);border-radius:10px;padding:14px">' +
+    '<div style="font-size:11px;color:#92400e;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">Nouveau loyer</div>' +
+    '<div style="font-size:1.5rem;font-weight:700;color:#c84b00">' + (revision ? revision.nouveauLoyer.toFixed(2) : '—') + ' €</div>' +
+    '</div>' +
+    '</div>' +
+    '<div style="background:var(--color-bg-secondary);border-radius:10px;padding:14px;margin-bottom:16px">' +
+    '<div style="display:flex;justify-content:space-between;margin-bottom:8px">' +
+    '<span style="font-size:13px;color:var(--color-text-secondary)">' + (isCommercial ? 'ILC' : 'IRL') + ' de référence (' + (refParsed ? refParsed.trimestre : '—') + ')</span>' +
+    '<strong style="font-size:13px">' + (indiceRef ? indiceRef.toFixed(2) : '—') + '</strong>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;margin-bottom:8px">' +
+    '<span style="font-size:13px;color:var(--color-text-secondary)">Nouvel ' + (isCommercial ? 'ILC' : 'IRL') + ' (' + trimestreNouvel + ')</span>' +
+    '<strong style="font-size:13px">' + indiceNouvel.toFixed(2) + '</strong>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--color-border)">' +
+    '<span style="font-size:13px;color:var(--color-text-secondary)">Variation</span>' +
+    '<strong style="font-size:13px;color:' + augColor + '">' +
+    (revision ? (revision.augmentation >= 0 ? '+' : '') + revision.augmentation.toFixed(2) + ' \u20ac (' + revision.pourcentage.toFixed(2) + '%)' : '—') +
+    '</strong>' +
+    '</div>' +
+    '</div>' +
+    '<div style="background:var(--color-bg-secondary);border-radius:10px;padding:14px;margin-bottom:20px">' +
+    '<div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Ajuster manuellement</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+    '<div>' +
+    '<label style="font-size:11px;color:var(--color-text-secondary)">Indice référence</label>' +
+    '<input id="irl-ref-input" type="number" step="0.01" value="' + (indiceRef ? indiceRef.toFixed(2) : '') + '" oninput="recalcIRL(' + loyerActuel + ')" style="width:100%;padding:7px 9px;border:1.5px solid var(--color-border);border-radius:7px;font-size:13px;margin-top:3px">' +
+    '</div>' +
+    '<div>' +
+    '<label style="font-size:11px;color:var(--color-text-secondary)">Nouvel indice</label>' +
+    '<input id="irl-nouvel-input" type="number" step="0.01" value="' + indiceNouvel.toFixed(2) + '" oninput="recalcIRL(' + loyerActuel + ')" style="width:100%;padding:7px 9px;border:1.5px solid var(--color-border);border-radius:7px;font-size:13px;margin-top:3px">' +
+    '</div>' +
+    '</div>' +
+    '</div>' +
+    '<div style="display:flex;gap:10px;justify-content:flex-end">' +
+    '<button onclick="document.getElementById(\'irl-overlay\').remove()" style="padding:9px 18px;border:1.5px solid var(--color-border);border-radius:8px;background:none;font-size:13px;cursor:pointer;color:var(--color-text)">Fermer</button>' +
+    '<button onclick="envoyerEmailIRL(\'' + leaseId + '\')" style="padding:9px 18px;border:1.5px solid var(--color-border);border-radius:8px;background:var(--color-bg-secondary);font-size:13px;cursor:pointer;color:var(--color-text)">📧 Email bailleur</button>' +
+    '<button id="btn-appliquer-irl" onclick="appliquerRevisionIRL(\'' + leaseId + '\',' + loyerActuel + ',\'' + (refParsed ? refParsed.trimestre : trimestreNouvel) + '\')" style="padding:9px 18px;background:#e8793a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">✅ Appliquer</button>' +
+    '</div>' +
+    '</div></div>';
+
+  document.getElementById('irl-overlay')?.remove();
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function recalcIRL(loyerActuel) {
+  var ref = parseFloat(document.getElementById('irl-ref-input')?.value);
+  var nouvel = parseFloat(document.getElementById('irl-nouvel-input')?.value);
+  if (!ref || !nouvel || !loyerActuel) return;
+  var revision = calculerRevision(loyerActuel, ref, nouvel);
+  if (!revision) return;
+  var card = document.querySelector('#irl-overlay [style*="Nouveau loyer"] + div');
+  // Mettre à jour les chiffres dans la modale
+  var cells = document.querySelectorAll('#irl-overlay strong');
+  cells.forEach(function(el) {
+    if (el.closest('.grid') || el.parentElement.querySelector('.grid')) return;
+  });
+  // Reconstruire les 2 cartes loyer
+  var cards = document.querySelectorAll('#irl-overlay > div > div > div[style*="grid-template-columns"]')[0];
+  if (cards) {
+    var augColor = revision.augmentation >= 0 ? '#c84b00' : '#166534';
+    cards.children[1].querySelector('div:last-child').textContent = revision.nouveauLoyer.toFixed(2) + ' \u20ac';
+    var varEl = document.querySelectorAll('#irl-overlay > div > div > div[style*="background:var(--color-bg-secondary)"]')[0];
+    if (varEl) {
+      var varSpan = varEl.querySelector('strong:last-child') || varEl.querySelectorAll('strong')[2];
+      if (varSpan) {
+        varSpan.style.color = augColor;
+        varSpan.textContent = (revision.augmentation >= 0 ? '+' : '') + revision.augmentation.toFixed(2) + ' \u20ac (' + revision.pourcentage.toFixed(2) + '%)';
+      }
+    }
+  }
+}
+
+async function appliquerRevisionIRL(leaseId, loyerActuel, trimestreRef) {
+  var ref = parseFloat(document.getElementById('irl-ref-input')?.value);
+  var nouvel = parseFloat(document.getElementById('irl-nouvel-input')?.value);
+  if (!ref || !nouvel) { showToast('Veuillez renseigner les deux indices.', 'error'); return; }
+  var revision = calculerRevision(loyerActuel, ref, nouvel);
+  if (!revision) { showToast('Calcul impossible.', 'error'); return; }
+
+  var lease = _allLeases.find(function(l) { return l.id === leaseId; });
+  if (!lease) return;
+  var ld = JSON.parse(JSON.stringify(lease.data || {}));
+  var fd = ld.formData || {};
+  var nouveauLoyer = revision.nouveauLoyer;
+  var latest = getLatestIRL();
+  fd.rent = nouveauLoyer.toFixed(2);
+  fd.irlReference = latest.trimestre + ' \u2014 indice ' + latest.indice.toFixed(2).replace('.', ',');
+  fd.irlRevisionHistory = fd.irlRevisionHistory || [];
+  fd.irlRevisionHistory.push({
+    date: new Date().toISOString().split('T')[0],
+    ancienLoyer: loyerActuel,
+    nouveauLoyer: nouveauLoyer,
+    indiceRef: ref,
+    indiceNouvel: nouvel,
+    trimestreRef: trimestreRef,
+    trimestreNouvel: latest.trimestre
+  });
+  ld.formData = fd;
+  var res = await db.from('leases').update({ data: ld }).eq('id', leaseId);
+  if (res.error) { showToast('Erreur : ' + res.error.message, 'error'); return; }
+  // Mettre à jour le cache local
+  var idx = _allLeases.findIndex(function(l) { return l.id === leaseId; });
+  if (idx >= 0) _allLeases[idx].data = ld;
+  document.getElementById('irl-overlay')?.remove();
+  showToast('Loyer mis à jour : ' + nouveauLoyer.toFixed(2) + ' \u20ac \u2014 Référence IRL actualisée ✅');
+  // Recharger le détail
+  if (currentDetailLeaseId === leaseId) loadLeaseDetail(leaseId);
+}
+
+async function envoyerEmailIRL(leaseId) {
+  var lease = _allLeases.find(function(l) { return l.id === leaseId; });
+  if (!lease) return;
+  var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+  var isCommercial = (f.leaseType || '').toLowerCase().includes('commercial');
+  var ref = parseFloat(document.getElementById('irl-ref-input')?.value);
+  var nouvel = parseFloat(document.getElementById('irl-nouvel-input')?.value);
+  var loyerActuel = parseFloat(f.rent) || 0;
+  var revision = calculerRevision(loyerActuel, ref, nouvel);
+  var anniversaire = checkAnniversaireBail(f.effectiveDate);
+  var adresse = f.propertyAddress || 'votre bien';
+  var latest = getLatestIRL();
+
+  var body = 'Bonjour,\n\n';
+  body += 'La date anniversaire du bail pour le bien situe au ' + adresse + ' approche.\n\n';
+  if (anniversaire) body += 'Date anniversaire : ' + anniversaire.date.toLocaleDateString('fr-FR') + ' (dans ' + anniversaire.joursRestants + ' jours)\n\n';
+  if (revision) {
+    body += 'Revision ' + (isCommercial ? 'ILC' : 'IRL') + ' :\n';
+    body += '- Loyer actuel : ' + loyerActuel.toFixed(2) + ' EUR\n';
+    body += '- Nouveau loyer applicable : ' + revision.nouveauLoyer.toFixed(2) + ' EUR\n';
+    body += '- Variation : ' + (revision.augmentation >= 0 ? '+' : '') + revision.augmentation.toFixed(2) + ' EUR (' + revision.pourcentage.toFixed(2) + '%)\n';
+    body += '- Indice de reference : ' + (ref || '—') + '\n';
+    body += '- Nouvel indice (' + latest.trimestre + ') : ' + (nouvel || latest.indice) + '\n\n';
+  }
+  body += 'Cordialement,\nBailo Gestion';
+
+  var email = f.landlordEmail || '';
+  var subject = 'Revision IRL — ' + adresse;
+  var profile = await loadProfileData();
+  var emailDest = profile.email || email;
+  if (!emailDest) { showToast('Aucun email bailleur configuré dans Paramètres.', 'error'); return; }
+
+  try {
+    var res = await db.functions.invoke('send-email', {
+      body: { to: emailDest, subject: subject, text: body }
+    });
+    if (res.error) throw res.error;
+    showToast('Email envoyé à ' + emailDest + ' ✅');
+  } catch(e) {
+    showToast('Erreur envoi email : ' + (e.message || e), 'error');
+  }
+}
+
 function showToast(msg, type = '', duration = 3000) {
   const el = document.getElementById('toast');
   el.textContent = msg;
