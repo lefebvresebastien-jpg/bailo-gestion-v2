@@ -396,6 +396,100 @@
     canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
   }
 
+  async function saveBailleurSig() {
+    var canvas = document.getElementById('sig-bailleur');
+    if (!canvas) return;
+    var blank = document.createElement('canvas'); blank.width = canvas.width; blank.height = canvas.height;
+    if (canvas.toDataURL() === blank.toDataURL()) { alert('Veuillez signer avant de valider.'); return; }
+    var sig = canvas.toDataURL('image/png');
+    var params = new URLSearchParams(window.location.search);
+    var leaseId = params.get('lease');
+    var resp = await db.from('leases').select('data').eq('id', leaseId).single();
+    if (!resp.data) { alert('Bail introuvable.'); return; }
+    var leaseData = resp.data.data || {};
+    var fd = leaseData.formData || {};
+    fd.sig_bailleur = sig;
+    fd.sig_bailleur_at = new Date().toISOString();
+    leaseData.formData = fd;
+    var res = await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
+    if (res.error) { alert('Erreur : ' + res.error.message); return; }
+    var box = canvas.closest('.sig-box');
+    if (box) box.innerHTML = '<span class="sig-label">Le Bailleur</span>' +
+      '<div style="border:1px solid #d4c8b8;border-radius:8px;overflow:hidden;background:white;padding:4px">' +
+      '<img src="' + sig + '" style="width:100%;max-height:120px;object-fit:contain;display:block"></div>' +
+      '<div style="font-size:12px;color:#16a34a;font-weight:600;font-family:Inter,sans-serif;margin-top:4px">&#10003; Signe le ' + new Intl.DateTimeFormat('fr-FR').format(new Date()) + '</div>';
+    alert('Signature bailleur enregistree.');
+  }
+
+  async function savePreneurSig() {
+    var canvas = document.getElementById('sig-preneur');
+    if (!canvas) return;
+    var blank = document.createElement('canvas'); blank.width = canvas.width; blank.height = canvas.height;
+    if (canvas.toDataURL() === blank.toDataURL()) { alert('Veuillez signer avant de valider.'); return; }
+    var sig = canvas.toDataURL('image/png');
+    var params = new URLSearchParams(window.location.search);
+    var leaseId = params.get('lease');
+    var resp = await db.from('leases').select('data').eq('id', leaseId).single();
+    if (!resp.data) { alert('Bail introuvable.'); return; }
+    var leaseData = resp.data.data || {};
+    var fd = leaseData.formData || {};
+    fd.sig_locataire = sig;
+    fd.sig_locataire_at = new Date().toISOString();
+    leaseData.formData = fd;
+    var res = await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
+    if (res.error) { alert('Erreur : ' + res.error.message); return; }
+    var box = canvas.closest('.sig-box');
+    if (box) box.innerHTML = '<span class="sig-label">Le Preneur</span>' +
+      '<div style="border:1px solid #d4c8b8;border-radius:8px;overflow:hidden;background:white;padding:4px">' +
+      '<img src="' + sig + '" style="width:100%;max-height:120px;object-fit:contain;display:block"></div>' +
+      '<div style="font-size:12px;color:#16a34a;font-weight:600;font-family:Inter,sans-serif;margin-top:4px">&#10003; Signe le ' + new Intl.DateTimeFormat('fr-FR').format(new Date()) + '</div>';
+    alert('Signature preneur enregistree.');
+  }
+
+  async function saveBailleurSig() {
+    var canvas = document.getElementById('sig-bailleur');
+    if (!canvas) return;
+    var blank = document.createElement('canvas'); blank.width = canvas.width; blank.height = canvas.height;
+    if (canvas.toDataURL() === blank.toDataURL()) { alert('Veuillez signer avant de valider.'); return; }
+    var sig = canvas.toDataURL('image/png');
+    var leaseId = new URLSearchParams(window.location.search).get('lease');
+    var resp = await db.from('leases').select('data').eq('id', leaseId).single();
+    if (!resp.data) { alert('Bail introuvable.'); return; }
+    var ld = resp.data.data || {}; var fd = ld.formData || {};
+    fd.sig_bailleur = sig; fd.sig_bailleur_at = new Date().toISOString();
+    ld.formData = fd;
+    var res = await db.from('leases').update({ data: ld }).eq('id', leaseId);
+    if (res.error) { alert('Erreur : ' + res.error.message); return; }
+    var box = canvas.closest('.sig-box');
+    if (box) box.innerHTML = '<span class="sig-label">Le Bailleur</span>' +
+      '<div style="border:1px solid #d4c8b8;border-radius:8px;overflow:hidden;background:white;padding:4px">' +
+      '<img src="' + sig + '" style="width:100%;max-height:120px;object-fit:contain;display:block"></div>' +
+      '<div style="font-size:12px;color:#16a34a;font-weight:600;font-family:Inter,sans-serif;margin-top:4px">&#10003; Signe le ' + new Intl.DateTimeFormat('fr-FR').format(new Date()) + '</div>';
+    alert('Signature bailleur enregistree.');
+  }
+
+  async function savePreneurSig() {
+    var canvas = document.getElementById('sig-preneur');
+    if (!canvas) return;
+    var blank = document.createElement('canvas'); blank.width = canvas.width; blank.height = canvas.height;
+    if (canvas.toDataURL() === blank.toDataURL()) { alert('Veuillez signer avant de valider.'); return; }
+    var sig = canvas.toDataURL('image/png');
+    var leaseId = new URLSearchParams(window.location.search).get('lease');
+    var resp = await db.from('leases').select('data').eq('id', leaseId).single();
+    if (!resp.data) { alert('Bail introuvable.'); return; }
+    var ld = resp.data.data || {}; var fd = ld.formData || {};
+    fd.sig_locataire = sig; fd.sig_locataire_at = new Date().toISOString();
+    ld.formData = fd;
+    var res = await db.from('leases').update({ data: ld }).eq('id', leaseId);
+    if (res.error) { alert('Erreur : ' + res.error.message); return; }
+    var box = canvas.closest('.sig-box');
+    if (box) box.innerHTML = '<span class="sig-label">Le Preneur</span>' +
+      '<div style="border:1px solid #d4c8b8;border-radius:8px;overflow:hidden;background:white;padding:4px">' +
+      '<img src="' + sig + '" style="width:100%;max-height:120px;object-fit:contain;display:block"></div>' +
+      '<div style="font-size:12px;color:#16a34a;font-weight:600;font-family:Inter,sans-serif;margin-top:4px">&#10003; Signe le ' + new Intl.DateTimeFormat('fr-FR').format(new Date()) + '</div>';
+    alert('Signature preneur enregistree.');
+  }
+
   async function init() {
     var params = new URLSearchParams(window.location.search);
     var leaseId = params.get('lease');
