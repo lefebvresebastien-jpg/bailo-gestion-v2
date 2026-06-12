@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bail commercial — Bailo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Georgia&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <style>
+    :root {
+      --accent: #e8793a;
+      --ink: #1a110a;
+      --ink-2: #4a3728;
+      --ink-3: #8a7060;
+      --surface: #fdfaf6;
+      --border: rgba(56,37,17,0.12);
+      --r-xl: 16px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Georgia, serif; background: #f0ebe4; color: var(--ink); }
+    .toolbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: #1a110a; color: #fff;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 24px; gap: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .toolbar-left { display: flex; align-items: center; gap: 12px; }
+    .toolbar-title { font-family: Inter, sans-serif; font-size: 15px; font-weight: 600; }
+    .toolbar-sub { font-size: 12px; opacity: 0.6; font-family: Inter, sans-serif; }
+    .btn-back { background: rgba(255,255,255,0.1); color: #fff; border: none; padding: 7px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; font-family: Inter, sans-serif; }
+    .btn-back:hover { background: rgba(255,255,255,0.2); }
+    .btn-print { background: var(--accent); color: #fff; border: none; padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: Inter, sans-serif; }
+    .btn-print:hover { opacity: 0.9; }
+    .loading { display: flex; align-items: center; justify-content: center; height: 100vh; flex-direction: column; gap: 16px; font-family: Inter, sans-serif; color: var(--ink-3); }
+    .spinner { width: 32px; height: 32px; border: 3px solid rgba(0,0,0,0.1); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .page-wrapper { max-width: 860px; margin: 0 auto; padding: 80px 24px 48px; }
+    .contract-preview { background: var(--surface); color: var(--ink); border-radius: var(--r-xl); padding: 40px 48px; font-family: Georgia, serif; line-height: 1.75; border: 1px solid var(--border); box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+    .contract-header { border-bottom: 2px solid var(--border); padding-bottom: 24px; margin-bottom: 28px; text-align: center; }
+    .contract-header .label { text-transform: uppercase; letter-spacing: .15em; font-size: .7rem; opacity: .55; margin-bottom: 8px; font-family: Inter, sans-serif; }
+    .contract-header h3 { font-size: 2rem; font-family: "Instrument Serif", Georgia, serif; margin-bottom: 6px; }
+    .contract-header .subtitle { font-size: .82rem; color: var(--ink-3); font-family: Inter, sans-serif; margin-top: 6px; }
+    .contract-preview section { margin-top: 22px; }
+    .contract-preview h4 { font-size: 0.82rem; font-weight: 700; margin-bottom: 8px; font-family: Inter, sans-serif; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+    .contract-preview p { margin-bottom: 8px; font-size: 0.91rem; }
+    .contract-preview p + p { margin-top: 6px; }
+    .contract-preview strong { color: var(--ink); }
+    .contract-preview ul { padding-left: 22px; margin-bottom: 8px; }
+    .contract-preview li { font-size: 0.91rem; margin-bottom: 5px; }
+    .mention-legale { background: #fef9f5; border: 1px solid rgba(232,121,58,0.25); border-radius: 8px; padding: 14px 18px; margin-top: 10px; font-size: 0.82rem; color: var(--ink-3); font-family: Inter, sans-serif; line-height: 1.6; }
+    .signature-section { margin-top: 36px; padding-top: 28px; border-top: 2px solid var(--border); }
+    .signature-section h4 { font-size: 0.82rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-bottom: 16px; font-family: Inter, sans-serif; }
+    .signature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+    .sig-box { display: flex; flex-direction: column; gap: 8px; }
+    .sig-label { font-size: 12px; font-family: Inter, sans-serif; font-weight: 600; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em; }
+    .sig-name { font-size: 13px; color: var(--ink-3); font-family: Inter, sans-serif; }
+    canvas.sig-canvas { border: 1.5px solid var(--border); border-radius: 8px; background: #fff; cursor: crosshair; touch-action: none; display: block; width: 100%; height: 120px; }
+    .sig-actions { display: flex; gap: 8px; margin-top: 4px; }
+    .btn-sig-clear { font-size: 11px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; font-family: Inter, sans-serif; color: var(--ink-3); }
+    .contract-footer { margin-top: 24px; padding: 12px 16px; background: rgba(56,37,17,0.04); border-radius: 8px; font-size: 0.74rem; color: var(--ink-3); font-family: Inter, sans-serif; line-height: 1.5; }
+    @media print {
+      .toolbar { display: none !important; }
+      .page-wrapper { padding: 0; max-width: 100%; }
+      .contract-preview { border-radius: 0; box-shadow: none; border: none; padding: 20px; }
+      body { background: white; }
+      canvas.sig-canvas { border: 1px solid #ccc; }
+      .sig-actions { display: none; }
+    }
+    @media (max-width: 600px) {
+      .contract-preview { padding: 20px; }
+      .signature-grid { grid-template-columns: 1fr; }
+      .toolbar { padding: 10px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="toolbar-left">
+    <button class="btn-back" onclick="history.length > 1 ? history.back() : window.location.href='https://bailo-gestion-v2.netlify.app'">← Retour</button>
+    <div>
+      <div class="toolbar-title" id="toolbar-title">Bail commercial</div>
+      <div class="toolbar-sub" id="toolbar-sub">Chargement…</div>
+    </div>
+  </div>
+  <button class="btn-print" onclick="window.print()">🖨️ Imprimer / PDF</button>
+</div>
+
+<div id="loading" class="loading">
+  <div class="spinner"></div>
+  <p>Chargement du contrat…</p>
+</div>
+
+<div id="page-wrapper" class="page-wrapper" style="display:none">
+  <div class="contract-preview" id="print-area"></div>
+</div>
+
+<script>
+  const SUPABASE_URL = 'https://nltuysmnxsomlhgvbtwz.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0';
+  const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  function formatDate(str) {
+    if (!str) return '—';
+    try { return new Intl.DateTimeFormat('fr-FR').format(new Date(str)); } catch(e) { return str; }
+  }
+  function fmtEur(v) {
+    if (!v) return '—';
+    return new Intl.NumberFormat('fr-FR', {style:'currency', currency:'EUR', maximumFractionDigits:2}).format(parseFloat(v));
+  }
+  function v(val, fallback) { return val || fallback || '—'; }
+
+  function buildContrat(f) {
+    var loyer = (parseFloat(f.rent)||0);
+    var charges = (parseFloat(f.charges)||0);
+    var loyerCC = loyer + charges;
+    var hasGarant = f.guarantorName && f.guarantorName.trim();
+    var destinationContractuelle = v(f.commercialDestination, 'Usage commercial');
+    var descriptionLocaux = v(f.localDescription, 'Locaux tels que visites et acceptes par le Preneur');
+    var activiteAutorisee = v(f.authorizedActivity, destinationContractuelle);
+
+    var html = '';
+
+    // EN-TETE
+    html += '<div class="contract-header">';
+    html += '<p class="label">Bail commercial — Articles L. 145-1 et suivants du Code de commerce</p>';
+    html += '<h3>BAIL COMMERCIAL</h3>';
+    html += '<p class="subtitle">Conclu entre les soussignes — Signe a ' + v(f.signatureCity) + ', le ' + (f.signatureDate ? formatDate(f.signatureDate) : '___________') + '</p>';
+    html += '</div>';
+
+    // ART 1 — PARTIES
+    html += '<section>';
+    html += '<h4>Article 1 — Designation des parties</h4>';
+    html += '<p><strong>Le Bailleur :</strong> <strong>' + v(f.landlordName) + '</strong>';
+    if (f.landlordRepresentative) html += ', represente par ' + f.landlordRepresentative;
+    html += ', dont le domicile ou siege social est situe au ' + v(f.landlordAddress);
+    if (f.landlordEmail) html += ', joignable a ' + f.landlordEmail;
+    html += ', ci-apres designe "le Bailleur".</p>';
+    html += '<p style="margin-top:8px"><strong>Le Preneur :</strong> <strong>' + v(f.tenantName) + '</strong>';
+    if (f.tenantLegalForm) html += ', ' + f.tenantLegalForm;
+    if (f.tenantSiret) html += ', SIRET ' + f.tenantSiret;
+    if (f.tenantRCS) html += ', immatricule au RCS sous le n° ' + f.tenantRCS;
+    if (f.tenantAddress) html += ', dont le siege est situe au ' + f.tenantAddress;
+    if (f.tenantPhone || f.tenantEmail) html += ', joignable au ' + v(f.tenantPhone) + ' / ' + v(f.tenantEmail);
+    html += ', ci-apres designe "le Preneur".</p>';
+    if (hasGarant) {
+      html += '<p style="margin-top:8px"><strong>La Caution solidaire :</strong> ' + v(f.guarantorName);
+      if (f.guarantorAddress) html += ', domiciliee au ' + f.guarantorAddress;
+      html += '. La caution s engage solidairement et indivisiblement avec le Preneur au paiement des loyers, charges et accessoires, et a l execution de toutes les conditions du present bail.</p>';
+    }
+    html += '</section>';
+
+    // ART 2 — DESIGNATION DES LOCAUX
+    html += '<section>';
+    html += '<h4>Article 2 — Designation des locaux loues</h4>';
+    html += '<p>Le Bailleur donne a bail au Preneur, conformement aux dispositions des articles L. 145-1 et suivants du Code de commerce, les locaux ci-apres designes :</p>';
+    html += '<p style="margin-top:8px"><strong>Adresse :</strong> ' + v(f.propertyAddress) + '</p>';
+    if (f.propertyFloor) html += '<p><strong>Situation :</strong> ' + f.propertyFloor + '</p>';
+    html += '<p><strong>Surface :</strong> ' + v(f.surface) + '</p>';
+    html += '<p><strong>Description :</strong> ' + descriptionLocaux + '</p>';
+    if (f.cadastralRef) html += '<p><strong>Reference cadastrale / lot :</strong> ' + f.cadastralRef + '</p>';
+    html += '<p style="margin-top:8px">Le Preneur declare parfaitement connaitre les locaux pour les avoir vus et visites, et les accepte dans l etat ou ils se trouvent a la date de prise d effet du present bail, sans recours contre le Bailleur pour quelque cause que ce soit, sauf vices caches.</p>';
+    html += '</section>';
+
+    // ART 3 — DESTINATION
+    html += '<section>';
+    html += '<h4>Article 3 — Destination des lieux loues</h4>';
+    html += '<p>Les locaux sont loues a usage exclusif de : <strong>' + destinationContractuelle + '</strong>.</p>';
+    html += '<p style="margin-top:6px">Les activites autorisees dans les locaux sont limitees a : <strong>' + activiteAutorisee + '</strong>. Le Preneur s engage a conserver aux lieux loues leur destination contractuelle et a ne pas exercer d activite differente sans accord ecrit prealable du Bailleur, sous peine de resiliation de plein droit du present bail.</p>';
+    html += '<p style="margin-top:6px">Le Preneur fera son affaire personnelle de l obtention de toutes autorisations administratives necessaires a l exercice de son activite (autorisation d exploitation, licences, declarations, etc.), sans recours possible contre le Bailleur.</p>';
+    html += '</section>';
+
+    // ART 4 — DUREE
+    html += '<section>';
+    html += '<h4>Article 4 — Duree du bail (art. L. 145-4 C. com.)</h4>';
+    html += '<p>Le present bail est consenti pour une duree de <strong>' + v(f.duration, 'neuf (9) annees entieres et consecutives') + '</strong>, prenant effet le <strong>' + (f.effectiveDate ? formatDate(f.effectiveDate) : '___________') + '</strong>.</p>';
+    html += '<p style="margin-top:6px">Conformement aux dispositions de l article L. 145-4 du Code de commerce, le Preneur aura la faculte de donner conge a l expiration de chaque periode triennale, en prévenant le Bailleur au moins <strong>six (6) mois a l avance</strong> par acte extrajudiciaire.</p>';
+    html += '<p style="margin-top:6px">Le Bailleur aura la meme faculte s il entend invoquer les dispositions des articles L. 145-18, L. 145-21 et L. 145-24 du Code de commerce.</p>';
+    html += '</section>';
+
+    // ART 5 — LOYER
+    html += '<section>';
+    html += '<h4>Article 5 — Loyer initial</h4>';
+    html += '<p>Le present bail est consenti moyennant un loyer annuel hors taxes et hors charges de <strong>' + fmtEur(loyer * 12) + '</strong>, soit <strong>' + fmtEur(loyer) + ' par mois</strong>, que le Preneur s oblige a payer d avance au Bailleur, <strong>' + v(f.rentDueDay, 'le 1er de chaque mois') + '</strong>, par <strong>' + v(f.paymentTerms, 'virement bancaire') + '</strong>.</p>';
+    if (charges > 0) {
+      html += '<p style="margin-top:6px">En sus du loyer, le Preneur versera des provisions sur charges d un montant de <strong>' + fmtEur(charges) + ' par mois</strong>, selon le regime suivant : <strong>' + v(f.chargesRegime) + '</strong>.</p>';
+    }
+    if (f.taxeFonciere) {
+      html += '<p style="margin-top:6px"><strong>Taxe fonciere :</strong> ' + v(f.taxeFonciere) + '.</p>';
+    }
+    html += '<p style="margin-top:6px">TVA : ' + (f.tvaApplicable === 'oui' ? 'Le loyer est soumis a la TVA au taux en vigueur. Le Preneur s engage a acquitter la TVA en sus du loyer aux memes echeances.' : 'Le Bailleur n a pas opte pour l assujettissement a la TVA de la presente location. Dans l hypothese ou cette option serait exercee en cours de bail, la TVA sera due par le Preneur.') + '</p>';
+    html += '</section>';
+
+    // ART 6 — INDEXATION
+    html += '<section>';
+    html += '<h4>Article 6 — Indexation du loyer (art. L. 145-34 et L. 145-38 C. com.)</h4>';
+    html += '<p>Le loyer sera revise automatiquement et de plein droit chaque annee a la date anniversaire de l entree en jouissance du Preneur, proportionnellement a la variation de l <strong>' + v(f.irlReference, 'Indice des Loyers Commerciaux (ILC)') + '</strong>, publie trimestriellement par l INSEE.</p>';
+    html += '<p style="margin-top:6px">L indice de base retenu est celui du trimestre connu a la date de prise d effet du present bail. Chaque indexation annuelle sera calculee en fonction de la valeur de l indice correspondant au meme trimestre de l annee suivante. La presente clause d indexation ne pourra avoir pour effet de ramener le loyer a un montant inferieur au loyer de base.</p>';
+    html += '<p style="margin-top:6px"><strong>Revision triennale :</strong> Lors du renouvellement ou de la revision triennale, le loyer peut etre deplafonné et fixe a la valeur locative en cas de modification notable des facteurs locaux de commercialite ayant entraine une variation de plus de 10 % de la valeur locative (art. 23-4 du decret du 30 septembre 1953 integre au Code de commerce).</p>';
+    html += '</section>';
+
+    // ART 7 — DEPOT DE GARANTIE
+    html += '<section>';
+    html += '<h4>Article 7 — Depot de garantie</h4>';
+    if (f.deposit && parseFloat(f.deposit) > 0) {
+      html += '<p>Le Bailleur reconnait avoir recu du Preneur la somme de <strong>' + fmtEur(f.deposit) + '</strong> a titre de depot de garantie, en garantie du paiement des loyers et charges, des reparations locatives et de l execution des clauses et conditions du present bail.</p>';
+    } else {
+      html += '<p>Un depot de garantie d un montant convenu entre les parties est verse par le Preneur a la signature des presentes, en garantie du paiement des loyers et charges et de l execution des clauses du present bail.</p>';
+    }
+    html += '<p style="margin-top:6px">Ce depot de garantie ne sera pas productif d interets au profit du Preneur et ne pourra etre impute par compensation sur la derniere echeance de loyer. Il sera restitue dans un delai de deux mois suivant la remise des cles et la constatation contradictoire de l etat des lieux de sortie, deduction faite des sommes dues par le Preneur.</p>';
+    html += '<p style="margin-top:6px">A chaque reajustement du loyer, le depot de garantie sera majore de maniere a toujours rester equivalent au montant initial exprime en mois de loyer.</p>';
+    html += '</section>';
+
+    // ART 8 — ENTRETIEN ET TRAVAUX
+    html += '<section>';
+    html += '<h4>Article 8 — Entretien, reparations et travaux</h4>';
+    html += '<p><strong>Obligations du Preneur :</strong> Le Preneur prend les locaux dans l etat ou ils se trouvent et aura a sa charge toutes reparations, y compris celles dues a la vetuste, grosses et menues, qu il s agisse d entretien, de refection, d amelioration ou de cas de force majeure. Il devra tenir les lieux en bon etat de reparations et les rendre tels a l expiration du bail.</p>';
+    html += '<p style="margin-top:6px"><strong>Travaux d amelioration :</strong> Aucun changement de distribution, demolition, percement de mur ou construction ne pourra etre realise sans l autorisation expresse et ecrite du Bailleur. Tous travaux effectues par le Preneur, meme avec autorisation, resteront a l expiration du bail la propriete du Bailleur sans indemnite, a moins que le Bailleur ne prefere demander le retablissement des lieux dans leur etat primitif aux frais du Preneur.</p>';
+    html += '<p style="margin-top:6px"><strong>Obligations du Bailleur :</strong> Le Bailleur prend en charge les grosses reparations visees a l article 606 du Code civil (gros murs, voutes, toitures), sauf si elles resultent d un manquement du Preneur a ses obligations d entretien.</p>';
+    html += '</section>';
+
+    // ART 9 — CHARGES ET IMPOTS
+    html += '<section>';
+    html += '<h4>Article 9 — Charges et impots</h4>';
+    html += '<p>Le Preneur s engage a rembourser au Bailleur, avec le loyer, toutes les charges, taxes, prestations et fournitures de toute nature relatives aux locaux loues, notamment :</p>';
+    html += '<ul>';
+    html += '<li>Consommation d eau, gaz et electricite (sur justificatifs ou au prorata)</li>';
+    html += '<li>Taxe d enlevement des ordures menageres et taxes de voirie</li>';
+    html += '<li>Quote-part des charges de copropriete incombant aux locaux loues</li>';
+    html += '<li>Taxe fonciere sur les proprietes baties : ' + (f.taxeFonciere ? v(f.taxeFonciere) : 'selon repartition definie aux presentes') + '</li>';
+    html += '<li>Primes d assurance incendie et risques locatifs afferentes aux locaux</li>';
+    html += '</ul>';
+    html += '<p style="margin-top:6px">Le Preneur fera son affaire personnelle du paiement de tout impot, contribution ou taxe lui incombant en raison de son activite ou de l utilisation des locaux.</p>';
+    html += '</section>';
+
+    // ART 10 — CESSION ET SOUS-LOCATION
+    html += '<section>';
+    html += '<h4>Article 10 — Cession du bail et sous-location</h4>';
+    html += '<p><strong>Cession avec fonds de commerce :</strong> Le Preneur ne pourra ceder son droit au present bail qu a son successeur dans la propriete ou l exploitation de son fonds de commerce, pour la meme activite que celle autorisee aux presentes. En cas de projet de cession, le Preneur devra en informer le Bailleur par acte extrajudiciaire, en lui signifiant le projet d acte dans son integralite. Le Bailleur dispose d un droit de preemption pendant <strong>un (1) mois</strong> a compter de cette signification.</p>';
+    html += '<p style="margin-top:6px"><strong>Solidarite du cedant :</strong> A defaut d exercice du droit de preemption, le cedant restera garant solidairement avec le cessionnaire et tous cessionnaires successifs du paiement des loyers et charges et de l execution des conditions du present bail.</p>';
+    html += '<p style="margin-top:6px"><strong>Sous-location :</strong> Toute sous-location totale ou partielle est interdite sans accord ecrit prealable du Bailleur. En cas d autorisation, les conditions de la sous-location seront soumises au Bailleur pour approbation.</p>';
+    html += '</section>';
+
+    // ART 11 — ASSURANCES
+    html += '<section>';
+    html += '<h4>Article 11 — Assurances</h4>';
+    html += '<p><strong>Assurances du Bailleur :</strong> Le Bailleur assure l immeuble contre les risques d incendie, d explosion, de degats des eaux et risques annexes en valeur de reconstruction a neuf. Le Preneur remboursera au Bailleur sa quote-part des primes d assurance au prorata de la surface occupee.</p>';
+    html += '<p style="margin-top:6px"><strong>Assurances du Preneur :</strong> Le Preneur devra souscrire et maintenir en vigueur, pendant toute la duree du bail, une assurance multirisques professionnelle couvrant : sa responsabilite civile exploitation, les dommages causes aux locaux et aux tiers, les risques propres a son activite (incendie, explosion, degats des eaux, bris de glace, etc.). Ces polices devront comporter une clause de renonciation a recours contre le Bailleur et son assureur. Une attestation d assurance sera remise au Bailleur avant la prise de possession et a chaque renouvellement, a premiere demande.</p>';
+    html += '</section>';
+
+    // ART 12 — RENOUVELLEMENT
+    html += '<section>';
+    html += '<h4>Article 12 — Droit au renouvellement (art. L. 145-8 et s. C. com.)</h4>';
+    html += '<p>Le Preneur immatricule au Registre du Commerce et des Societes ou au Repertoire des Metiers beneficie d un droit au renouvellement du present bail, conformement aux dispositions des articles L. 145-8 et suivants du Code de commerce.</p>';
+    html += '<p style="margin-top:6px"><strong>Conge et renouvellement :</strong> Le conge doit etre signifie par acte extrajudiciaire au moins <strong>six (6) mois</strong> avant l expiration du bail. A defaut de conge, le bail se renouvelle par tacite reconduction pour une nouvelle periode de neuf ans.</p>';
+    html += '<p style="margin-top:6px"><strong>Refus de renouvellement :</strong> En cas de refus de renouvellement sans motif grave et legitime, le Bailleur est redevable envers le Preneur d une indemnite d eviction destinee a compenser le prejudice cause par le defaut de renouvellement, calculee notamment en fonction de la valeur marchande du fonds de commerce.</p>';
+    html += '<p style="margin-top:6px"><strong>Loyer du bail renouvele :</strong> Le loyer du bail renouvele est en principe plafonné a la variation de l indice de reference convenu. Il peut etre fixe a la valeur locative en cas de modification notable d un element de la valeur locative, notamment des facteurs locaux de commercialite.</p>';
+    html += '</section>';
+
+    // ART 13 — CLAUSE RESOLUTOIRE
+    html += '<section>';
+    html += '<h4>Article 13 — Clause resolutoire</h4>';
+    html += '<p>A defaut de paiement d un seul terme de loyer ou partie de terme de loyer, de frais, charges ou prestations, a l echeance, <strong>un (1) mois apres un commandement de payer demeure infructueux</strong> et contenant declaration par le Bailleur de son intention d user du benefice de la presente clause, ou en cas d inexecution par le Preneur de l une quelconque de ses obligations, <strong>un (1) mois apres une sommation d executer restee sans effet</strong> visant cette clause, le present bail sera resilie de plein droit, si bon semble au Bailleur, meme en cas de paiement ou d execution posterieure.</p>';
+    html += '<p style="margin-top:6px">Dans le cas ou le Preneur se refuserait a quitter les lieux, son expulsion pourra avoir lieu sur simple ordonnance de refere, executoire par provision et nonobstant appel.</p>';
+    html += '</section>';
+
+    // ART 14 — CLAUSES PENALES
+    html += '<section>';
+    html += '<h4>Article 14 — Clauses penales et indemnites d occupation</h4>';
+    html += '<p><strong>Retard de paiement :</strong> En cas de non-paiement de toute somme due a son echeance, le Preneur devra payer, en sus des frais de recouvrement, une penalite de <strong>trente pour cent (30 %)</strong> du montant de la somme due, sans prejudice de l application judiciaire de l article 700 du Code de procedure civile.</p>';
+    html += '<p style="margin-top:6px"><strong>Maintien dans les lieux :</strong> Si le Preneur, dechu de tout droit d occupation, ne libere pas les lieux, il devra verser par jour de retard, outre les charges, une indemnite conventionnelle d occupation egale a deux fois le loyer quotidien, jusqu a complet demenagement et restitution des cles.</p>';
+    html += '</section>';
+
+    // ART 15 — VISITE ET AFFICHAGE
+    html += '<section>';
+    html += '<h4>Article 15 — Droit de visite et affichage</h4>';
+    html += '<p>Le Bailleur ou son mandataire pourra visiter les locaux, aussi souvent que cela lui paraitra utile, sans que ces visites puissent etre abusives. Dans les six mois qui precederont l expiration du bail, le Preneur devra laisser visiter les locaux tous les jours ouvres de 9h a 12h et de 14h a 18h. Le Preneur laissera egalement le Bailleur apposer tout ecriteau ou enseigne indiquant que les locaux sont a louer ou a vendre.</p>';
+    html += '</section>';
+
+    // ART 16 — ETAT DES LIEUX
+    html += '<section>';
+    html += '<h4>Article 16 — Etat des lieux et restitution des locaux</h4>';
+    html += '<p>Un etat des lieux contradictoire sera etabli lors de la remise des cles au Preneur et lors de leur restitution en fin de bail. A defaut d etat des lieux d entree, le Preneur sera repute avoir recu les locaux en parfait etat.</p>';
+    html += '<p style="margin-top:6px">A l expiration du bail, le Preneur devra rendre les locaux en bon etat de reparations locatives. Il reglera au Bailleur le cout des travaux necessaires a la remise en etat des locaux. Le Preneur sera redevable d une indemnite d occupation calculee sur la base du loyer prevu au bail, au prorata de la duree necessaire a la remise en etat.</p>';
+    html += '</section>';
+
+    // ART 17 — SOLIDARITE
+    html += '<section>';
+    html += '<h4>Article 17 — Solidarite et indivisibilite</h4>';
+    html += '<p>Les obligations resultant du present bail constituent pour le Preneur et tous ses ayants-cause une charge solidaire et indivisible. En cas de pluralite de Preneurs, ceux-ci sont solidairement et indivisiblement tenus au paiement des loyers et charges et a l execution de toutes les conditions du bail. Tout conge pour mettre valablement fin au bail devra emaner de tous les Preneurs et etre donne pour la meme date.</p>';
+    html += '</section>';
+
+    // ART 18 — INFORMATIONS PARTICULIERES
+    html += '<section>';
+    html += '<h4>Article 18 — Informations particulieres</h4>';
+    if (f.noiseZone) {
+      html += '<p><strong>Proximite d un aerodrome :</strong> Les locaux sont situes en zone ' + f.noiseZone + ' du plan d exposition au bruit.</p>';
+    } else {
+      html += '<p><strong>Bruit :</strong> Les locaux ne sont pas situes a proximite d un aerodrome soumis a plan d exposition au bruit.</p>';
+    }
+    html += '<p style="margin-top:6px"><strong>Risques naturels et technologiques :</strong> Conformement a l article L. 125-5 du Code de l environnement, l etat des risques et pollutions est annexe aux presentes. ' + (f.riskZone ? 'Les locaux sont situes dans une zone couverte par un plan de prevention des risques.' : 'Les locaux ne sont pas situes dans une zone couverte par un plan de prevention des risques naturels ou technologiques previsibles, prescrit ou approuve.') + '</p>';
+    if (f.additionalInfo) {
+      html += '<p style="margin-top:6px">' + f.additionalInfo + '</p>';
+    }
+    html += '</section>';
+
+    // ART 19 — CLAUSES PARTICULIERES
+    html += '<section>';
+    html += '<h4>Article 19 — Clauses particulieres</h4>';
+    if (f.specialClauses && f.specialClauses.trim()) {
+      html += '<p>' + f.specialClauses.replace(/\n/g, '<br>') + '</p>';
+    } else {
+      html += '<p>Neant.</p>';
+    }
+    if (f.suspensiveConditions && f.suspensiveConditions.trim()) {
+      html += '<p style="margin-top:8px"><strong>Conditions suspensives :</strong> ' + f.suspensiveConditions + '</p>';
+    }
+    html += '</section>';
+
+    // ART 20 — ELECTION DE DOMICILE
+    html += '<section>';
+    html += '<h4>Article 20 — Election de domicile et attribution de juridiction</h4>';
+    html += '<p>Pour l execution des presentes et de leur suite, y compris la signification de tous actes, le Preneur fait election de domicile dans les locaux loues et le Bailleur a l adresse de son mandataire ou a son domicile indique ci-dessus.</p>';
+    html += '<p style="margin-top:6px">En cas de litige relatif a l execution ou a l interpretation du present bail, le Tribunal de commerce du lieu de situation des locaux sera seul competent, nonobstant pluralite de defendeurs ou appel en garantie.</p>';
+    html += '<p style="margin-top:6px">Fait a <strong>' + v(f.signatureCity) + '</strong>, le ' + (f.signatureDate ? formatDate(f.signatureDate) : '___________') + ', en trois (3) exemplaires originaux.</p>';
+    html += '</section>';
+
+    // MENTION LEGALE
+    html += '<div class="mention-legale">';
+    html += '<strong>Avertissement :</strong> Ce contrat est genere par Bailo a titre indicatif, sur la base des informations saisies. Il s appuie sur les articles L. 145-1 et suivants du Code de commerce. Compte tenu des enjeux juridiques et financiers propres aux baux commerciaux (droit au renouvellement, indemnite d eviction, deplafo nnement du loyer), il est fortement recommande de faire verifier ce document par un avocat ou un notaire specialise avant toute signature.';
+    html += '</div>';
+
+    return html;
+  }
+
+  function sigBlock(label, name, canvasId, existingSig, canEdit) {
+    var dateStr = existingSig ? new Intl.DateTimeFormat('fr-FR').format(new Date()) : '';
+    return '<div class="sig-box">' +
+      '<span class="sig-label">' + label + '</span>' +
+      '<span class="sig-name">' + (name || '') + '</span>' +
+      (existingSig ?
+        '<div style="border:1px solid #d4c8b8;border-radius:8px;overflow:hidden;background:white;padding:4px">' +
+        '<img src="' + existingSig + '" style="width:100%;max-height:120px;object-fit:contain;display:block"></div>' +
+        (canEdit ? '<div class="sig-actions"><button class="btn-sig-clear" onclick="clearSig(\'' + canvasId + '\')">Effacer</button></div>' : '') +
+        '<div style="font-size:12px;color:#16a34a;font-weight:600;font-family:Inter,sans-serif;margin-top:4px">Lu et approuve — ' + dateStr + '</div>' :
+        '<canvas class="sig-canvas" id="' + canvasId + '" width="400" height="120"></canvas>' +
+        (canEdit ? '<div class="sig-actions"><button class="btn-sig-clear" onclick="clearSig(\'' + canvasId + '\')">Effacer</button></div>' : '') +
+        '<div style="font-size:12px;color:var(--ink-3);font-family:Inter,sans-serif;margin-top:4px">Lu et approuve</div>'
+      ) +
+      '</div>';
+  }
+
+  function addSignatureSection(f) {
+    var today = new Intl.DateTimeFormat('fr-FR').format(new Date());
+    var html = '<div class="signature-section">';
+    html += '<h4>Signatures</h4>';
+    html += '<p style="font-size:13px;font-family:Inter,sans-serif;color:var(--ink-3);margin-bottom:16px">Fait a ' + (f.signatureCity || '______') + ', le ' + today + ', en trois exemplaires originaux.</p>';
+    html += '<div class="signature-grid">';
+    html += sigBlock('Le Bailleur', f.landlordName || '', 'sig-bailleur', f.sig_bailleur, true);
+    html += sigBlock('Le Preneur', f.tenantName || '', 'sig-preneur', f.sig_locataire, true);
+    html += '</div>';
+    if (f.guarantorName) {
+      html += '<div style="margin-top:16px">' + sigBlock('La Caution solidaire', f.guarantorName, 'sig-caution', f.sig_garant, false) + '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function initSignatureCanvas(canvasId) {
+    var canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    var ctx = canvas.getContext('2d');
+    canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+    canvas.height = 120 * window.devicePixelRatio;
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    var drawing = false;
+    function getPos(e) {
+      var r = canvas.getBoundingClientRect();
+      var src = e.touches ? e.touches[0] : e;
+      return { x: (src.clientX - r.left) * (canvas.offsetWidth / r.width), y: (src.clientY - r.top) * (120 / r.height) };
+    }
+    canvas.addEventListener('mousedown', function(e) { drawing = true; var p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); });
+    canvas.addEventListener('mousemove', function(e) { if (!drawing) return; var p = getPos(e); ctx.lineTo(p.x, p.y); ctx.strokeStyle = '#1a1208'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke(); });
+    canvas.addEventListener('mouseup', function() { drawing = false; });
+    canvas.addEventListener('mouseleave', function() { drawing = false; });
+    canvas.addEventListener('touchstart', function(e) { e.preventDefault(); drawing = true; var p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }, { passive: false });
+    canvas.addEventListener('touchmove', function(e) { e.preventDefault(); if (!drawing) return; var p = getPos(e); ctx.lineTo(p.x, p.y); ctx.strokeStyle = '#1a1208'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke(); }, { passive: false });
+    canvas.addEventListener('touchend', function() { drawing = false; });
+  }
+
+  function clearSig(id) {
+    var canvas = document.getElementById(id);
+    if (!canvas) return;
+    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  async function init() {
+    var params = new URLSearchParams(window.location.search);
+    var leaseId = params.get('lease');
+    if (!leaseId) {
+      document.getElementById('loading').innerHTML = '<p style="color:#c0392b;font-family:Inter,sans-serif">Parametre lease manquant.</p>';
+      return;
+    }
+    var res = await db.from('leases').select('*').eq('id', leaseId).single();
+    if (res.error || !res.data) {
+      document.getElementById('loading').innerHTML = '<p style="color:#c0392b;font-family:Inter,sans-serif">Bail introuvable.</p>';
+      return;
+    }
+    var lease = res.data;
+    var f = (lease.data && lease.data.formData) ? lease.data.formData : lease.data || {};
+
+    document.getElementById('toolbar-title').textContent = 'Bail commercial';
+    document.getElementById('toolbar-sub').textContent = (f.tenantName || '—') + ' — ' + (f.propertyAddress || '—');
+    document.title = 'Bail commercial — ' + (f.tenantName || '') + ' — Bailo';
+
+    var html = buildContrat(f);
+    html += addSignatureSection(f);
+    html += '<p class="contract-footer" style="margin-top:24px">Document genere par Bailo — Bail commercial (art. L. 145-1 C. com.) — A titre indicatif uniquement. Verifier avec un professionnel du droit avant signature.</p>';
+
+    document.getElementById('print-area').innerHTML = html;
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('page-wrapper').style.display = '';
+
+    ['sig-bailleur', 'sig-preneur', 'sig-caution'].forEach(initSignatureCanvas);
+  }
+
+  init();
+</script>
+</body>
+</html>
