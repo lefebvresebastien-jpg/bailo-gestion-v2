@@ -3569,8 +3569,8 @@ const WIZARD_STEPS_CONTENT = {
         '<div class="form-group"><label>Duree du bail</label>' +
         '<select id="w-duration">' +
         (isCommercial ?
-          '<option value="Bail commercial 3-6-9 ans"' + (d.duration&&d.duration.includes('3-6-9')?' selected':' selected') + '>3-6-9 ans (commercial)</option>' +
-          '<option value="Bail debiteur 6 ans"' + (d.duration&&d.duration.includes('6 ans')?' selected':'') + '>6 ans (debiteur)</option>' :
+          '<option value="neuf (9) annees entieres et consecutives"' + (!d.duration||d.duration.includes('neuf')||d.duration.includes('3-6-9')?' selected':'') + '>9 ans - sortie possible tous les 3 ans (standard)</option>' +
+          '<option value="six (6) annees entieres et consecutives"' + (d.duration&&d.duration.includes('six')?' selected':'') + '>6 ans minimum (debiteur)</option>' :
         isPro ?
           '<option value="6 ans renouvelable"' + ' selected' + '>6 ans (professionnel)</option>' :
           '<option value="3 ans renouvelables par tacite reconduction"' + (!d.duration||d.duration.startsWith("3")?' selected':'') + '>3 ans (location vide)</option>' +
@@ -4001,7 +4001,7 @@ async function createLease() {
         deposit: _wizardData.deposit || '',
         rentDueDay: _wizardData.rentDueDay || 'Le 1 de chaque mois',
         duration: _wizardData.duration || (
-          (_wizardData.leaseType||'').includes('commercial') ? 'Bail 3-6-9 ans' :
+          (_wizardData.leaseType||'').includes('commercial') ? 'neuf (9) annees entieres et consecutives' :
           (_wizardData.leaseType||'').includes('professionnel') ? '6 ans renouvelable' :
           '3 ans renouvelables par tacite reconduction'
         ),
