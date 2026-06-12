@@ -4043,9 +4043,20 @@ async function createLease() {
 
   var dbOp;
   if (_wizardEditId) {
-    // Mise à jour
+    // Mise à jour — préserver les signatures et données non éditables
     delete payload.id;
     delete payload.bailleur_id;
+    var existingRes = await db.from('leases').select('data').eq('id', _wizardEditId).single();
+    if (existingRes.data && existingRes.data.data && existingRes.data.data.formData) {
+      var existingFD = existingRes.data.data.formData;
+      // Préserver signatures
+      if (existingFD.sig_bailleur) payload.data.formData.sig_bailleur = existingFD.sig_bailleur;
+      if (existingFD.sig_bailleur_at) payload.data.formData.sig_bailleur_at = existingFD.sig_bailleur_at;
+      if (existingFD.sig_locataire) payload.data.formData.sig_locataire = existingFD.sig_locataire;
+      if (existingFD.sig_locataire_at) payload.data.formData.sig_locataire_at = existingFD.sig_locataire_at;
+      if (existingFD.sig_garant) payload.data.formData.sig_garant = existingFD.sig_garant;
+      if (existingFD.sig_garant_at) payload.data.formData.sig_garant_at = existingFD.sig_garant_at;
+    }
     dbOp = await db.from('leases').update(payload).eq('id', _wizardEditId);
     // Mettre à jour unit_id si présent
     if (payload.unit_id) {
