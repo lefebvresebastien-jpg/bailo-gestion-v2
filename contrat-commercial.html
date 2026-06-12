@@ -337,16 +337,20 @@
 
   function sigBlock(label, name, canvasId, existingSig, canEdit) {
     var dateStr = existingSig ? new Intl.DateTimeFormat('fr-FR').format(new Date()) : '';
+    var saveFn = canvasId === 'sig-bailleur' ? 'saveBailleurSig()' : canvasId === 'sig-preneur' ? 'savePreneurSig()' : null;
     return '<div class="sig-box">' +
       '<span class="sig-label">' + label + '</span>' +
       '<span class="sig-name">' + (name || '') + '</span>' +
       (existingSig ?
         '<div style="border:1px solid #d4c8b8;border-radius:8px;overflow:hidden;background:white;padding:4px">' +
         '<img src="' + existingSig + '" style="width:100%;max-height:120px;object-fit:contain;display:block"></div>' +
-        (canEdit ? '<div class="sig-actions"><button class="btn-sig-clear" onclick="clearSig(\'' + canvasId + '\')">Effacer</button></div>' : '') +
-        '<div style="font-size:12px;color:#16a34a;font-weight:600;font-family:Inter,sans-serif;margin-top:4px">Lu et approuve — ' + dateStr + '</div>' :
+        '<div style="font-size:12px;color:#16a34a;font-weight:600;font-family:Inter,sans-serif;margin-top:4px">&#10003; Lu et approuve — ' + dateStr + '</div>' :
         '<canvas class="sig-canvas" id="' + canvasId + '" width="400" height="120"></canvas>' +
-        (canEdit ? '<div class="sig-actions"><button class="btn-sig-clear" onclick="clearSig(\'' + canvasId + '\')">Effacer</button></div>' : '') +
+        (canEdit ?
+          '<div class="sig-actions">' +
+          '<button class="btn-sig-clear" onclick="clearSig(\'' + canvasId + '\')">Effacer</button>' +
+          (saveFn ? '<button onclick="' + saveFn + '" style="font-size:11px;padding:4px 14px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:Inter,sans-serif;font-weight:600">Valider ma signature</button>' : '') +
+          '</div>' : '') +
         '<div style="font-size:12px;color:var(--ink-3);font-family:Inter,sans-serif;margin-top:4px">Lu et approuve</div>'
       ) +
       '</div>';
