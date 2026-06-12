@@ -1545,21 +1545,33 @@ async function loadRecentLeases() {
 async function loadRecentActivity() {
   const el = document.getElementById('activity-list');
   if (!el) return;
+
+  // S'assurer que _allLeases est chargé pour afficher les noms
+  if (!_allLeases.length) {
+    const { data: leasesData } = await db.from('leases').select('id, data');
+    _allLeases = leasesData || [];
+  }
+
   const { data, error } = await db.from('messages').select('id, kind, created_at, lease_id').order('created_at', { ascending: false }).limit(6);
   if (error || !data?.length) { el.innerHTML = emptyState('Aucune activité récente.'); return; }
-  const icons = { 'Quittance':'🧾','Message':'💬','EDL':'📋','Document':'📄','Incident':'⚠️' };
-  const labels = { 'Quittance':'Quittance envoyée','Message':'Message','EDL':'État des lieux','Document':'Document','Incident':'Incident' };
-  el.innerHTML = data.map(m => `
-    <div class="list-item">
-      <div class="list-item-icon">${icons[m.kind] || '📌'}</div>
-      <div class="list-item-body">
-        <div class="list-item-title">${labels[m.kind] || m.kind || 'Événement'}</div>
-        <div class="list-item-sub">${(_allLeases.find(l=>l.id===m.lease_id) ? leaseTenantName(_allLeases.find(l=>l.id===m.lease_id)) : 'Bail #'+(m.lease_id||'').substring(0,8))}</div>
-      </div>
-      <div class="list-item-right">
-        <div class="list-item-date">${formatRelative(m.created_at)}</div>
-      </div>
-    </div>`).join('');
+  const icons = { 'Quittance':'🧾','Renseignement':'💬','EDL':'📋','Document':'📄','Incident':'⚠️','Information':'ℹ️' };
+  const labels = { 'Quittance':'Quittance envoyée','Renseignement':'Message','EDL':'État des lieux','Document':'Document envoyé','Incident':'Incident déclaré','Information':'Information' };
+  el.innerHTML = data.map(function(m) {
+    var lease = _allLeases.find(function(l){ return l.id === m.lease_id; });
+    var tenantLabel = lease ? leaseTenantName(lease) : '—';
+    var adresseLabel = lease ? (leaseAddress(lease)||'').split(',')[0] : '';
+    return '<div class="list-item" style="cursor:pointer" onclick="openLeaseDetail(&#39;' + (m.lease_id||'') + '&#39;)">' +
+      '<div class="list-item-icon">' + (icons[m.kind] || '📌') + '</div>' +
+      '<div class="list-item-body">' +
+        '<div class="list-item-title">' + (labels[m.kind] || m.kind || 'Evenement') + '</div>' +
+        '<div class="list-item-sub" style="font-weight:600;color:var(--color-text)">' + tenantLabel + '</div>' +
+        (adresseLabel ? '<div class="list-item-sub">' + adresseLabel + '</div>' : '') +
+      '</div>' +
+      '<div class="list-item-right">' +
+        '<div class="list-item-date">' + formatRelative(m.created_at) + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
 }
 
 // ============================================================
