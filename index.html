@@ -652,6 +652,12 @@
             <button class="btn-secondary" onclick="ouvrirPanneauIRL(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px;background:var(--color-warning-light);border-color:var(--color-warning);color:#92400e">
               📈 Révision IRL
             </button>
+            <button class="btn-secondary" onclick="ouvrirRegularisation(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
+              📊 Régularisation
+            </button>
+            <button class="btn-secondary" onclick="ouvrirRegularisation(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
+              📊 Régularisation
+            </button>
             <button class="btn-primary" id="btn-voir-contrat" onclick="ouvrirContratV1(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
               📄 Voir le contrat
             </button>
@@ -1555,6 +1561,643 @@ async function envoyerEmailIRL(leaseId) {
     showToast('Erreur envoi email : ' + (e.message || e), 'error');
   }
 }
+
+
+// ══════════════════════════════════════════════════════════════
+//  MODULE RELANCES — Loyers en retard
+// ══════════════════════════════════════════════════════════════
+
+function checkRelances() {
+  if (!_allLeases || !_allLeases.length) return [];
+  var today = new Date();
+  var yearMonth = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0');
+  var alerts = [];
+  _allLeases.forEach(function(lease) {
+    var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+    if (!f.rent || !f.tenantName) return;
+    var key = lease.id + '_' + yearMonth;
+    var paye = _loyersStatus && _loyersStatus[key] === 'paye';
+    if (paye) return;
+    // Calculer le retard : dueDay = jour d'echeance (defaut 1)
+    var dueDay = parseInt((f.rentDueDay||'Le 1').replace(/\D/g,'')) || 1;
+    var dueDate = new Date(today.getFullYear(), today.getMonth(), dueDay);
+    var diffDays = Math.floor((today - dueDate) / (1000*60*60*24));
+    if (diffDays >= 0) {
+      alerts.push({
+        leaseId: lease.id,
+        tenantName: f.tenantName,
+        rent: parseFloat(f.rent) + (parseFloat(f.charges)||0),
+        diffDays: diffDays,
+        tenantEmail: f.tenantEmail || '',
+        propertyAddress: f.propertyAddress || ''
+      });
+    }
+  });
+  return alerts.sort(function(a,b){ return b.diffDays - a.diffDays; });
+}
+
+function renderRelanceBanner() {
+  var existing = document.getElementById('relance-banner');
+  if (existing) existing.remove();
+  var alerts = checkRelances();
+  if (!alerts.length) return;
+
+  var fc = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0});
+  var banner = document.createElement('div');
+  banner.id = 'relance-banner';
+  banner.style.cssText = 'background:rgba(220,38,38,.07);border:1px solid rgba(220,38,38,.25);border-radius:var(--radius-lg);padding:14px 18px;margin-bottom:16px;cursor:pointer';
+  banner.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between">' +
+    '<div><strong style="color:var(--color-danger);font-size:13px">⏰ ' + alerts.length + ' loyer(s) non confirmé(s) ce mois</strong>' +
+    '<div style="margin-top:6px;font-size:12px;color:var(--color-text-secondary)">' +
+    alerts.map(function(a) {
+      return '<span style="margin-right:12px">' + a.tenantName + ' — ' + fc.format(a.rent) +
+        (a.diffDays > 7 ? ' <span style="color:var(--color-danger);font-weight:600">(' + a.diffDays + 'j de retard)</span>' : ' <span style="color:var(--color-text-secondary)">(à confirmer)</span>') + '</span>';
+    }).join('') +
+    '</div></div>' +
+    '<button onclick="ouvrirModalRelances()" style="padding:7px 14px;background:var(--color-danger);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">Gérer les relances</button>' +
+    '</div>';
+  var dashEl = document.getElementById('page-dashboard');
+  var firstCard = dashEl ? dashEl.querySelector('.kpi-grid, .alerts-section, h1') : null;
+  if (firstCard) firstCard.parentNode.insertBefore(banner, firstCard);
+}
+
+function ouvrirModalRelances() {
+  document.getElementById('relances-overlay')?.remove();
+  var alerts = checkRelances();
+  var fc = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:2});
+  var today = new Date().toLocaleDateString('fr-FR');
+
+  var rows = alerts.map(function(a) {
+    var urgColor = a.diffDays > 14 ? 'var(--color-danger)' : a.diffDays > 7 ? '#d97706' : 'var(--color-text-secondary)';
+    return '<tr style="border-bottom:1px solid var(--color-border)">' +
+      '<td style="padding:10px 12px;font-weight:600">' + a.tenantName + '</td>' +
+      '<td style="padding:10px 12px;font-size:12px;color:var(--color-text-secondary)">' + a.propertyAddress + '</td>' +
+      '<td style="padding:10px 12px;font-weight:600">' + fc.format(a.rent) + '</td>' +
+      '<td style="padding:10px 12px;font-weight:600;color:' + urgColor + '">' + (a.diffDays === 0 ? "Aujourd\'hui" : a.diffDays + ' jours') + '</td>' +
+      '<td style="padding:10px 12px">' +
+        (a.tenantEmail ?
+          '<button onclick="envoyerRelanceEmail(\'' + a.leaseId + '\')" style="padding:5px 10px;font-size:11px;background:var(--color-warning-light);border:1px solid #f59e0b;border-radius:6px;cursor:pointer;color:#92400e;font-weight:600">📧 Relancer</button>' :
+          '<span style="font-size:11px;color:var(--color-text-secondary)">Pas d\'email</span>') +
+      '</td>' +
+      '</tr>';
+  }).join('');
+
+  var html = '<div id="relances-overlay" style="position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px">' +
+    '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:16px;padding:28px;width:680px;max-width:100%;max-height:90vh;overflow-y:auto">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">' +
+    '<div><h3 style="font-size:1.1rem;font-weight:700">⏰ Loyers non confirmés</h3>' +
+    '<p style="font-size:12px;color:var(--color-text-secondary);margin-top:2px">Baux dont le paiement n\'est pas marqué ce mois — ' + today + '</p></div>' +
+    '<button onclick="document.getElementById(\'relances-overlay\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--color-text-secondary)">×</button>' +
+    '</div>' +
+    '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+    '<thead><tr style="background:var(--color-bg-secondary)">' +
+    '<th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-secondary)">Locataire</th>' +
+    '<th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-secondary)">Adresse</th>' +
+    '<th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-secondary)">Loyer CC</th>' +
+    '<th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-secondary)">Retard</th>' +
+    '<th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-secondary)">Action</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<div style="display:flex;justify-content:flex-end;margin-top:16px;gap:10px">' +
+    '<button onclick="document.getElementById(\'relances-overlay\').remove()" style="padding:9px 18px;border:1.5px solid var(--color-border);border-radius:8px;background:none;font-size:13px;cursor:pointer;color:var(--color-text)">Fermer</button>' +
+    '<button onclick="envoyerToutesRelances()" style="padding:9px 18px;background:#e8793a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📧 Relancer tous</button>' +
+    '</div></div></div>';
+
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function envoyerRelanceEmail(leaseId) {
+  var lease = _allLeases.find(function(l) { return l.id === leaseId; });
+  if (!lease) return;
+  var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+  if (!f.tenantEmail) { showToast('Pas d\'email locataire pour ce bail.', 'error'); return; }
+  var fc = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'});
+  var loyer = parseFloat(f.rent) + (parseFloat(f.charges)||0);
+  var today = new Date().toLocaleDateString('fr-FR');
+  var body = 'Madame, Monsieur ' + (f.tenantName||'') + ',\n\n' +
+    'Sauf erreur ou omission de notre part, nous n\'avons pas encore recu le reglement de votre loyer du mois en cours.\n\n' +
+    'Montant du : ' + fc.format(loyer) + '\n' +
+    'Logement : ' + (f.propertyAddress||'') + '\n' +
+    'Date de rappel : ' + today + '\n\n' +
+    'Merci de proceder au reglement dans les meilleurs delais.\n' +
+    'En cas d\'erreur, veuillez ignorer ce message.\n\n' +
+    'Cordialement,\n' + (f.landlordName || 'Votre bailleur');
+  try {
+    var res = await db.functions.invoke('send-email', {
+      body: { to: f.tenantEmail, subject: 'Rappel loyer — ' + (f.propertyAddress||''), text: body }
+    });
+    if (res.error) throw res.error;
+    showToast('Relance envoyee a ' + f.tenantEmail + ' ✅');
+  } catch(e) {
+    showToast('Erreur envoi : ' + (e.message||e), 'error');
+  }
+}
+
+async function envoyerToutesRelances() {
+  var alerts = checkRelances().filter(function(a) { return a.tenantEmail; });
+  if (!alerts.length) { showToast('Aucun locataire avec email a relancer.', 'error'); return; }
+  showToast('Envoi de ' + alerts.length + ' relance(s)...');
+  for (var a of alerts) { await envoyerRelanceEmail(a.leaseId); }
+  document.getElementById('relances-overlay')?.remove();
+  showToast(alerts.length + ' relance(s) envoyee(s) ✅');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MODULE REGULARISATION — Décompte annuel charges (art. 23 loi 89-462)
+// ══════════════════════════════════════════════════════════════
+
+function ouvrirRegularisation(leaseId) {
+  document.getElementById('reg-overlay')?.remove();
+  var lease = _allLeases.find(function(l) { return l.id === leaseId; });
+  if (!lease) return;
+  var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+  var provMens = parseFloat(f.charges) || 0;
+
+  // Periode : annee ecoulee
+  var today = new Date();
+  var debut = new Date(today.getFullYear()-1, today.getMonth(), 1);
+  var fin = new Date(today.getFullYear(), today.getMonth(), 0);
+  var dateDebStr = debut.toISOString().split('T')[0];
+  var dateFinStr = fin.toISOString().split('T')[0];
+
+  var postes = [
+    { id: 'eau',          label: 'Eau froide et chaude' },
+    { id: 'ordures',      label: 'Taxe ordures menageres' },
+    { id: 'entretien',    label: 'Entretien parties communes' },
+    { id: 'ascenseur',    label: 'Ascenseur / monte-charge' },
+    { id: 'chauffage',    label: 'Chauffage collectif' },
+    { id: 'gardiennage',  label: 'Gardiennage / concierge' },
+    { id: 'espaces',      label: 'Espaces verts' },
+    { id: 'autre',        label: 'Autres charges' }
+  ];
+
+  var postesHtml = postes.map(function(p) {
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--color-border)">' +
+      '<label style="font-size:13px;color:var(--color-text)">' + p.label + '</label>' +
+      '<div style="display:flex;align-items:center;gap:6px">' +
+      '<input type="number" id="reg-' + p.id + '" min="0" step="0.01" placeholder="0.00" value="" oninput="recalcReg()" ' +
+      'style="width:100px;padding:6px 8px;border:1.5px solid var(--color-border);border-radius:7px;background:var(--color-bg);color:var(--color-text);font-size:13px;text-align:right">' +
+      '<span style="font-size:12px;color:var(--color-text-secondary)">€</span>' +
+      '</div></div>';
+  }).join('');
+
+  var html = '<div id="reg-overlay" style="position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto">' +
+    '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:16px;padding:28px;width:560px;max-width:100%;margin:auto">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">' +
+    '<h3 style="font-size:1.1rem;font-weight:700">📊 Regularisation des charges</h3>' +
+    '<button onclick="document.getElementById(\'reg-overlay\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--color-text-secondary)">×</button>' +
+    '</div>' +
+    '<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:20px">' + (f.tenantName||'—') + ' — ' + (f.propertyAddress||'—') + '</p>' +
+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">' +
+    '<div><label style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.05em">Periode du</label>' +
+    '<input type="date" id="reg-debut" value="' + dateDebStr + '" onchange="recalcReg()" style="width:100%;margin-top:4px;padding:7px 9px;border:1.5px solid var(--color-border);border-radius:7px;background:var(--color-bg);color:var(--color-text);font-size:13px"></div>' +
+    '<div><label style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.05em">Au</label>' +
+    '<input type="date" id="reg-fin" value="' + dateFinStr + '" onchange="recalcReg()" style="width:100%;margin-top:4px;padding:7px 9px;border:1.5px solid var(--color-border);border-radius:7px;background:var(--color-bg);color:var(--color-text);font-size:13px"></div>' +
+    '</div>' +
+
+    '<div style="background:var(--color-bg-secondary);border-radius:10px;padding:14px;margin-bottom:16px">' +
+    '<div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Provision mensuelle versee</div>' +
+    '<div style="display:flex;align-items:center;gap:8px">' +
+    '<input type="number" id="reg-prov-mens" value="' + provMens + '" oninput="recalcReg()" ' +
+    'style="width:80px;padding:7px 8px;border:1.5px solid var(--color-border);border-radius:7px;background:var(--color-bg);color:var(--color-text);font-size:13px">' +
+    '<span style="font-size:13px;color:var(--color-text-secondary)">€/mois — soit <strong id="reg-prov-total">—</strong> sur la periode</span>' +
+    '</div></div>' +
+
+    '<div style="font-size:11px;font-weight:700;color:var(--color-text);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Charges reelles par poste (decret 87-713)</div>' +
+    '<div style="max-height:240px;overflow-y:auto;margin-bottom:16px">' + postesHtml + '</div>' +
+
+    '<div style="background:var(--color-bg-secondary);border-radius:10px;padding:14px;margin-bottom:20px">' +
+    '<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px">' +
+    '<span style="color:var(--color-text-secondary)">Total charges reelles</span><strong id="reg-total-reel">0.00 €</strong></div>' +
+    '<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px">' +
+    '<span style="color:var(--color-text-secondary)">Provisions versees</span><strong id="reg-total-prov">0.00 €</strong></div>' +
+    '<div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--color-border);font-size:14px;font-weight:700">' +
+    '<span id="reg-solde-label">Solde</span><strong id="reg-solde" style="color:var(--color-text)">—</strong>' +
+    '</div></div>' +
+
+    '<div style="display:flex;gap:10px;justify-content:flex-end">' +
+    '<button onclick="document.getElementById(\'reg-overlay\').remove()" style="padding:9px 18px;border:1.5px solid var(--color-border);border-radius:8px;background:none;font-size:13px;cursor:pointer;color:var(--color-text)">Annuler</button>' +
+    '<button onclick="imprimerRegul(\'' + leaseId + '\')" style="padding:9px 18px;border:1.5px solid var(--color-border);border-radius:8px;background:var(--color-bg-secondary);font-size:13px;cursor:pointer;color:var(--color-text)">🖨️ Imprimer</button>' +
+    '<button onclick="envoyerRegul(\'' + leaseId + '\')" style="padding:9px 18px;background:#e8793a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📧 Envoyer au locataire</button>' +
+    '</div></div></div>';
+
+  document.body.insertAdjacentHTML('beforeend', html);
+  recalcReg();
+}
+
+function getPostesIds() {
+  return ['eau','ordures','entretien','ascenseur','chauffage','gardiennage','espaces','autre'];
+}
+
+function recalcReg() {
+  var prov = parseFloat(document.getElementById('reg-prov-mens')?.value) || 0;
+  var debut = document.getElementById('reg-debut')?.value;
+  var fin = document.getElementById('reg-fin')?.value;
+  var mois = 12;
+  if (debut && fin) {
+    var d1 = new Date(debut); var d2 = new Date(fin);
+    mois = Math.max(1, Math.round((d2 - d1) / (1000*60*60*24*30.44)));
+  }
+  var provTotal = prov * mois;
+  var totalReel = getPostesIds().reduce(function(s, id) {
+    return s + (parseFloat(document.getElementById('reg-' + id)?.value) || 0);
+  }, 0);
+  var solde = totalReel - provTotal;
+  var fc = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'});
+  var el = function(id) { return document.getElementById(id); };
+  if (el('reg-prov-total')) el('reg-prov-total').textContent = fc.format(provTotal) + ' (' + mois + ' mois)';
+  if (el('reg-total-reel')) el('reg-total-reel').textContent = fc.format(totalReel);
+  if (el('reg-total-prov')) el('reg-total-prov').textContent = fc.format(provTotal);
+  if (el('reg-solde')) {
+    el('reg-solde').textContent = (solde > 0 ? '+' : '') + fc.format(solde);
+    el('reg-solde').style.color = solde > 0 ? 'var(--color-danger)' : '#166534';
+  }
+  if (el('reg-solde-label')) el('reg-solde-label').textContent = solde > 0 ? 'Complement a payer' : solde < 0 ? 'Remboursement du' : 'Solde';
+}
+
+function getRegData(leaseId) {
+  var lease = _allLeases.find(function(l) { return l.id === leaseId; }) || {};
+  var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+  var prov = parseFloat(document.getElementById('reg-prov-mens')?.value) || 0;
+  var debut = document.getElementById('reg-debut')?.value;
+  var fin = document.getElementById('reg-fin')?.value;
+  var mois = 12;
+  if (debut && fin) {
+    var d1 = new Date(debut); var d2 = new Date(fin);
+    mois = Math.max(1, Math.round((d2 - d1) / (1000*60*60*24*30.44)));
+  }
+  var postes = [
+    {id:'eau',label:'Eau froide et chaude'},
+    {id:'ordures',label:'Taxe ordures menageres'},
+    {id:'entretien',label:'Entretien parties communes'},
+    {id:'ascenseur',label:'Ascenseur / monte-charge'},
+    {id:'chauffage',label:'Chauffage collectif'},
+    {id:'gardiennage',label:'Gardiennage / concierge'},
+    {id:'espaces',label:'Espaces verts'},
+    {id:'autre',label:'Autres charges'}
+  ];
+  var postesData = postes.map(function(p) {
+    return { label: p.label, montant: parseFloat(document.getElementById('reg-' + p.id)?.value) || 0 };
+  }).filter(function(p) { return p.montant > 0; });
+  var totalReel = postesData.reduce(function(s,p) { return s + p.montant; }, 0);
+  var provTotal = prov * mois;
+  return { f: f, debut: debut, fin: fin, mois: mois, provMens: prov, provTotal: provTotal, totalReel: totalReel, solde: totalReel - provTotal, postesData: postesData };
+}
+
+function imprimerRegul(leaseId) {
+  var data = getRegData(leaseId);
+  var f = data.f;
+  var soldeLabel = data.solde > 0 ? 'COMPLEMENT A PAYER par le locataire' : data.solde < 0 ? 'REMBOURSEMENT DU au locataire' : 'Solde nul';
+  var soldeColor = data.solde > 0 ? '#c84b00' : '#166534';
+  var fc = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'});
+  var postesHtml = data.postesData.map(function(p) {
+    return '<tr><td style="padding:8px 12px;border-bottom:1px solid #eee">' + p.label + '</td><td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right">' + fc.format(p.montant) + '</td></tr>';
+  }).join('') || '<tr><td colspan="2" style="padding:8px 12px;color:#888">Aucune charge renseignee</td></tr>';
+
+  var html = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Regularisation charges</title>' +
+    '<style>body{font-family:Georgia,serif;color:#222;max-width:700px;margin:40px auto;padding:0 20px;font-size:14px;line-height:1.6}' +
+    'h1{font-size:1.2rem}h2{font-size:1rem;margin:20px 0 8px}table{width:100%;border-collapse:collapse}' +
+    'th{background:#f5f5f5;padding:8px 12px;text-align:left}@media print{body{margin:20px}}</style></head><body>' +
+    '<div style="text-align:right;font-size:.85rem;color:#888">Bailo Gestion — ' + new Date().toLocaleDateString('fr-FR') + '</div>' +
+    '<h1>Decompte annuel des charges locatives</h1>' +
+    '<p style="font-size:.9rem;color:#555">Conformement a l\'article 23 de la loi n 89-462 du 6 juillet 1989</p><hr style="margin:16px 0">' +
+    '<table style="margin-bottom:16px"><tbody>' +
+    '<tr><td style="padding:4px 0;color:#555;width:180px">Bailleur</td><td><strong>' + (f.landlordName||'—') + '</strong></td></tr>' +
+    '<tr><td style="padding:4px 0;color:#555">Locataire</td><td><strong>' + (f.tenantName||'—') + '</strong></td></tr>' +
+    '<tr><td style="padding:4px 0;color:#555">Logement</td><td>' + (f.propertyAddress||'—') + '</td></tr>' +
+    '<tr><td style="padding:4px 0;color:#555">Periode</td><td>' + new Date(data.debut).toLocaleDateString('fr-FR') + ' au ' + new Date(data.fin).toLocaleDateString('fr-FR') + ' (' + data.mois + ' mois)</td></tr>' +
+    '</tbody></table>' +
+    '<h2>1. Charges reelles (decret 87-713)</h2>' +
+    '<table><thead><tr><th>Nature</th><th style="text-align:right">Montant</th></tr></thead>' +
+    '<tbody>' + postesHtml + '</tbody>' +
+    '<tfoot><tr style="font-weight:700;background:#f9f9f9"><td style="padding:10px 12px">TOTAL charges reelles</td><td style="padding:10px 12px;text-align:right">' + fc.format(data.totalReel) + '</td></tr></tfoot></table>' +
+    '<h2>2. Provisions versees</h2>' +
+    '<table><tbody>' +
+    '<tr><td style="padding:8px 12px;border-bottom:1px solid #eee">Provision mensuelle</td><td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right">' + fc.format(data.provMens) + '/mois</td></tr>' +
+    '<tr style="font-weight:700"><td style="padding:10px 12px;background:#f9f9f9">TOTAL provisions (' + data.mois + ' mois)</td><td style="padding:10px 12px;text-align:right;background:#f9f9f9">' + fc.format(data.provTotal) + '</td></tr>' +
+    '</tbody></table>' +
+    '<div style="margin-top:16px;padding:14px;border-radius:6px;background:' + (data.solde > 0 ? '#fff3f0' : '#f0fff4') + ';border:2px solid ' + soldeColor + ';color:' + soldeColor + ';font-size:1.1rem;font-weight:700">' +
+    soldeLabel + ' : ' + (data.solde > 0 ? '+' : '') + fc.format(data.solde) + '</div>' +
+    '<p style="font-size:.8rem;color:#888;margin-top:24px">Conformement a l\'article 23 de la loi du 6 juillet 1989. Les justificatifs sont tenus a votre disposition sur simple demande.</p>' +
+    '<div style="margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:40px">' +
+    '<div><p>Fait a __________, le __________</p><p style="margin-top:40px">Signature Bailleur :</p><div style="border-bottom:1px solid #222;margin-top:40px"></div></div>' +
+    '<div><p>&nbsp;</p><p style="margin-top:40px">Signature Locataire :</p><div style="border-bottom:1px solid #222;margin-top:40px"></div></div>' +
+    '</div></body></html>';
+
+  var win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  setTimeout(function() { win.print(); }, 500);
+}
+
+async function envoyerRegul(leaseId) {
+  var data = getRegData(leaseId);
+  var f = data.f;
+  if (!f.tenantEmail) { showToast('Email locataire non renseigne dans le bail.', 'error'); return; }
+  var fc = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'});
+  var soldeLabel = data.solde > 0 ? 'Complement a payer' : 'Remboursement';
+  var postesRows = data.postesData.map(function(p) {
+    return p.label + ' : ' + fc.format(p.montant);
+  }).join('\n') || 'Aucune charge renseignee';
+
+  var body = 'Madame, Monsieur ' + (f.tenantName||'') + ',\n\n' +
+    'Vous trouverez ci-dessous le decompte annuel des charges pour le logement situe au ' + (f.propertyAddress||'') + '.\n\n' +
+    'Periode : ' + new Date(data.debut).toLocaleDateString('fr-FR') + ' au ' + new Date(data.fin).toLocaleDateString('fr-FR') + ' (' + data.mois + ' mois)\n\n' +
+    'Charges reelles :\n' + postesRows + '\n' +
+    'Total charges : ' + fc.format(data.totalReel) + '\n' +
+    'Provisions versees (' + data.mois + ' mois x ' + fc.format(data.provMens) + ') : ' + fc.format(data.provTotal) + '\n\n' +
+    soldeLabel + ' : ' + (data.solde > 0 ? '+' : '') + fc.format(data.solde) + '\n\n' +
+    'Conformement a l\'article 23 de la loi du 6 juillet 1989. Les justificatifs sont a votre disposition sur demande.\n\n' +
+    'Cordialement,\n' + (f.landlordName || 'Votre bailleur');
+
+  try {
+    var res = await db.functions.invoke('send-email', {
+      body: { to: f.tenantEmail, subject: 'Decompte annuel des charges — ' + (f.propertyAddress||''), text: body }
+    });
+    if (res.error) throw res.error;
+    showToast('Decompte envoye a ' + f.tenantEmail + ' ✅');
+    document.getElementById('reg-overlay')?.remove();
+  } catch(e) {
+    showToast('Erreur envoi : ' + (e.message||e), 'error');
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════
+//  MODULE RELANCES — Loyers en retard
+// ══════════════════════════════════════════════════════════════
+
+function checkRelances() {
+  if (!_allLeases || !_allLeases.length) return [];
+  var today = new Date();
+  var yearMonth = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0');
+  var alerts = [];
+  _allLeases.forEach(function(lease) {
+    var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+    if (!f.rent || !f.tenantName) return;
+    var key = lease.id + '_' + yearMonth;
+    var paye = _loyersStatus && _loyersStatus[key] === 'paye';
+    if (paye) return;
+    var dueDay = parseInt((f.rentDueDay||'Le 1').replace(/\D/g,'')) || 1;
+    var dueDate = new Date(today.getFullYear(), today.getMonth(), dueDay);
+    var diffDays = Math.floor((today - dueDate) / (1000*60*60*24));
+    if (diffDays >= 0) {
+      alerts.push({
+        leaseId: lease.id,
+        tenantName: f.tenantName,
+        rent: parseFloat(f.rent) + (parseFloat(f.charges)||0),
+        diffDays: diffDays,
+        tenantEmail: f.tenantEmail || '',
+        propertyAddress: f.propertyAddress || ''
+      });
+    }
+  });
+  return alerts.sort(function(a,b){ return b.diffDays - a.diffDays; });
+}
+
+function renderRelanceBanner() {
+  var existing = document.getElementById('relance-banner');
+  if (existing) existing.remove();
+  if (!_allLeases || !_allLeases.length) return;
+  var alerts = checkRelances();
+  if (!alerts.length) return;
+  var fc = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0});
+  var banner = document.createElement('div');
+  banner.id = 'relance-banner';
+  banner.style.cssText = 'background:rgba(220,38,38,.07);border:1px solid rgba(220,38,38,.25);border-radius:var(--radius-lg);padding:14px 18px;margin-bottom:16px;cursor:pointer';
+  banner.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between">'
+    + '<div><strong style="color:var(--color-danger);font-size:13px">&#9200; ' + alerts.length + ' loyer(s) non confirm\u00e9(s) ce mois</strong>'
+    + '<div style="margin-top:6px;font-size:12px;color:var(--color-text-secondary)">'
+    + alerts.map(function(a) {
+        return a.tenantName + ' \u2014 ' + fc.format(a.rent)
+          + (a.diffDays > 7 ? ' <span style="color:var(--color-danger);font-weight:600">(' + a.diffDays + 'j de retard)</span>' : ' <span style="color:var(--color-text-secondary)">(&#224; confirmer)</span>');
+      }).join(' &nbsp;&bull;&nbsp; ')
+    + '</div></div>'
+    + '<button onclick="ouvrirModalRelances()" style="padding:7px 14px;background:var(--color-danger);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">G\u00e9rer les relances</button>'
+    + '</div>';
+  var dashEl = document.getElementById('page-dashboard');
+  if (dashEl) {
+    var firstChild = dashEl.querySelector('.kpi-grid') || dashEl.querySelector('h1') || dashEl.firstElementChild;
+    if (firstChild) firstChild.parentNode.insertBefore(banner, firstChild);
+    else dashEl.prepend(banner);
+  }
+}
+
+function ouvrirModalRelances() {
+  document.getElementById('relances-overlay')?.remove();
+  var alerts = checkRelances();
+  var fc = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:2});
+  var today = new Date().toLocaleDateString('fr-FR');
+  var rows = alerts.map(function(a) {
+    var urgColor = a.diffDays > 14 ? 'var(--color-danger)' : a.diffDays > 7 ? '#d97706' : 'var(--color-text-secondary)';
+    return '<tr style="border-bottom:1px solid var(--color-border)">'
+      + '<td style="padding:10px 12px;font-weight:600">' + a.tenantName + '</td>'
+      + '<td style="padding:10px 12px;font-size:12px;color:var(--color-text-secondary)">' + a.propertyAddress + '</td>'
+      + '<td style="padding:10px 12px;font-weight:600">' + fc.format(a.rent) + '</td>'
+      + '<td style="padding:10px 12px;font-weight:600;color:' + urgColor + '">' + (a.diffDays === 0 ? "Aujourd'hui" : a.diffDays + 'j') + '</td>'
+      + '<td style="padding:10px 12px">'
+      + (a.tenantEmail
+          ? '<button onclick="envoyerRelanceEmail(\'' + a.leaseId + '\')" style="padding:5px 10px;font-size:11px;background:var(--color-warning-light);border:1px solid #f59e0b;border-radius:6px;cursor:pointer;color:#92400e;font-weight:600">&#128231; Relancer</button>'
+          : '<span style="font-size:11px;color:var(--color-text-secondary)">Pas d\'email</span>')
+      + '</td></tr>';
+  }).join('');
+  var html = '<div id="relances-overlay" style="position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px">'
+    + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:16px;padding:28px;width:680px;max-width:100%;max-height:90vh;overflow-y:auto">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">'
+    + '<div><h3 style="font-size:1.1rem;font-weight:700">&#9200; Loyers non confirm\u00e9s</h3>'
+    + '<p style="font-size:12px;color:var(--color-text-secondary);margin-top:2px">Baux dont le paiement n\'est pas marqu\u00e9 ce mois \u2014 ' + today + '</p></div>'
+    + '<button onclick="document.getElementById(\'relances-overlay\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer">&#215;</button>'
+    + '</div>'
+    + '<table style="width:100%;border-collapse:collapse;font-size:13px">'
+    + '<thead><tr style="background:var(--color-bg-secondary)">'
+    + '<th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--color-text-secondary)">Locataire</th>'
+    + '<th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--color-text-secondary)">Adresse</th>'
+    + '<th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--color-text-secondary)">Loyer CC</th>'
+    + '<th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--color-text-secondary)">Retard</th>'
+    + '<th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--color-text-secondary)">Action</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table>'
+    + '<div style="display:flex;justify-content:flex-end;margin-top:16px;gap:10px">'
+    + '<button onclick="document.getElementById(\'relances-overlay\').remove()" style="padding:9px 18px;border:1.5px solid var(--color-border);border-radius:8px;background:none;font-size:13px;cursor:pointer;color:var(--color-text)">Fermer</button>'
+    + '<button onclick="envoyerToutesRelances()" style="padding:9px 18px;background:#e8793a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">&#128231; Relancer tous</button>'
+    + '</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function envoyerRelanceEmail(leaseId) {
+  var lease = _allLeases.find(function(l) { return l.id === leaseId; });
+  if (!lease) return;
+  var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+  if (!f.tenantEmail) { showToast('Email locataire non renseigne.', 'error'); return; }
+  var fc = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'});
+  var loyer = parseFloat(f.rent) + (parseFloat(f.charges)||0);
+  var body = 'Madame, Monsieur ' + (f.tenantName||'') + ',\n\n'
+    + 'Sauf erreur, nous n\'avons pas encore recu le reglement de votre loyer du mois en cours.\n\n'
+    + 'Montant du : ' + fc.format(loyer) + '\n'
+    + 'Logement : ' + (f.propertyAddress||'') + '\n\n'
+    + 'Merci de proceder au reglement dans les meilleurs delais.\n\n'
+    + 'Cordialement,\n' + (f.landlordName || 'Votre bailleur');
+  try {
+    var res = await db.functions.invoke('send-email', {
+      body: { to: f.tenantEmail, subject: 'Rappel loyer — ' + (f.propertyAddress||''), text: body }
+    });
+    if (res.error) throw res.error;
+    showToast('Relance envoyee a ' + f.tenantEmail + ' \u2705');
+  } catch(e) {
+    showToast('Erreur envoi : ' + (e.message||e), 'error');
+  }
+}
+
+async function envoyerToutesRelances() {
+  var alerts = checkRelances().filter(function(a) { return a.tenantEmail; });
+  if (!alerts.length) { showToast('Aucun locataire avec email.', 'error'); return; }
+  showToast('Envoi de ' + alerts.length + ' relance(s)...');
+  for (var i = 0; i < alerts.length; i++) { await envoyerRelanceEmail(alerts[i].leaseId); }
+  document.getElementById('relances-overlay')?.remove();
+  showToast(alerts.length + ' relance(s) envoyee(s) \u2705');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MODULE REGULARISATION — art. 23 loi 89-462
+// ══════════════════════════════════════════════════════════════
+
+function ouvrirRegularisation(leaseId) {
+  document.getElementById('reg-overlay')?.remove();
+  var lease = _allLeases.find(function(l) { return l.id === leaseId; });
+  if (!lease) return;
+  var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+  var provMens = parseFloat(f.charges) || 0;
+  var today = new Date();
+  var debut = new Date(today.getFullYear()-1, today.getMonth(), 1).toISOString().split('T')[0];
+  var fin = new Date(today.getFullYear(), today.getMonth(), 0).toISOString().split('T')[0];
+  var postes = [
+    {id:'eau',label:'Eau froide et chaude'},
+    {id:'ordures',label:'Taxe ordures m\u00e9nag\u00e8res'},
+    {id:'entretien',label:'Entretien parties communes'},
+    {id:'ascenseur',label:'Ascenseur / monte-charge'},
+    {id:'chauffage',label:'Chauffage collectif'},
+    {id:'gardiennage',label:'Gardiennage / concierge'},
+    {id:'espaces',label:'Espaces verts'},
+    {id:'autre',label:'Autres charges'}
+  ];
+  var postesHtml = postes.map(function(p) {
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--color-border)">'
+      + '<label style="font-size:13px">' + p.label + '</label>'
+      + '<div style="display:flex;align-items:center;gap:6px">'
+      + '<input type="number" id="reg-' + p.id + '" min="0" step="0.01" placeholder="0.00" oninput="recalcReg()" style="width:100px;padding:6px 8px;border:1.5px solid var(--color-border);border-radius:7px;background:var(--color-bg);color:var(--color-text);font-size:13px;text-align:right">'
+      + '<span style="font-size:12px;color:var(--color-text-secondary)">\u20ac</span>'
+      + '</div></div>';
+  }).join('');
+  var html = '<div id="reg-overlay" style="position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto">'
+    + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:16px;padding:28px;width:540px;max-width:100%;margin:auto">'
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">'
+    + '<h3 style="font-size:1.1rem;font-weight:700">&#128202; R\u00e9gularisation des charges</h3>'
+    + '<button onclick="document.getElementById(\'reg-overlay\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer">&#215;</button>'
+    + '</div>'
+    + '<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:20px">' + (f.tenantName||'\u2014') + ' \u2014 ' + (f.propertyAddress||'\u2014') + '</p>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">'
+    + '<div><label style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.05em">P\u00e9riode du</label>'
+    + '<input type="date" id="reg-debut" value="' + debut + '" onchange="recalcReg()" style="width:100%;margin-top:4px;padding:7px 9px;border:1.5px solid var(--color-border);border-radius:7px;background:var(--color-bg);color:var(--color-text);font-size:13px"></div>'
+    + '<div><label style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.05em">Au</label>'
+    + '<input type="date" id="reg-fin" value="' + fin + '" onchange="recalcReg()" style="width:100%;margin-top:4px;padding:7px 9px;border:1.5px solid var(--color-border);border-radius:7px;background:var(--color-bg);color:var(--color-text);font-size:13px"></div>'
+    + '</div>'
+    + '<div style="background:var(--color-bg-secondary);border-radius:10px;padding:14px;margin-bottom:16px">'
+    + '<div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Provision mensuelle vers\u00e9e</div>'
+    + '<div style="display:flex;align-items:center;gap:8px">'
+    + '<input type="number" id="reg-prov-mens" value="' + provMens + '" oninput="recalcReg()" style="width:80px;padding:7px 8px;border:1.5px solid var(--color-border);border-radius:7px;background:var(--color-bg);color:var(--color-text);font-size:13px">'
+    + '<span style="font-size:13px;color:var(--color-text-secondary)">\u20ac/mois \u2014 soit <strong id="reg-prov-total">\u2014</strong> sur la p\u00e9riode</span>'
+    + '</div></div>'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Charges r\u00e9elles (d\u00e9cret 87-713)</div>'
+    + '<div style="max-height:240px;overflow-y:auto;margin-bottom:16px">' + postesHtml + '</div>'
+    + '<div style="background:var(--color-bg-secondary);border-radius:10px;padding:14px;margin-bottom:20px">'
+    + '<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px"><span style="color:var(--color-text-secondary)">Total charges r\u00e9elles</span><strong id="reg-total-reel">0.00 \u20ac</strong></div>'
+    + '<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px"><span style="color:var(--color-text-secondary)">Provisions vers\u00e9es</span><strong id="reg-total-prov">0.00 \u20ac</strong></div>'
+    + '<div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--color-border);font-size:14px;font-weight:700">'
+    + '<span id="reg-solde-label">Solde</span><strong id="reg-solde">\u2014</strong></div></div>'
+    + '<div style="display:flex;gap:10px;justify-content:flex-end">'
+    + '<button onclick="document.getElementById(\'reg-overlay\').remove()" style="padding:9px 18px;border:1.5px solid var(--color-border);border-radius:8px;background:none;font-size:13px;cursor:pointer;color:var(--color-text)">Annuler</button>'
+    + '<button onclick="imprimerRegul(\'' + leaseId + '\')" style="padding:9px 18px;border:1.5px solid var(--color-border);border-radius:8px;background:var(--color-bg-secondary);font-size:13px;cursor:pointer;color:var(--color-text)">\u{1F5A8} Imprimer</button>'
+    + '<button onclick="envoyerRegul(\'' + leaseId + '\')" style="padding:9px 18px;background:#e8793a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">&#128231; Envoyer</button>'
+    + '</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  recalcReg();
+}
+
+function recalcReg() {
+  var prov = parseFloat(document.getElementById('reg-prov-mens')?.value) || 0;
+  var debut = document.getElementById('reg-debut')?.value;
+  var fin = document.getElementById('reg-fin')?.value;
+  var mois = 12;
+  if (debut && fin) {
+    mois = Math.max(1, Math.round((new Date(fin) - new Date(debut)) / (1000*60*60*24*30.44)));
+  }
+  var ids = ['eau','ordures','entretien','ascenseur','chauffage','gardiennage','espaces','autre'];
+  var totalReel = ids.reduce(function(s,id) { return s + (parseFloat(document.getElementById('reg-'+id)?.value)||0); }, 0);
+  var provTotal = prov * mois;
+  var solde = totalReel - provTotal;
+  var fc = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'});
+  var el = function(id) { return document.getElementById(id); };
+  if (el('reg-prov-total')) el('reg-prov-total').textContent = fc.format(provTotal) + ' (' + mois + ' mois)';
+  if (el('reg-total-reel')) el('reg-total-reel').textContent = fc.format(totalReel);
+  if (el('reg-total-prov')) el('reg-total-prov').textContent = fc.format(provTotal);
+  if (el('reg-solde')) { el('reg-solde').textContent = (solde>0?'+':'') + fc.format(solde); el('reg-solde').style.color = solde>0?'var(--color-danger)':'#166534'; }
+  if (el('reg-solde-label')) el('reg-solde-label').textContent = solde>0?'Compl\u00e9ment \u00e0 payer':solde<0?'Remboursement d\u00fb':'Solde nul';
+}
+
+function getRegData(leaseId) {
+  var lease = (_allLeases||[]).find(function(l){ return l.id===leaseId; }) || {};
+  var f = (lease.data&&lease.data.formData)?lease.data.formData:{};
+  var prov = parseFloat(document.getElementById('reg-prov-mens')?.value)||0;
+  var debut = document.getElementById('reg-debut')?.value;
+  var fin = document.getElementById('reg-fin')?.value;
+  var mois = debut&&fin ? Math.max(1,Math.round((new Date(fin)-new Date(debut))/(1000*60*60*24*30.44))) : 12;
+  var postes = [{id:'eau',label:'Eau froide et chaude'},{id:'ordures',label:'Taxe ordures m\u00e9nag\u00e8res'},{id:'entretien',label:'Entretien parties communes'},{id:'ascenseur',label:'Ascenseur / monte-charge'},{id:'chauffage',label:'Chauffage collectif'},{id:'gardiennage',label:'Gardiennage / concierge'},{id:'espaces',label:'Espaces verts'},{id:'autre',label:'Autres charges'}];
+  var postesData = postes.map(function(p){ return {label:p.label,montant:parseFloat(document.getElementById('reg-'+p.id)?.value)||0}; }).filter(function(p){ return p.montant>0; });
+  var totalReel = postesData.reduce(function(s,p){ return s+p.montant; },0);
+  var provTotal = prov*mois;
+  return {f:f,debut:debut,fin:fin,mois:mois,provMens:prov,provTotal:provTotal,totalReel:totalReel,solde:totalReel-provTotal,postesData:postesData};
+}
+
+function imprimerRegul(leaseId) {
+  var data = getRegData(leaseId);
+  var f = data.f;
+  var fc = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'});
+  var solde = data.solde;
+  var soldeLabel = solde>0?'COMPLEMENT A PAYER':solde<0?'REMBOURSEMENT DU':'SOLDE NUL';
+  var soldeColor = solde>0?'#c84b00':'#166534';
+  var postesHtml = data.postesData.map(function(p){ return '<tr><td style="padding:8px 12px;border-bottom:1px solid #eee">'+p.label+'</td><td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right">'+fc.format(p.montant)+'</td></tr>'; }).join('') || '<tr><td colspan="2" style="padding:8px 12px;color:#888">Aucune charge renseign\u00e9e</td></tr>';
+  var html = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>R\u00e9gularisation</title><style>body{font-family:Georgia,serif;color:#222;max-width:700px;margin:40px auto;padding:0 20px;font-size:14px;line-height:1.6}h1{font-size:1.2rem}h2{font-size:1rem;margin:20px 0 8px}table{width:100%;border-collapse:collapse}th{background:#f5f5f5;padding:8px 12px;text-align:left}@media print{body{margin:20px}}</style></head><body>'
+    + '<div style="text-align:right;font-size:.85rem;color:#888">Bailo Gestion \u2014 '+new Date().toLocaleDateString('fr-FR')+'</div>'
+    + '<h1>D\u00e9compte annuel des charges locatives</h1>'
+    + '<p style="font-size:.9rem;color:#555">Conform\u00e9ment \u00e0 l\'article 23 de la loi n\u00b0 89-462 du 6 juillet 1989</p><hr style="margin:16px 0">'
+    + '<table style="margin-bottom:16px"><tbody><tr><td style="padding:4px 0;color:#555;width:180px">Bailleur</td><td><strong>'+(f.landlordName||'\u2014')+'</strong></td></tr><tr><td style="padding:4px 0;color:#555">Locataire</td><td><strong>'+(f.tenantName||'\u2014')+'</strong></td></tr><tr><td style="padding:4px 0;color:#555">Logement</td><td>'+(f.propertyAddress||'\u2014')+'</td></tr><tr><td style="padding:4px 0;color:#555">P\u00e9riode</td><td>'+new Date(data.debut).toLocaleDateString('fr-FR')+' au '+new Date(data.fin).toLocaleDateString('fr-FR')+' ('+data.mois+' mois)</td></tr></tbody></table>'
+    + '<h2>1. Charges r\u00e9elles (d\u00e9cret 87-713)</h2><table><thead><tr><th>Nature</th><th style="text-align:right">Montant</th></tr></thead><tbody>'+postesHtml+'</tbody><tfoot><tr style="font-weight:700;background:#f9f9f9"><td style="padding:10px 12px">TOTAL</td><td style="padding:10px 12px;text-align:right">'+fc.format(data.totalReel)+'</td></tr></tfoot></table>'
+    + '<h2>2. Provisions vers\u00e9es</h2><table><tbody><tr><td style="padding:8px 12px;border-bottom:1px solid #eee">Provision mensuelle</td><td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right">'+fc.format(data.provMens)+'/mois</td></tr><tr style="font-weight:700"><td style="padding:10px 12px;background:#f9f9f9">TOTAL ('+data.mois+' mois)</td><td style="padding:10px 12px;text-align:right;background:#f9f9f9">'+fc.format(data.provTotal)+'</td></tr></tbody></table>'
+    + '<div style="margin-top:16px;padding:14px;border-radius:6px;background:'+(solde>0?'#fff3f0':'#f0fff4')+';border:2px solid '+soldeColor+';color:'+soldeColor+';font-size:1.1rem;font-weight:700">'+soldeLabel+' : '+(solde>0?'+':'')+fc.format(solde)+'</div>'
+    + '<p style="font-size:.8rem;color:#888;margin-top:24px">Conform\u00e9ment \u00e0 l\'article 23 de la loi du 6 juillet 1989.</p>'
+    + '<div style="margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:40px"><div><p>Fait \u00e0 __________, le __________</p><p style="margin-top:40px">Signature Bailleur :</p><div style="border-bottom:1px solid #222;margin-top:40px"></div></div><div><p>&nbsp;</p><p style="margin-top:40px">Signature Locataire :</p><div style="border-bottom:1px solid #222;margin-top:40px"></div></div></div>'
+    + '</body></html>';
+  var win = window.open('','_blank'); win.document.write(html); win.document.close(); setTimeout(function(){ win.print(); },500);
+}
+
+async function envoyerRegul(leaseId) {
+  var data = getRegData(leaseId);
+  var f = data.f;
+  if (!f.tenantEmail) { showToast('Email locataire non renseign\u00e9.','error'); return; }
+  var fc = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'});
+  var soldeLabel = data.solde>0?'Compl\u00e9ment \u00e0 payer':'Remboursement';
+  var body = 'Madame, Monsieur '+(f.tenantName||'')+',\n\nVeuillez trouver le d\u00e9compte annuel des charges pour le logement situ\u00e9 au '+(f.propertyAddress||'')+'.\n\nP\u00e9riode : '+new Date(data.debut).toLocaleDateString('fr-FR')+' au '+new Date(data.fin).toLocaleDateString('fr-FR')+' ('+data.mois+' mois)\n\n'
+    + data.postesData.map(function(p){ return p.label+' : '+fc.format(p.montant); }).join('\n')
+    + '\n\nTotal charges r\u00e9elles : '+fc.format(data.totalReel)
+    + '\nProvisions vers\u00e9es : '+fc.format(data.provTotal)
+    + '\n\n'+soldeLabel+' : '+(data.solde>0?'+':'')+fc.format(data.solde)
+    + '\n\nConform\u00e9ment \u00e0 l\'article 23 de la loi du 6 juillet 1989.\n\nCordialement,\n'+(f.landlordName||'Votre bailleur');
+  try {
+    var res = await db.functions.invoke('send-email', { body: { to: f.tenantEmail, subject: 'D\u00e9compte annuel charges \u2014 '+(f.propertyAddress||''), text: body } });
+    if (res.error) throw res.error;
+    showToast('D\u00e9compte envoy\u00e9 \u2705'); document.getElementById('reg-overlay')?.remove();
+  } catch(e) { showToast('Erreur : '+(e.message||e),'error'); }
+}
+
 
 function showToast(msg, type = '', duration = 3000) {
   const el = document.getElementById('toast');
