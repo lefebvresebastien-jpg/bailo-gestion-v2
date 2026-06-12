@@ -1969,7 +1969,10 @@ async function renderSignatureStatus(leaseId) {
 
 function ouvrirContratV1(leaseId) {
   if (!leaseId) { showToast('Bail introuvable.', 'error'); return; }
-  window.open('/contrat.html?lease=' + leaseId, '_blank');
+  var lease = _allLeases.find(function(l){ return l.id === leaseId; });
+  var lt = lease && lease.data && lease.data.formData ? (lease.data.formData.leaseType||'') : '';
+  var isComm = lt.includes('commercial') || lt.includes('Commercial');
+  window.open((isComm ? '/contrat-commercial.html' : '/contrat.html') + '?lease=' + leaseId, '_blank');
 }
 
 
@@ -3370,6 +3373,7 @@ const WIZARD_STEPS_CONTENT = {
 
   2: function() {
     var d = _wizardData;
+    var isCommercialLease2 = (d.leaseType||'').includes('commercial') || (d.leaseType||'').includes('Commercial') || (d.leaseType||'').includes('professionnel');
     var dpeOptions = ['A','B','C','D','E','F','G'].map(function(c) {
       return '<option value="' + c + '"' + (d.dpeClass===c?' selected':'') + '>' + c + '</option>';
     }).join('');
@@ -3382,6 +3386,8 @@ const WIZARD_STEPS_CONTENT = {
         '<option value="Location vide"' + (d.leaseType==='Location vide'?' selected':'') + '>Location vide</option>' +
         '<option value="Location meublee"' + (d.leaseType==='Location meublee'?' selected':'') + '>Location meublee</option>' +
         '<option value="Bail mobilite"' + (d.leaseType==='Bail mobilite'?' selected':'') + '>Bail mobilite</option>' +
+        '<option value="Bail commercial 3-6-9"' + (d.leaseType==='Bail commercial 3-6-9'?' selected':'') + '>Bail commercial 3-6-9</option>' +
+        '<option value="Bail professionnel 6 ans"' + (d.leaseType==='Bail professionnel 6 ans'?' selected':'') + '>Bail professionnel 6 ans</option>' +
         '</select></div>' +
         '<div class="form-group"><label>Surface</label>' +
         '<input type="text" id="w-surface" value="' + (d.surface||'') + '" placeholder="45 m2" /></div>' +
@@ -3404,7 +3410,20 @@ const WIZARD_STEPS_CONTENT = {
         '<div class="form-group"><label>Eau chaude</label>' +
         '<input type="text" id="w-hotWaterType" value="' + (d.hotWaterType||'') + '" placeholder="Individuelle" /></div>' +
       '</div>' +
-      buildDpeField(d);
+      buildDpeField(d) +
+      (isCommercialLease2 ?
+        '<div class="wizard-section-title" style="margin-top:var(--space-lg)">Locaux commerciaux</div>' +
+        '<div class="form-group"><label>Destination contractuelle *</label>' +
+        '<input type="text" id="w-commercialDestination" value="' + (d.commercialDestination||'') + '" placeholder="Usage commercial - vente detail, restauration..." /></div>' +
+        '<div class="form-group"><label>Description des locaux</label>' +
+        '<textarea id="w-localDescription" rows="3" style="width:100%;padding:9px 12px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;font-size:13px;outline:none">' + (d.localDescription||'') + '</textarea></div>' +
+        '<div class="form-row">' +
+          '<div class="form-group"><label>Reference cadastrale / lot</label>' +
+          '<input type="text" id="w-cadastralRef" value="' + (d.cadastralRef||'') + '" placeholder="Lot n 12, bat A..." /></div>' +
+          '<div class="form-group"><label>Activites autorisees</label>' +
+          '<input type="text" id="w-authorizedActivity" value="' + (d.authorizedActivity||'') + '" placeholder="Activite autorisee..." /></div>' +
+        '</div>'
+      : '');
   },
 
   3: function() {
@@ -3488,6 +3507,16 @@ const WIZARD_STEPS_CONTENT = {
       '<input type="text" id="w-tenantAddress" value="' + (d.tenantAddress||'') + '" placeholder="Adresse avant entree dans les lieux" /></div>' +
       '<div class="form-group"><label>Piece d\'identite</label>' +
       '<input type="text" id="w-tenantIdDoc" value="' + (d.tenantIdDoc||'') + '" placeholder="CNI n 123456789" /></div>' +
+      ((_wizardData.leaseType||'').includes('commercial') || (_wizardData.leaseType||'').includes('Commercial') ?
+        '<div class="form-row">' +
+          '<div class="form-group"><label>Forme juridique</label>' +
+          '<input type="text" id="w-tenantLegalForm" value="' + (d.tenantLegalForm||'') + '" placeholder="SARL, SAS, EI..." /></div>' +
+          '<div class="form-group"><label>SIRET</label>' +
+          '<input type="text" id="w-tenantSiret" value="' + (d.tenantSiret||'') + '" placeholder="12345678900012" /></div>' +
+        '</div>' +
+        '<div class="form-group"><label>Immatriculation RCS</label>' +
+        '<input type="text" id="w-tenantRCS" value="' + (d.tenantRCS||'') + '" placeholder="Paris B 123 456 789" /></div>'
+      : '') +
       '<div class="wizard-section-title" style="margin-top:var(--space-lg)">Le garant (optionnel)</div>' +
       '<div class="form-row">' +
         '<div class="form-group"><label>Nom du garant</label>' +
@@ -3570,10 +3599,52 @@ const WIZARD_STEPS_CONTENT = {
 
   5: function() {
     var d = _wizardData;
+    var isComm5 = (d.leaseType||'').includes('commercial') || (d.leaseType||'').includes('Commercial');
+
+    if (isComm5) {
+      // Clauses specifiques bail commercial
+      var clausesComm = [
+        ['clauseResolutory','Clause resolutoire (1 mois)'],
+        ['clauseInsurance','Assurance professionnelle'],
+        ['clauseRentReview','Indexation ILC/ILAT annuelle'],
+        ['clauseCession','Cession avec fonds de commerce'],
+        ['clauseNoSubletting','Interdiction sous-location'],
+        ['clauseTripleNet','Charges triple net'],
+        ['clauseVisits','Droit de visite bailleur'],
+        ['clauseSolidarity','Solidarite et indivisibilite'],
+        ['clauseLatePenalty','Penalites 30% retard'],
+        ['clausePreemption','Droit preemption bailleur (cession)']
+      ];
+      var cbComm = clausesComm.map(function(c) {
+        return '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--color-border);background:var(--color-bg)">' +
+          '<input type="checkbox" id="w-' + c[0] + '"' + (d[c[0]] !== false ? ' checked' : '') + ' style="accent-color:var(--color-primary)" />' +
+          c[1] + '</label>';
+      }).join('');
+      return '<div class="wizard-section-title">Clauses bail commercial</div>' +
+        '<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#92400e">Clauses incluses d\'office dans le contrat Code de commerce. Decochez pour les supprimer.</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:var(--space-lg)">' + cbComm + '</div>' +
+        '<div class="form-group"><label>Clauses speciales</label>' +
+        '<textarea id="w-specialClauses" rows="3" style="width:100%;padding:9px 12px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;font-size:13px;outline:none">' + (d.specialClauses||'') + '</textarea></div>' +
+        '<div class="form-group"><label>Conditions suspensives</label>' +
+        '<textarea id="w-suspensiveConditions" rows="2" style="width:100%;padding:9px 12px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;font-size:13px;outline:none">' + (d.suspensiveConditions||'') + '</textarea></div>' +
+        '<div class="form-row">' +
+          '<div class="form-group"><label>TVA applicable</label>' +
+          '<select id="w-tvaApplicable">' +
+          '<option value="non"' + (d.tvaApplicable==='non'?' selected':' selected') + '>Non assujetti</option>' +
+          '<option value="oui"' + (d.tvaApplicable==='oui'?' selected':'') + '>Assujetti TVA</option>' +
+          '</select></div>' +
+          '<div class="form-group"><label>Taxe fonciere (clause)</label>' +
+          '<input type="text" id="w-taxeFonciere" value="' + (d.taxeFonciere||'A la charge du Preneur') + '" /></div>' +
+        '</div>' +
+        '<div class="form-group"><label>Annexes fournies</label>' +
+        '<input type="text" id="w-annexesProvided" value="' + (d.annexesProvided||'Etat des lieux, etat des risques (ERP)') + '" /></div>';
+    }
+
+    // Bail habitation (comportement original)
     var clauses = [
       ['clauseRentReview','Revision annuelle du loyer'],
       ['clauseResolutory','Clause resolutoire'],
-      ['clauseInsurance','Obligation d\'assurance'],
+      ['clauseInsurance','Obligation assurance'],
       ['clauseMaintenance','Entretien courant'],
       ['clauseVisits','Droit de visite'],
       ['clauseNoSubletting','Interdiction de sous-location'],
@@ -3744,6 +3815,13 @@ function collectStepData() {
     case 2:
       _wizardData.propertyAddress = g('w-propertyAddress');
       _wizardData.leaseType = g('w-leaseType');
+      var isComm2 = (_wizardData.leaseType||'').includes('commercial') || (_wizardData.leaseType||'').includes('professionnel');
+      if (isComm2) {
+        _wizardData.commercialDestination = g('w-commercialDestination');
+        _wizardData.localDescription = g('w-localDescription');
+        _wizardData.cadastralRef = g('w-cadastralRef');
+        _wizardData.authorizedActivity = g('w-authorizedActivity');
+      }
       _wizardData.surface = g('w-surface');
       _wizardData.propertyFloor = g('w-propertyFloor');
       _wizardData.rooms = g('w-rooms');
@@ -3765,6 +3843,9 @@ function collectStepData() {
       _wizardData.guarantorType = g('w-guarantorType');
       _wizardData.guarantorAddress = g('w-guarantorAddress');
       _wizardData.guarantorIncome = g('w-guarantorIncome');
+      _wizardData.tenantLegalForm = g('w-tenantLegalForm');
+      _wizardData.tenantSiret = g('w-tenantSiret');
+      _wizardData.tenantRCS = g('w-tenantRCS');
       break;
     case 4:
       _wizardData.rent = g('w-rent');
@@ -3787,9 +3868,14 @@ function collectStepData() {
       _wizardData.clauseNoTransformation = gc('w-clauseNoTransformation');
       _wizardData.clauseSolidarity = gc('w-clauseSolidarity');
       _wizardData.clauseLatePenalty = gc('w-clauseLatePenalty');
+      _wizardData.clauseCession = gc('w-clauseCession');
+      _wizardData.clauseTripleNet = gc('w-clauseTripleNet');
+      _wizardData.clausePreemption = gc('w-clausePreemption');
       _wizardData.specialClauses = g('w-specialClauses');
       _wizardData.suspensiveConditions = g('w-suspensiveConditions');
       _wizardData.annexesProvided = g('w-annexesProvided');
+      _wizardData.tvaApplicable = g('w-tvaApplicable');
+      _wizardData.taxeFonciere = g('w-taxeFonciere');
       break;
   }
 }
@@ -5527,3 +5613,4 @@ async function sendBailoMessage() {
 </script>
 </body>
 </html>
+
