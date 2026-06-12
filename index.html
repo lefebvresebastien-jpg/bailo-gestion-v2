@@ -633,6 +633,14 @@
           </div>
         </div>
 
+        <!-- Bandeau avertissement bail commercial -->
+        <div id="commercial-lease-warn" style="display:none;margin-bottom:16px">
+          <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:10px;padding:14px 18px;font-size:13px;color:#92400e">
+            <strong>⚠️ Bail commercial (Code de Commerce)</strong> — Ce contrat est indicatif uniquement.
+            Faites rédiger ce bail par un <strong>notaire ou avocat spécialisé</strong> en droit commercial avant toute signature.
+          </div>
+        </div>
+
         <div class="detail-grid">
           <!-- Colonne gauche -->
           <div style="display:flex;flex-direction:column;gap:var(--space-lg)">
@@ -1941,17 +1949,7 @@ function renderLeaseDetail(lease) {
   // Alerte bail commercial
   const isCommercialLease = (f.leaseType||'').toLowerCase().includes('commercial') || (f.leaseType||'').toLowerCase().includes('professionnel');
   var warnZone = document.getElementById('commercial-lease-warn');
-  if (!warnZone) {
-    warnZone = document.createElement('div');
-    warnZone.id = 'commercial-lease-warn';
-    var detailCol = document.querySelector('.lease-detail-scroll') || document.querySelector('.lease-detail');
-    if (detailCol) detailCol.insertBefore(warnZone, detailCol.firstChild);
-  }
-  warnZone.innerHTML = isCommercialLease ?
-    '<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:10px;padding:12px 16px;margin:12px 0 4px;font-size:12px;color:#92400e">' +
-    '<strong>⚠️ Bail commercial (Code de Commerce)</strong> — Le contrat généré est indicatif. ' +
-    'Faites rédiger ce bail par un notaire ou avocat spécialisé avant toute signature.</div>'
-    : '';
+  if (warnZone) warnZone.style.display = isCommercialLease ? 'block' : 'none';
 
   // Helper pour créer un champ
   const field = (label, value) => value ? `
