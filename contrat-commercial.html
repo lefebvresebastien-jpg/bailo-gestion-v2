@@ -400,6 +400,78 @@
     canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
   }
 
+
+  function generateEDLCommercial(f) {
+    var today = new Intl.DateTimeFormat('fr-FR').format(new Date());
+    var entryDate = f.effectiveDate ? formatDate(f.effectiveDate) : today;
+    var surface = f.surface || 'NC';
+    var dest = f.commercialDestination || f.leaseType || 'Usage commercial';
+    var optHtml = ['Bon','Moyen','Mauvais','N/A'].map(function(o){return '<option>'+o+'</option>';}).join('');
+    var zones = [
+      { nom: 'Entree et acces', items: ['Porte entree (etat, fermeture, vitrage)', 'Sol (revetement, etat)', 'Murs et plafond', 'Eclairage'] },
+      { nom: 'Zone principale — ' + dest, items: ['Sol (revetement, etat)', 'Murs (peinture, revetement, fissures)', 'Plafond (etat, faux-plafond)', 'Vitrine et devanture', 'Eclairage general', 'Prises electriques', 'Chauffage et climatisation'] },
+      { nom: 'Reserve et stockage', items: ['Sol', 'Murs et plafond', 'Ventilation', 'Eclairage'] },
+      { nom: 'Bureau et espace administratif', items: ['Sol', 'Murs et plafond', 'Eclairage', 'Prises et connectique'] },
+      { nom: 'Sanitaires', items: ['WC (etat, chasse)', 'Lavabo (robinetterie, evacuation)', 'Sol et carrelage', 'Ventilation'] },
+      { nom: 'Facade et exterieur', items: ['Devanture et vitrine', 'Enseigne (si existante)', 'Store et banne (si existant)'] },
+      { nom: 'Installations techniques', items: ['Tableau electrique (conformite)', 'Compteur eau', 'Compteur electricite', 'VMC et ventilation', 'Plomberie (fuites apparentes)'] }
+    ];
+    var html = '<div style="margin-top:32px;padding-top:32px;border-top:2px solid var(--border)">';
+    html += '<h3 style="font-family:Inter,sans-serif;font-size:.85rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:4px;margin-bottom:8px">Annexe 1 — Etat des lieux commercial</h3>';
+    html += '<p style="font-size:.8rem;color:var(--ink-3);font-family:Inter,sans-serif;margin-bottom:16px">Local : ' + (f.propertyAddress||'—') + ' — Surface : ' + surface + ' — Date : ' + entryDate + '</p>';
+    zones.forEach(function(zone) {
+      html += '<div style="margin-bottom:14px;border:1px solid var(--border);border-radius:8px;overflow:hidden">';
+      html += '<div style="background:rgba(56,37,17,.05);padding:7px 12px;font-family:Inter,sans-serif;font-size:.78rem;font-weight:700;text-transform:uppercase">' + zone.nom + '</div>';
+      html += '<table style="width:100%;border-collapse:collapse;font-size:.8rem;font-family:Inter,sans-serif">';
+      html += '<thead><tr style="background:rgba(56,37,17,.03)"><th style="padding:5px 10px;text-align:left;border-bottom:1px solid var(--border);width:50%">Element</th><th style="padding:5px 10px;text-align:center;border-bottom:1px solid var(--border);width:18%">Etat</th><th style="padding:5px 10px;border-bottom:1px solid var(--border)">Observations</th></tr></thead><tbody>';
+      zone.items.forEach(function(item,i) {
+        html += '<tr style="' + (i%2?'background:rgba(56,37,17,.02)':'') + '"><td style="padding:5px 10px;border-bottom:1px solid var(--border)">' + item + '</td><td style="padding:5px 10px;border-bottom:1px solid var(--border);text-align:center"><select style="font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:4px">' + optHtml + '</select></td><td style="padding:5px 10px;border-bottom:1px solid var(--border)"><input type="text" placeholder="RAS" style="width:100%;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px" /></td></tr>';
+      });
+      html += '</tbody></table></div>';
+    });
+    html += '<div style="margin-top:12px;padding:12px;background:rgba(56,37,17,.03);border-radius:8px;font-family:Inter,sans-serif;font-size:.8rem">';
+    html += '<strong>Observations generales :</strong><br>';
+    html += '<textarea rows="3" placeholder="Observations sur les locaux..." style="width:100%;margin-top:6px;padding:7px;border:1px solid var(--border);border-radius:6px;font-size:.8rem;font-family:Inter,sans-serif;resize:vertical"></textarea>';
+    html += '</div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:16px"><div><div style="font-family:Inter,sans-serif;font-size:.75rem;font-weight:700;text-transform:uppercase;margin-bottom:6px">Signature Bailleur</div><div style="height:56px;border:1px solid var(--border);border-radius:6px;background:white"></div><div style="font-size:.73rem;color:var(--ink-3);font-family:Inter,sans-serif;margin-top:4px">Lu et approuve</div></div><div><div style="font-family:Inter,sans-serif;font-size:.75rem;font-weight:700;text-transform:uppercase;margin-bottom:6px">Signature Preneur</div><div style="height:56px;border:1px solid var(--border);border-radius:6px;background:white"></div><div style="font-size:.73rem;color:var(--ink-3);font-family:Inter,sans-serif;margin-top:4px">Lu et approuve</div></div></div>';
+    html += '</div>';
+    return html;
+  }
+
+  function generateAnnexesCommercial(f) {
+    var html = '<div style="margin-top:32px;padding-top:32px;border-top:2px solid var(--border)">';
+    html += '<h3 style="font-family:Inter,sans-serif;font-size:.85rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:4px;margin-bottom:16px">Annexe 2 — Inventaire charges et travaux (loi Pinel)</h3>';
+    var rows = [
+      ['Taxe fonciere','Preneur',f.taxeFonciere||'A la charge du Preneur','#166534'],
+      ['Taxe ordures menageres','Preneur','Refacturee sur justificatif','#166534'],
+      ['Charges de copropriete','Preneur','Au prorata milliemes','#166534'],
+      ['Primes assurance immeuble','Preneur','Quote-part au prorata','#166534'],
+      ['Assurance RC exploitation','Preneur','Police propre au Preneur','#166534'],
+      ['Eau, gaz, electricite','Preneur','Compteurs individuels','#166534'],
+      ['Entretien courant des locaux','Preneur','Exclusivement a sa charge','#166534'],
+      ['Grosses reparations (art. 606)','Bailleur','Gros murs, toiture, structure','#1d4ed8'],
+      ['Mise aux normes securite','Preneur','Frais et autorisations a sa charge','#166534']
+    ];
+    html += '<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px">';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:.8rem;font-family:Inter,sans-serif">';
+    html += '<thead><tr style="background:rgba(56,37,17,.05)"><th style="padding:7px 12px;text-align:left;border-bottom:1px solid var(--border);width:40%">Nature</th><th style="padding:7px 12px;text-align:center;border-bottom:1px solid var(--border);width:20%">A la charge du</th><th style="padding:7px 12px;border-bottom:1px solid var(--border)">Precision</th></tr></thead><tbody>';
+    rows.forEach(function(r,i) {
+      html += '<tr style="' + (i%2?'background:rgba(56,37,17,.02)':'') + '"><td style="padding:6px 12px;border-bottom:1px solid var(--border)">' + r[0] + '</td><td style="padding:6px 12px;border-bottom:1px solid var(--border);text-align:center;font-weight:600;color:' + r[3] + '">' + r[1] + '</td><td style="padding:6px 12px;border-bottom:1px solid var(--border);color:var(--ink-3)">' + r[2] + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    html += '<div style="margin-bottom:16px;padding:10px 14px;background:rgba(56,37,17,.03);border-radius:8px;font-size:.8rem;font-family:Inter,sans-serif">';
+    html += '<strong>Travaux Bailleur avant prise d&#39;effet :</strong> ' + (f.landlordWorks || 'Neant — locaux remis en etat.') + '<br>';
+    html += '<strong>Franchise de loyer :</strong> ' + (f.rentFreedom || 'Aucune franchise prevue.');
+    html += '</div>';
+    html += '<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">';
+    html += '<div style="background:rgba(56,37,17,.05);padding:7px 12px;font-family:Inter,sans-serif;font-size:.78rem;font-weight:700;text-transform:uppercase">Etat des risques et pollutions (ERP)</div>';
+    html += '<div style="padding:12px;font-size:.8rem;font-family:Inter,sans-serif">';
+    html += '<p>Conformement a l&#39;article L. 125-5 du Code de l&#39;environnement, les locaux situes au <strong>' + (f.propertyAddress||'—') + '</strong> ' + (f.riskZone ? 'sont situes dans une zone a risques. ERP de moins de 6 mois annexe.' : 'ne sont pas situes dans une zone couverte par un plan de prevention des risques naturels ou technologiques.') + '</p>';
+    html += '<p style="margin-top:6px">Le Preneur reconnait avoir recu l&#39;ERP a la date de signature.</p>';
+    html += '</div></div></div>';
+    return html;
+  }
+
   function checkCommAnnexes() {
     var ids = ['chk-contrat', 'chk-erp-comm', 'chk-dest'];
     var all = ids.every(function(id) { var el = document.getElementById(id); return el && el.checked; });
@@ -431,36 +503,7 @@
     canvas.parentElement.appendChild(ok);
   }
 
-  function checkCommAnnexes() {
-    var ids = ['chk-contrat', 'chk-erp-comm', 'chk-dest'];
-    var all = ids.every(function(id) { var el = document.getElementById(id); return el && el.checked; });
-    var btn = document.getElementById('btn-signer-comm');
-    if (btn) { btn.disabled = !all; btn.style.opacity = all ? '1' : '0.4'; btn.style.pointerEvents = all ? 'auto' : 'none'; }
-    var warn = document.getElementById('comm-warn');
-    if (warn) warn.style.display = all ? 'none' : 'block';
-  }
 
-  async function savePreneurMobile(leaseId) {
-    var canvas = document.getElementById('sig-preneur-mobile');
-    if (!canvas) return;
-    var blank = document.createElement('canvas'); blank.width = canvas.width; blank.height = canvas.height;
-    if (canvas.toDataURL() === blank.toDataURL()) { alert('Veuillez signer avant de valider.'); return; }
-    var sig = canvas.toDataURL('image/png');
-    var resp = await db.from('leases').select('data').eq('id', leaseId).single();
-    if (!resp.data) { alert('Bail introuvable.'); return; }
-    var ld = resp.data.data || {}; var fd = ld.formData || {};
-    fd.sig_locataire = sig; fd.sig_locataire_at = new Date().toISOString();
-    ld.formData = fd;
-    var res = await db.from('leases').update({ data: ld }).eq('id', leaseId);
-    if (res.error) { alert('Erreur : ' + res.error.message); return; }
-    var btn = document.getElementById('btn-signer-comm');
-    if (btn) { btn.textContent = 'Bail signe !'; btn.style.background = '#16a34a'; btn.disabled = true; btn.style.pointerEvents = 'none'; }
-    var ok = document.createElement('div');
-    ok.style.cssText = 'background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:16px;text-align:center;font-size:14px;font-weight:700;color:#166534;margin-top:12px';
-    ok.innerHTML = '&#10003; Bail signe le ' + new Intl.DateTimeFormat('fr-FR').format(new Date());
-    canvas.style.display = 'none';
-    canvas.parentElement.appendChild(ok);
-  }
 
   async function saveBailleurSig() {
     var canvas = document.getElementById('sig-bailleur');
@@ -536,6 +579,8 @@
 
     var html = buildContrat(f);
     html += addSignatureSection(f);
+    html += generateEDLCommercial(f);
+    html += generateAnnexesCommercial(f);
     html += '<p class="contract-footer" style="margin-top:24px">Document genere par Bailo — Bail commercial (art. L. 145-1 C. com.) — A titre indicatif uniquement. Verifier avec un professionnel du droit avant signature.</p>';
 
     document.getElementById('print-area').innerHTML = html;
