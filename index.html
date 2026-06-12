@@ -1938,6 +1938,20 @@ function renderLeaseDetail(lease) {
   document.getElementById('detail-sub').textContent = f.propertyAddress || '';
   document.getElementById('detail-status-badge').innerHTML = leaseStatusBadge(leaseStatus(lease));
 
+  // Alerte bail commercial
+  var warnZone = document.getElementById('commercial-lease-warn');
+  if (!warnZone) {
+    warnZone = document.createElement('div');
+    warnZone.id = 'commercial-lease-warn';
+    var detailCol = document.querySelector('.lease-detail-scroll') || document.querySelector('.lease-detail');
+    if (detailCol) detailCol.insertBefore(warnZone, detailCol.firstChild);
+  }
+  warnZone.innerHTML = isCommercialLease ?
+    '<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:10px;padding:12px 16px;margin:12px 0 4px;font-size:12px;color:#92400e">' +
+    '<strong>⚠️ Bail commercial (Code de Commerce)</strong> — Le contrat généré est indicatif. ' +
+    'Faites rédiger ce bail par un notaire ou avocat spécialisé avant toute signature.</div>'
+    : '';
+
   // Helper pour créer un champ
   const field = (label, value) => value ? `
     <div class="detail-field">
