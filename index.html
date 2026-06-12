@@ -3579,7 +3579,7 @@ const WIZARD_STEPS_CONTENT = {
         ) +
         '</select></div>' +
         '<div class="form-group"><label>' + (isCommercialOrPro ? 'Reference ILC/ILAT' : 'Reference IRL') + '</label>' +
-        '<input type="text" id="w-irlReference" value="' + (d.irlReference || (isCommercialOrPro ? 'ILC T4 2025 - indice 130,12' : 'T4 2025 - indice 145,73')) + '" /></div>' +
+        '<input type="text" id="w-irlReference" value="' + (d.irlReference || (isCommercial ? 'ILC T4 2024 - indice 130,12' : isPro ? 'ILAT T4 2024 - indice 138,50' : 'IRL T4 2025 - indice 145,73')) + '" /></div>' +
       '</div>' +
       '<div class="form-group"><label>Mode de paiement</label>' +
       '<input type="text" id="w-paymentTerms" value="' + (d.paymentTerms||'Par virement bancaire') + '" /></div>' +
