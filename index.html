@@ -1904,11 +1904,11 @@ async function renderSignatureStatus(leaseId) {
   };
 
   let html = sigRow('Bailleur', sigB, f.landlordEmail, '🏠');
+  const hasGarant = !!(f.guarantorName && f.guarantorName.trim() && f.guarantorName !== 'Aucun garant renseigné');
   html += sigRow('Locataire', sigL, f.tenantEmail, '👤');
   if (hasGarant) html += sigRow('Garant — ' + (f.guarantorName||''), sigG, f.guarantorEmail, '🤝');
 
   // Statut global
-  const hasGarant = !!(f.guarantorName && f.guarantorName.trim() && f.guarantorName !== 'Aucun garant renseigné');
   const allSigned = sigB && sigL && (!hasGarant || sigG);
   html += '<div style="margin-top:12px;padding:10px 14px;border-radius:8px;text-align:center;font-size:13px;font-weight:700;' +
     (allSigned ? 'background:#dcfce7;color:#166534' : 'background:#f1ede7;color:#6a5a40') + '">' +
