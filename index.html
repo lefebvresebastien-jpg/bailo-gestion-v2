@@ -2986,7 +2986,19 @@ function getLotWizardStepContent(step) {
     }
     if (!_wizardData.surface) _wizardData.surface = _wizardData.unitSurface || '';
     if (!_wizardData.propertyFloor) _wizardData.propertyFloor = _wizardData.unitFloor || '';
-    if (!_wizardData.leaseType) _wizardData.leaseType = _wizardData.unitFurnished ? 'Location meublee' : 'Location vide';
+    // Adapter le type de bail selon le type de lot
+    if (!_wizardData.leaseType) {
+      var ut = (_wizardData.unitType || '').toLowerCase();
+      if (ut.includes('commercial') || ut.includes('bureau') || ut.includes('entrepot')) {
+        _wizardData.leaseType = 'Bail commercial 3-6-9';
+      } else if (ut.includes('professionnel')) {
+        _wizardData.leaseType = 'Bail professionnel';
+      } else {
+        _wizardData.leaseType = _wizardData.unitFurnished ? 'Location meublee' : 'Location vide';
+      }
+    }
+    // Conserver l'unitId pour l'assigner au bail
+    if (_wizardData.unitId && !_wizardData._unitId) _wizardData._unitId = _wizardData.unitId;
     _wizardStep = bailStep;
     return WIZARD_STEPS_CONTENT[bailStep]();
   }
@@ -3400,35 +3412,51 @@ const WIZARD_STEPS_CONTENT = {
       var val = 'Le ' + n + ' de chaque mois';
       return '<option value="' + val + '"' + (d.rentDueDay===val?' selected':'') + '>Le ' + n + ' du mois</option>';
     }).join('');
+    var isCommercial = (d.leaseType||'').includes('commercial') || (d.leaseType||'').includes('Commercial');
+    var isPro = (d.leaseType||'').includes('professionnel');
+    var isCommercialOrPro = isCommercial || isPro;
+
     return '<div class="wizard-section-title">Conditions financieres</div>' +
+      (isCommercialOrPro ? '<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#92400e">⚠️ Bail ' + (isCommercial ? 'commercial 3-6-9 (Code de Commerce)' : 'professionnel 6 ans') + ' — Conditions specifiques applicables</div>' : '') +
       '<div class="form-row">' +
-        '<div class="form-group"><label>Loyer hors charges (€) *</label>' +
+        '<div class="form-group"><label>' + (isCommercialOrPro ? 'Loyer hors taxes (€) *' : 'Loyer hors charges (€) *') + '</label>' +
         '<input type="number" id="w-rent" value="' + (d.rent||'') + '" placeholder="700" step="0.01" /></div>' +
-        '<div class="form-group"><label>Charges (€)</label>' +
+        '<div class="form-group"><label>' + (isCommercialOrPro ? 'Charges (€ HT)' : 'Charges (€)') + '</label>' +
         '<input type="number" id="w-charges" value="' + (d.charges||'') + '" placeholder="50" step="0.01" /></div>' +
       '</div>' +
       '<div class="form-row">' +
-        '<div class="form-group"><label>Depot de garantie (€)</label>' +
-        '<input type="number" id="w-deposit" value="' + (d.deposit||'') + '" placeholder="700" step="0.01" /></div>' +
+        '<div class="form-group"><label>' + (isCommercial ? 'Depot de garantie (2-3 trimestres)' : 'Depot de garantie (€)') + '</label>' +
+        '<input type="number" id="w-deposit" value="' + (d.deposit||'') + '" placeholder="' + (isCommercial ? '4200' : '700') + '" step="0.01" /></div>' +
         '<div class="form-group"><label>Jour d\'echeance</label>' +
         '<select id="w-rentDueDay">' + dayOpts + '</select></div>' +
       '</div>' +
       '<div class="form-row">' +
         '<div class="form-group"><label>Duree du bail</label>' +
         '<select id="w-duration">' +
-        '<option value="3 ans renouvelables par tacite reconduction"' + (!d.duration||d.duration.startsWith("3")?' selected':'') + '>3 ans (location vide)</option>' +
-        '<option value="1 an renouvelable par tacite reconduction"' + (d.duration&&d.duration.startsWith("1")?' selected':'') + '>1 an (meuble)</option>' +
-        '<option value="9 mois non renouvelable"' + (d.duration&&d.duration.startsWith("9")?' selected':'') + '>9 mois (mobilite)</option>' +
+        (isCommercial ?
+          '<option value="Bail commercial 3-6-9 ans"' + (d.duration&&d.duration.includes('3-6-9')?' selected':' selected') + '>3-6-9 ans (commercial)</option>' +
+          '<option value="Bail debiteur 6 ans"' + (d.duration&&d.duration.includes('6 ans')?' selected':'') + '>6 ans (debiteur)</option>' :
+        isPro ?
+          '<option value="6 ans renouvelable"' + ' selected' + '>6 ans (professionnel)</option>' :
+          '<option value="3 ans renouvelables par tacite reconduction"' + (!d.duration||d.duration.startsWith("3")?' selected':'') + '>3 ans (location vide)</option>' +
+          '<option value="1 an renouvelable par tacite reconduction"' + (d.duration&&d.duration.startsWith("1")?' selected':'') + '>1 an (meuble)</option>' +
+          '<option value="9 mois non renouvelable"' + (d.duration&&d.duration.startsWith("9")?' selected':'') + '>9 mois (mobilite)</option>'
+        ) +
         '</select></div>' +
-        '<div class="form-group"><label>Reference IRL</label>' +
-        '<input type="text" id="w-irlReference" value="' + (d.irlReference||'T4 2025 - indice 145,73') + '" /></div>' +
+        '<div class="form-group"><label>' + (isCommercialOrPro ? 'Reference ILC/ILAT' : 'Reference IRL') + '</label>' +
+        '<input type="text" id="w-irlReference" value="' + (d.irlReference || (isCommercialOrPro ? 'ILC T4 2025 - indice 130,12' : 'T4 2025 - indice 145,73')) + '" /></div>' +
       '</div>' +
       '<div class="form-group"><label>Mode de paiement</label>' +
       '<input type="text" id="w-paymentTerms" value="' + (d.paymentTerms||'Par virement bancaire') + '" /></div>' +
       '<div class="form-group"><label>Regime des charges</label>' +
       '<select id="w-chargesRegime">' +
-      '<option value="Provision sur charges avec regularisation annuelle"' + (!d.chargesRegime||d.chargesRegime.includes('Provision')?' selected':'') + '>Provision avec regularisation</option>' +
-      '<option value="Forfait charges sans regularisation"' + (d.chargesRegime&&d.chargesRegime.includes('Forfait')?' selected':'') + '>Forfait sans regularisation</option>' +
+      (isCommercial ?
+        '<option value="Triple net - locataire paie toutes les charges"' + (d.chargesRegime&&d.chargesRegime.includes('Triple')?' selected':' selected') + '>Triple net (locataire paie tout)</option>' +
+        '<option value="Charges refacturees sur justificatifs"' + (d.chargesRegime&&d.chargesRegime.includes('justificatifs')?' selected':'') + '>Refacturees sur justificatifs</option>' +
+        '<option value="Forfait charges sans regularisation"' + (d.chargesRegime&&d.chargesRegime.includes('Forfait')?' selected':'') + '>Forfait sans regularisation</option>' :
+        '<option value="Provision sur charges avec regularisation annuelle"' + (!d.chargesRegime||d.chargesRegime.includes('Provision')?' selected':'') + '>Provision avec regularisation</option>' +
+        '<option value="Forfait charges sans regularisation"' + (d.chargesRegime&&d.chargesRegime.includes('Forfait')?' selected':'') + '>Forfait sans regularisation</option>'
+      ) +
       '</select></div>' +
       '<div class="form-group"><label>Date de signature du bail</label>' +
       '<input type="date" id="w-signatureDate" value="' + (d.signatureDate||'') + '" /></div>';
@@ -3780,7 +3808,11 @@ async function createLease() {
         charges: _wizardData.charges || '0',
         deposit: _wizardData.deposit || '',
         rentDueDay: _wizardData.rentDueDay || 'Le 1 de chaque mois',
-        duration: _wizardData.duration || '3 ans renouvelables par tacite reconduction',
+        duration: _wizardData.duration || (
+          (_wizardData.leaseType||'').includes('commercial') ? 'Bail 3-6-9 ans' :
+          (_wizardData.leaseType||'').includes('professionnel') ? '6 ans renouvelable' :
+          '3 ans renouvelables par tacite reconduction'
+        ),
         irlReference: _wizardData.irlReference || '',
         chargesRegime: _wizardData.chargesRegime || '',
         paymentTerms: _wizardData.paymentTerms || '',
@@ -3797,12 +3829,20 @@ async function createLease() {
         specialClauses: _wizardData.specialClauses || '',
         suspensiveConditions: _wizardData.suspensiveConditions || '',
         annexesProvided: _wizardData.annexesProvided || '',
-        noticePeriodTenant: '3 mois',
-        noticePeriodLandlord: '6 mois',
+        noticePeriodTenant: (_wizardData.leaseType||'').includes('commercial') ? '6 mois' : '3 mois',
+        noticePeriodLandlord: (_wizardData.leaseType||'').includes('commercial') ? '6 mois' : '6 mois',
+        irlType: (_wizardData.leaseType||'').includes('commercial') ? 'ILC' : 'IRL',
       }
     },
     updated_at: new Date().toISOString(),
   };
+
+  // Assigner unit_id si on vient du wizard lot
+  if (_wizardData.unitId) {
+    payload.unit_id = _wizardData.unitId;
+  } else if (_wizardData._unitId) {
+    payload.unit_id = _wizardData._unitId;
+  }
 
   var dbOp;
   if (_wizardEditId) {
@@ -3810,6 +3850,10 @@ async function createLease() {
     delete payload.id;
     delete payload.bailleur_id;
     dbOp = await db.from('leases').update(payload).eq('id', _wizardEditId);
+    // Mettre à jour unit_id si présent
+    if (payload.unit_id) {
+      await db.from('leases').update({ unit_id: payload.unit_id }).eq('id', _wizardEditId);
+    }
   } else {
     // Création
     dbOp = await db.from('leases').insert(payload);
