@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bail mobilité — Bailo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <style>
+    :root { --accent:#e8793a; --ink:#1a110a; --ink-2:#4a3728; --ink-3:#8a7060; --surface:#fdfaf6; --border:rgba(56,37,17,0.12); }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:Georgia,serif; background:#f0ebe4; color:var(--ink); }
+    .toolbar { position:fixed; top:0; left:0; right:0; z-index:100; background:#1a110a; color:#fff; display:flex; align-items:center; justify-content:space-between; padding:12px 24px; gap:16px; }
+    .toolbar-left { display:flex; align-items:center; gap:12px; }
+    .toolbar-title { font-family:Inter,sans-serif; font-size:15px; font-weight:600; }
+    .toolbar-sub { font-size:12px; opacity:.6; font-family:Inter,sans-serif; }
+    .btn-back { background:rgba(255,255,255,.1); color:#fff; border:none; padding:7px 14px; border-radius:8px; font-size:13px; cursor:pointer; font-family:Inter,sans-serif; }
+    .btn-print { background:var(--accent); color:#fff; border:none; padding:8px 20px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:Inter,sans-serif; }
+    .page-wrapper { max-width:860px; margin:0 auto; padding:80px 24px 48px; }
+    .contract-preview { background:var(--surface); border-radius:16px; padding:40px 48px; font-family:Georgia,serif; line-height:1.75; border:1px solid var(--border); box-shadow:0 4px 24px rgba(0,0,0,.08); }
+    .contract-header { border-bottom:2px solid var(--border); padding-bottom:24px; margin-bottom:28px; text-align:center; }
+    .contract-header .label { text-transform:uppercase; letter-spacing:.15em; font-size:.7rem; opacity:.55; margin-bottom:8px; font-family:Inter,sans-serif; }
+    .contract-header h3 { font-size:2rem; font-family:"Instrument Serif",Georgia,serif; margin-bottom:6px; }
+    .contract-header .subtitle { font-size:.82rem; color:var(--ink-3); font-family:Inter,sans-serif; margin-top:6px; }
+    .contract-preview section { margin-top:22px; }
+    .contract-preview h4 { font-size:.82rem; font-weight:700; margin-bottom:8px; font-family:Inter,sans-serif; text-transform:uppercase; letter-spacing:.06em; color:var(--accent); border-bottom:1px solid var(--border); padding-bottom:4px; }
+    .contract-preview p { margin-bottom:8px; font-size:.91rem; }
+    .contract-preview ul { padding-left:22px; margin-bottom:8px; }
+    .contract-preview li { font-size:.91rem; margin-bottom:5px; }
+    .mention-legale { background:#fef9f5; border:1px solid rgba(232,121,58,.25); border-radius:8px; padding:14px 18px; margin-top:10px; font-size:.82rem; color:var(--ink-3); font-family:Inter,sans-serif; line-height:1.6; }
+    .sig-section { margin-top:36px; padding-top:28px; border-top:2px solid var(--border); }
+    .sig-grid { display:grid; grid-template-columns:1fr 1fr; gap:32px; }
+    .sig-box { display:flex; flex-direction:column; gap:8px; }
+    .sig-label { font-size:12px; font-family:Inter,sans-serif; font-weight:600; color:var(--ink-2); text-transform:uppercase; letter-spacing:.05em; }
+    canvas.sig-canvas { border:1.5px solid var(--border); border-radius:8px; background:#fff; cursor:crosshair; touch-action:none; display:block; width:100%; height:120px; }
+    .sig-actions { display:flex; gap:8px; margin-top:4px; }
+    .btn-sig-clear { font-size:11px; padding:4px 10px; border:1px solid var(--border); border-radius:6px; background:#fff; cursor:pointer; font-family:Inter,sans-serif; color:var(--ink-3); }
+    .btn-sig-val { font-size:11px; padding:4px 14px; background:var(--accent); color:#fff; border:none; border-radius:6px; cursor:pointer; font-family:Inter,sans-serif; font-weight:600; }
+    .situation-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:12px 0; font-family:Inter,sans-serif; font-size:.85rem; }
+    .situation-item { display:flex; align-items:center; gap:8px; padding:8px 12px; border:1px solid var(--border); border-radius:8px; background:var(--surface); }
+    @media print { .toolbar { display:none !important; } .page-wrapper { padding:0; max-width:100%; } .contract-preview { border-radius:0; box-shadow:none; border:none; padding:20px; } body { background:white; } .sig-actions { display:none; } }
+    @media (max-width:600px) { .contract-preview { padding:20px; } .sig-grid { grid-template-columns:1fr; } .toolbar { padding:10px 16px; } }
+  </style>
+</head>
+<body>
+<div class="toolbar">
+  <div class="toolbar-left">
+    <button class="btn-back" onclick="history.back()">← Retour</button>
+    <div>
+      <div class="toolbar-title" id="toolbar-title">Bail mobilité</div>
+      <div class="toolbar-sub" id="toolbar-sub">Chargement…</div>
+    </div>
+  </div>
+  <button class="btn-print" onclick="window.print()">🖨️ Imprimer / PDF</button>
+</div>
+
+<div id="loading" style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px;font-family:Inter,sans-serif;color:#8a7060">
+  <div style="width:32px;height:32px;border:3px solid rgba(0,0,0,.1);border-top-color:#e8793a;border-radius:50%;animation:spin .8s linear infinite"></div>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+  <p>Chargement…</p>
+</div>
+
+<div id="page-wrapper" class="page-wrapper" style="display:none">
+  <div class="contract-preview" id="print-area"></div>
+</div>
+
+<script>
+  const SUPABASE_URL = 'https://nltuysmnxsomlhgvbtwz.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0';
+  const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  function fmtDate(s) { if (!s) return '___________'; try { return new Intl.DateTimeFormat('fr-FR').format(new Date(s)); } catch(e) { return s; } }
+  function fmtEur(v) { if (!v) return '—'; return new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:2}).format(parseFloat(v)); }
+  function val(v, fb) { return v || fb || '—'; }
+
+  var SITUATIONS = [
+    'Formation professionnelle',
+    'Études supérieures',
+    'Contrat apprentissage',
+    'Stage',
+    'Service civique',
+    'Mutation professionnelle',
+    'Mission temporaire professionnelle'
+  ];
+
+  function buildContrat(f) {
+    var loyer = parseFloat(f.rent)||0;
+    var charges = parseFloat(f.charges)||0;
+    var dureesMois = parseInt(f.mobilityDuration||f.duration)||'—';
+    var situation = f.mobilitySituation || f.specialClauses || '';
+
+    var html = '';
+
+    // EN-TETE
+    html += '<div class="contract-header">';
+    html += '<p class="label">Bail mobilité — Titre Ier ter — Loi n° 89-462 du 6 juillet 1989 (art. 25-12 à 25-18) — Loi ELAN</p>';
+    html += '<h3>BAIL MOBILITÉ</h3>';
+    html += '<p class="subtitle">Conclu entre les soussignés — Signé à ' + val(f.signatureCity) + ', le ' + (f.signatureDate?fmtDate(f.signatureDate):'___________') + '</p>';
+    html += '</div>';
+
+    // ART I — PARTIES
+    html += '<section><h4>I. Désignation des parties</h4>';
+    html += '<p><strong>Le Bailleur :</strong> <strong>' + val(f.landlordName) + '</strong>';
+    if (f.landlordAddress) html += ', domicilié au ' + f.landlordAddress;
+    if (f.landlordEmail) html += ', ' + f.landlordEmail;
+    html += ', ci-après désigné « le Bailleur ».</p>';
+    html += '<p style="margin-top:8px"><strong>Le Locataire :</strong> <strong>' + val(f.tenantName) + '</strong>';
+    if (f.tenantDOB) html += ', né(e) le ' + fmtDate(f.tenantDOB);
+    if (f.tenantEmail) html += ', ' + f.tenantEmail;
+    html += ', ci-après désigné « le Locataire ».</p>';
+    html += '</section>';
+
+    // ART II — OBJET
+    html += '<section><h4>II. Objet du contrat</h4>';
+    html += '<p>Le présent contrat a pour objet la location d\'un logement dans le cadre d\'un bail mobilité pour le Locataire justifiant être dans la situation suivante :</p>';
+    html += '<div class="situation-grid">';
+    SITUATIONS.forEach(function(s) {
+      var checked = situation.toLowerCase().includes(s.toLowerCase().split(' ')[0]);
+      html += '<div class="situation-item"><span style="font-size:16px">' + (checked?'☑':'☐') + '</span> ' + s + '</div>';
+    });
+    html += '</div>';
+    if (situation) html += '<p style="margin-top:8px"><strong>Situation justifiée :</strong> ' + situation + '</p>';
+    html += '</section>';
+
+    // ART II A — LOGEMENT
+    html += '<section><h4>II-A. Consistance du logement</h4>';
+    html += '<p><strong>Adresse :</strong> ' + val(f.propertyAddress) + '</p>';
+    if (f.postalCode) html += '<p><strong>Code postal :</strong> ' + f.postalCode + ' — <strong>Ville :</strong> ' + val(f.city) + '</p>';
+    if (f.surface) html += '<p><strong>Surface habitable :</strong> ' + f.surface + '</p>';
+    if (f.rooms) html += '<p><strong>Nombre de pièces :</strong> ' + f.rooms + '</p>';
+    html += '<p><strong>Chauffage :</strong> ' + val(f.heatingType,'Individuel') + ' — <strong>Eau chaude :</strong> ' + val(f.hotWater,'Individuelle') + '</p>';
+    html += '<p><strong>DPE :</strong> Classe ' + val(f.dpeClass,'—') + '</p>';
+    html += '</section>';
+
+    // ART III — DUREE
+    html += '<section><h4>III. Date de prise d\'effet et durée</h4>';
+    html += '<p><strong>Date d\'effet :</strong> ' + fmtDate(f.effectiveDate) + '</p>';
+    html += '<p><strong>Durée :</strong> <strong>' + dureesMois + ' mois</strong> (durée comprise entre 1 et 10 mois).</p>';
+    html += '<p style="margin-top:6px">Le bail mobilité est conclu pour une durée minimale d\'un mois et maximale de dix mois, <strong>non renouvelable et non reconductible</strong>. La durée peut être modifiée une seule fois par avenant sans dépasser 10 mois au total. À l\'expiration, si les parties souhaitent poursuivre, un nouveau bail soumis au titre Ier bis (bail meublé classique) devra être conclu.</p>';
+    html += '</section>';
+
+    // ART IV — CONDITIONS FINANCIERES
+    html += '<section><h4>IV. Conditions financières</h4>';
+    html += '<p><strong>Loyer mensuel :</strong> <strong>' + fmtEur(loyer) + '</strong></p>';
+    html += '<p><strong>Charges :</strong> Forfait mensuel de <strong>' + fmtEur(charges) + '</strong> (non régularisable — art. 25-14).</p>';
+    html += '<p><strong>Loyer charges comprises :</strong> <strong>' + fmtEur(loyer+charges) + '</strong></p>';
+    html += '<p style="margin-top:6px"><strong>Modalités :</strong> Paiement ' + val(f.rentDueDay,'le 1er de chaque mois') + ' par ' + val(f.paymentTerms,'virement bancaire') + '.</p>';
+    html += '<div class="mention-legale" style="margin-top:10px">Dans le cadre du bail mobilité, les charges sont récupérées sous forme d\'un <strong>forfait non régularisable</strong>. Aucune régularisation ultérieure ne peut être effectuée.</div>';
+    html += '</section>';
+
+    // ART V — TRAVAUX
+    html += '<section><h4>V. Travaux</h4>';
+    html += '<p>' + (f.landlordWorks || 'Aucun travaux effectué depuis la fin du dernier contrat de location.') + '</p>';
+    html += '</section>';
+
+    // ART VI — CLAUSE RESOLUTOIRE
+    html += '<section><h4>VI. Clause résolutoire</h4>';
+    html += '<p>Le bail sera résilié de plein droit en cas d\'inexécution des obligations du Locataire : défaut de paiement du loyer ou des charges à l\'échéance, défaut d\'assurance contre les risques locatifs, troubles de voisinage constatés par décision de justice. Le Bailleur devra faire signifier un commandement de payer par acte d\'huissier, laissant un délai de deux mois au Locataire pour régulariser sa situation avant toute assignation.</p>';
+    html += '</section>';
+
+    // ART VII — DEPOT DE GARANTIE
+    html += '<section><h4>VII. Dépôt de garantie et caution</h4>';
+    html += '<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;font-family:Inter,sans-serif;font-size:.85rem;color:#92400e"><strong>Important :</strong> Dans le cadre du bail mobilité, <strong>aucun dépôt de garantie ne peut être exigé</strong> par le Bailleur (art. 25-15 loi 89-462). De même, toute clause de solidarité entre colocataires ou cautions est réputée non écrite.</div>';
+    html += '<p style="margin-top:10px">Le Bailleur peut en revanche recourir au dispositif <strong>Visale</strong> (cautionnement gratuit proposé par Action Logement) comme garantie de paiement des loyers.</p>';
+    html += '</section>';
+
+    // ART VIII — CONDITIONS PARTICULIERES
+    html += '<section><h4>VIII. Autres conditions particulières</h4>';
+    html += '<p>' + (f.otherClauses || 'Néant.') + '</p>';
+    html += '</section>';
+
+    // ART IX — ANNEXES
+    html += '<section><h4>IX. Annexes</h4>';
+    html += '<ul>';
+    html += '<li>A. Règlement de copropriété (si applicable)</li>';
+    html += '<li>B. Dossier de diagnostic technique : DPE (classe ' + val(f.dpeClass,'—') + '), CREP (si immeuble avant 1949), état des risques et pollutions</li>';
+    html += '<li>C. Notice d\'information relative aux droits et obligations des locataires et bailleurs</li>';
+    html += '<li>D. État des lieux d\'entrée, inventaire et état détaillé du mobilier</li>';
+    html += '<li>E. Justificatif de la situation du Locataire (formation, études, stage, etc.)</li>';
+    if (f.loiEncadrement) html += '<li>F. Références aux loyers habituellement constatés dans le voisinage</li>';
+    html += '</ul>';
+    html += '</section>';
+
+    // MENTION LEGALE
+    html += '<div class="mention-legale"><strong>Avertissement :</strong> Ce bail mobilité est soumis aux articles 25-12 à 25-18 de la loi n° 89-462 du 6 juillet 1989 (loi ELAN). Non renouvelable. Aucun dépôt de garantie autorisé. Généré par Bailo à titre indicatif.</div>';
+
+    // EDL simplifié
+    html += '<div style="margin-top:32px;padding-top:28px;border-top:2px solid var(--border)">';
+    html += '<h4>Annexe D — État des lieux et inventaire mobilier</h4>';
+    var zones = [
+      {nom:'Entrée / Couloir', items:['Sol','Murs et plafond','Porte entrée','Éclairage']},
+      {nom:'Pièce principale', items:['Sol','Murs et plafond','Fenêtres','Éclairage','Prises','Mobilier fourni']},
+      {nom:'Chambre (si séparée)', items:['Sol','Murs et plafond','Fenêtres','Mobilier fourni (lit, armoire...)']},
+      {nom:'Cuisine', items:['Sol','Murs','Équipements (plaques, frigo, four/micro-ondes)','Vaisselle et ustensiles']},
+      {nom:'Salle de bain / WC', items:['Sol','Murs','Baignoire/Douche','Lavabo','WC','Ventilation']},
+      {nom:'Général', items:['Tableau électrique','Compteur eau (relevé : '+(f.waterMeter||'—')+')','Compteur élec. (relevé : '+(f.elecMeter||'—')+')','Détecteur fumée']}
+    ];
+    var optHtml = ['Bon','Moyen','Mauvais','N/A'].map(function(o){return '<option>'+o+'</option>';}).join('');
+    zones.forEach(function(zone) {
+      html += '<div style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden">';
+      html += '<div style="background:rgba(56,37,17,.05);padding:7px 12px;font-family:Inter,sans-serif;font-size:.78rem;font-weight:700;text-transform:uppercase">' + zone.nom + '</div>';
+      html += '<table style="width:100%;border-collapse:collapse;font-size:.8rem;font-family:Inter,sans-serif"><thead><tr style="background:rgba(56,37,17,.03)"><th style="padding:5px 10px;text-align:left;border-bottom:1px solid var(--border);width:45%">Élément</th><th style="padding:5px 10px;text-align:center;border-bottom:1px solid var(--border);width:18%">État</th><th style="padding:5px 10px;border-bottom:1px solid var(--border)">Obs.</th></tr></thead><tbody>';
+      zone.items.forEach(function(item,i) {
+        html += '<tr style="'+(i%2?'background:rgba(56,37,17,.02)':'')+'"><td style="padding:5px 10px;border-bottom:1px solid var(--border)">'+item+'</td><td style="padding:5px 10px;border-bottom:1px solid var(--border);text-align:center"><select style="font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:4px">'+optHtml+'</select></td><td style="padding:5px 10px;border-bottom:1px solid var(--border)"><input type="text" placeholder="RAS" style="width:100%;font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px"/></td></tr>';
+      });
+      html += '</tbody></table></div>';
+    });
+    html += '<div style="margin-top:12px;padding:12px;background:rgba(56,37,17,.03);border-radius:8px;font-family:Inter,sans-serif;font-size:.8rem"><strong>Inventaire mobilier :</strong><br>';
+    var furniture = f.furnitureList || [];
+    if (furniture.length) {
+      html += '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:.8rem"><thead><tr><th style="padding:5px 10px;border:1px solid var(--border);background:rgba(56,37,17,.05)">Désignation</th><th style="padding:5px 10px;border:1px solid var(--border);background:rgba(56,37,17,.05)">Qté</th><th style="padding:5px 10px;border:1px solid var(--border);background:rgba(56,37,17,.05)">État</th></tr></thead><tbody>';
+      furniture.forEach(function(item,i) {
+        html += '<tr style="'+(i%2?'background:rgba(56,37,17,.02)':'')+'"><td style="padding:5px 10px;border:1px solid var(--border)">'+(item.nom||'')+'</td><td style="padding:5px 10px;border:1px solid var(--border)">'+(item.quantite||'1')+'</td><td style="padding:5px 10px;border:1px solid var(--border)">'+(item.etat||'Bon')+'</td></tr>';
+      });
+      html += '</tbody></table>';
+    } else {
+      html += '<p style="font-style:italic;margin-top:6px">À compléter lors de la remise des clés.</p>';
+    }
+    html += '</div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:16px"><div><div style="font-family:Inter,sans-serif;font-size:.75rem;font-weight:700;text-transform:uppercase;margin-bottom:6px">Signature Bailleur</div><div style="height:56px;border:1px solid var(--border);border-radius:6px;background:white"></div><div style="font-size:.73rem;color:var(--ink-3);font-family:Inter,sans-serif;margin-top:4px">Lu et approuvé</div></div><div><div style="font-family:Inter,sans-serif;font-size:.75rem;font-weight:700;text-transform:uppercase;margin-bottom:6px">Signature Locataire</div><div style="height:56px;border:1px solid var(--border);border-radius:6px;background:white"></div><div style="font-size:.73rem;color:var(--ink-3);font-family:Inter,sans-serif;margin-top:4px">Lu et approuvé</div></div></div>';
+    html += '</div>';
+
+    return html;
+  }
+
+  async function saveBailleurSig() {
+    var canvas=document.getElementById('sig-bailleur'); if(!canvas)return;
+    var blank=document.createElement('canvas');blank.width=canvas.width;blank.height=canvas.height;
+    if(canvas.toDataURL()===blank.toDataURL()){alert('Signez d\'abord.');return;}
+    var sig=canvas.toDataURL('image/png');
+    var leaseId=new URLSearchParams(window.location.search).get('lease');
+    var resp=await db.from('leases').select('data').eq('id',leaseId).single();
+    if(!resp.data)return;
+    var ld=resp.data.data||{};var fd=ld.formData||{};
+    fd.sig_bailleur=sig;fd.sig_bailleur_at=new Date().toISOString();ld.formData=fd;
+    await db.from('leases').update({data:ld}).eq('id',leaseId);
+    var box=canvas.closest('.sig-box');
+    if(box)box.innerHTML='<span class="sig-label">Le Bailleur</span><div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:white;padding:4px"><img src="'+sig+'" style="width:100%;max-height:120px;object-fit:contain;display:block"></div><div style="font-size:12px;color:#16a34a;font-weight:600;font-family:Inter,sans-serif;margin-top:4px">✓ Lu et approuvé — '+new Intl.DateTimeFormat('fr-FR').format(new Date())+'</div>';
+    alert('Signature enregistrée.');
+  }
+
+  async function savePreneurSig() {
+    var canvas=document.getElementById('sig-locataire'); if(!canvas)return;
+    var blank=document.createElement('canvas');blank.width=canvas.width;blank.height=canvas.height;
+    if(canvas.toDataURL()===blank.toDataURL()){alert('Signez d\'abord.');return;}
+    var sig=canvas.toDataURL('image/png');
+    var leaseId=new URLSearchParams(window.location.search).get('lease');
+    var resp=await db.from('leases').select('data').eq('id',leaseId).single();
+    if(!resp.data)return;
+    var ld=resp.data.data||{};var fd=ld.formData||{};
+    fd.sig_locataire=sig;fd.sig_locataire_at=new Date().toISOString();ld.formData=fd;
+    await db.from('leases').update({data:ld}).eq('id',leaseId);
+    var box=canvas.closest('.sig-box');
+    if(box)box.innerHTML='<span class="sig-label">Le Locataire</span><div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:white;padding:4px"><img src="'+sig+'" style="width:100%;max-height:120px;object-fit:contain;display:block"></div><div style="font-size:12px;color:#16a34a;font-weight:600;font-family:Inter,sans-serif;margin-top:4px">✓ Lu et approuvé — '+new Intl.DateTimeFormat('fr-FR').format(new Date())+'</div>';
+    alert('Signature enregistrée.');
+  }
+
+  function initCanvas(id) {
+    var canvas=document.getElementById(id);if(!canvas)return;
+    var ctx=canvas.getContext('2d');var drawing=false;
+    canvas.width=canvas.offsetWidth*window.devicePixelRatio;canvas.height=120*window.devicePixelRatio;
+    ctx.scale(window.devicePixelRatio,window.devicePixelRatio);
+    function pos(e){var r=canvas.getBoundingClientRect();var src=e.touches?e.touches[0]:e;return{x:(src.clientX-r.left)*(canvas.offsetWidth/r.width),y:(src.clientY-r.top)*(120/r.height)};}
+    canvas.addEventListener('mousedown',function(e){drawing=true;var p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});
+    canvas.addEventListener('mousemove',function(e){if(!drawing)return;var p=pos(e);ctx.lineTo(p.x,p.y);ctx.strokeStyle='#1a1208';ctx.lineWidth=2;ctx.lineCap='round';ctx.stroke();});
+    canvas.addEventListener('mouseup',function(){drawing=false;});
+    canvas.addEventListener('mouseleave',function(){drawing=false;});
+    canvas.addEventListener('touchstart',function(e){e.preventDefault();drawing=true;var p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});
+    canvas.addEventListener('touchmove',function(e){e.preventDefault();if(!drawing)return;var p=pos(e);ctx.lineTo(p.x,p.y);ctx.strokeStyle='#1a1208';ctx.lineWidth=2;ctx.lineCap='round';ctx.stroke();},{passive:false});
+    canvas.addEventListener('touchend',function(){drawing=false;});
+  }
+
+  function sigBlock(label,canvasId,existingSig,saveFn) {
+    var dateStr=existingSig?new Intl.DateTimeFormat('fr-FR').format(new Date()):'';
+    return '<div class="sig-box"><span class="sig-label">'+label+'</span>'
+      +(existingSig
+        ?'<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:white;padding:4px"><img src="'+existingSig+'" style="width:100%;max-height:120px;object-fit:contain;display:block"></div><div style="font-size:12px;color:#16a34a;font-weight:600;font-family:Inter,sans-serif;margin-top:4px">✓ Lu et approuvé — '+dateStr+'</div>'
+        :'<canvas class="sig-canvas" id="'+canvasId+'" width="400" height="120"></canvas>'
+        +'<div class="sig-actions"><button class="btn-sig-clear" onclick="document.getElementById(\''+canvasId+'\').getContext(\'2d\').clearRect(0,0,9999,9999)">Effacer</button>'
+        +(saveFn?'<button class="btn-sig-val" onclick="'+saveFn+'()">Valider ma signature</button>':'')
+        +'</div><div style="font-size:12px;color:var(--ink-3);font-family:Inter,sans-serif;margin-top:4px">Lu et approuvé</div>')
+      +'</div>';
+  }
+
+  async function init() {
+    var params=new URLSearchParams(window.location.search);
+    var leaseId=params.get('lease');
+    if(!leaseId){document.getElementById('loading').innerHTML='<p style="color:#c0392b;font-family:Inter,sans-serif">Paramètre lease manquant.</p>';return;}
+    var res=await db.from('leases').select('*').eq('id',leaseId).single();
+    if(res.error||!res.data){document.getElementById('loading').innerHTML='<p style="color:#c0392b;font-family:Inter,sans-serif">Bail introuvable.</p>';return;}
+    var f=(res.data.data&&res.data.data.formData)?res.data.data.formData:res.data.data||{};
+    document.getElementById('toolbar-title').textContent='Bail mobilité';
+    document.getElementById('toolbar-sub').textContent=(f.tenantName||'—')+' — '+(f.propertyAddress||'—');
+    document.title='Bail mobilité — '+(f.tenantName||'')+' — Bailo';
+    var html=buildContrat(f);
+    // Signatures
+    var lienPreneur=window.location.origin+'/contrat-mobilite.html?lease='+leaseId+'&mode=preneur';
+    html+='<div style="margin-top:32px;padding-top:28px;border-top:2px solid var(--border)">';
+    if(params.get('mode')!=='preneur'){
+      html+='<div style="background:#f0f7ff;border:1.5px solid #b0d0f0;border-radius:12px;padding:14px 18px;margin-bottom:20px;font-family:Inter,sans-serif"><div style="font-size:13px;font-weight:700;color:#1a3a6a;margin-bottom:8px">Envoyer au Locataire pour signature</div><div style="display:flex;gap:8px;align-items:center"><input id="lien-preneur" value="'+lienPreneur+'" readonly style="flex:1;padding:7px 10px;border:1px solid #b0d0f0;border-radius:7px;font-size:11px;font-family:monospace;background:#fff"><button id="btn-copier" style="padding:7px 14px;background:#1a3a6a;color:white;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer">Copier</button></div></div>';
+    }
+    html+='<h4 style="font-size:.82rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-bottom:16px;font-family:Inter,sans-serif">Signatures</h4>';
+    html+='<p style="font-size:13px;font-family:Inter,sans-serif;color:var(--ink-3);margin-bottom:16px">Fait à '+(f.signatureCity||'______')+', le '+new Intl.DateTimeFormat('fr-FR').format(new Date())+'.</p>';
+    html+='<div class="sig-grid">';
+    html+=sigBlock('Le Bailleur','sig-bailleur',f.sig_bailleur,'saveBailleurSig');
+    html+=sigBlock('Le Locataire','sig-locataire',f.sig_locataire,'savePreneurSig');
+    html+='</div></div>';
+    html+='<p style="margin-top:24px;font-size:.74rem;color:var(--ink-3);font-family:Inter,sans-serif">Généré par Bailo — Bail mobilité (loi 89-462 art. 25-12 à 25-18, loi ELAN) — À titre indicatif.</p>';
+    document.getElementById('print-area').innerHTML=html;
+    document.getElementById('loading').style.display='none';
+    document.getElementById('page-wrapper').style.display='';
+    ['sig-bailleur','sig-locataire'].forEach(initCanvas);
+    setTimeout(function(){
+      var btn=document.getElementById('btn-copier');
+      if(btn)btn.addEventListener('click',function(){var i=document.getElementById('lien-preneur');if(i){i.select();document.execCommand('copy');}btn.textContent='Copié !';setTimeout(function(){btn.textContent='Copier';},2000);});
+    },200);
+  }
+
+  init();
+</script>
+</body>
+</html>
