@@ -4063,7 +4063,7 @@ async function pwNext() {
         _pwLots = [{ designation: bt || 'Logement', type: bt || 'Appartement', surface: _pwData.surface || '', floor: '', occupant: '' }];
       }
       // Executer directement la sauvegarde
-      pwSave(); return;
+      _pwStep = PW_TOTAL; pwNext(); return;
     }
     pwRender(); return;
   }
