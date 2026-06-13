@@ -500,6 +500,11 @@
           <span class="nav-label">CAF / APL</span>
         </a>
 
+        <a href="#" class="nav-item" onclick="ouvrirOccupation()">
+          <span class="nav-icon">&#127968;</span>
+          <span class="nav-label">Décl. occupation</span>
+        </a>
+
         <div class="nav-group-label">Mon compte</div>
 
         <a href="#" class="nav-item" data-page="settings" onclick="navigate('settings',this)">
@@ -2306,6 +2311,176 @@ function checkCafAlerts() {
   var eligible = cafGetEligibleLeases();
   var done = cafGetDone();
   return eligible.filter(function(l){ return !done[l.id]; });
+}
+
+
+
+// ══════════════════════════════════════════════════════════════
+//  MODULE DECLARATION OCCUPATION — impots.gouv.fr (avant 30 juin)
+// ══════════════════════════════════════════════════════════════
+
+var OCCUP_DONE_KEY = 'bailo_occupation_done_v2';
+var OCCUP_DEADLINE_MONTH = 5; // juin = mois 5 (0-indexed)
+var OCCUP_DEADLINE_DAY = 30;
+
+function occupGetDone() {
+  try { return JSON.parse(localStorage.getItem(OCCUP_DONE_KEY) || '{}'); } catch(e) { return {}; }
+}
+function occupSetDone(leaseId, done) {
+  var map = occupGetDone();
+  done ? (map[leaseId] = new Date().toISOString().split('T')[0]) : delete map[leaseId];
+  localStorage.setItem(OCCUP_DONE_KEY, JSON.stringify(map));
+}
+function occupResetAll() { localStorage.removeItem(OCCUP_DONE_KEY); ouvrirOccupation(); }
+
+function occupGetDeadline() {
+  var today = new Date();
+  var year = today.getFullYear();
+  var deadline = new Date(year, OCCUP_DEADLINE_MONTH, OCCUP_DEADLINE_DAY);
+  if (today > deadline) deadline = new Date(year + 1, OCCUP_DEADLINE_MONTH, OCCUP_DEADLINE_DAY);
+  var diffDays = Math.ceil((deadline - today) / (1000*60*60*24));
+  return { date: deadline, diffDays: diffDays, urgent: diffDays <= 30 };
+}
+
+function occupGetYear() {
+  var today = new Date();
+  return today.getMonth() < 6 ? today.getFullYear() : today.getFullYear() + 1;
+}
+
+function checkOccupAlerts() {
+  var dl = occupGetDeadline();
+  if (!dl.urgent) return [];
+  var done = occupGetDone();
+  return (_allLeases||[]).filter(function(l) {
+    var f = (l.data && l.data.formData) ? l.data.formData : {};
+    return f.tenantName && f.rent && !done[l.id];
+  });
+}
+
+function ouvrirOccupation() {
+  document.getElementById('occup-overlay')?.remove();
+  var leases = (_allLeases||[]).filter(function(l) {
+    var f = (l.data && l.data.formData) ? l.data.formData : {};
+    return f.tenantName && f.rent;
+  });
+  var done = occupGetDone();
+  var dl = occupGetDeadline();
+  var year = occupGetYear();
+  var doneCount = leases.filter(function(l){ return done[l.id]; }).length;
+  var total = leases.length;
+  var pct = total > 0 ? Math.round(doneCount/total*100) : 0;
+  var fc = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0});
+  var COLORS = ['#1a56db','#057a55','#b45309','#6c2bd9','#c81e1e','#0694a2'];
+
+  var deadlineHtml = dl.urgent
+    ? '<div style="background:#fff0f0;border:1px solid #fca5a5;border-radius:10px;padding:14px 18px;margin-bottom:20px">'
+      + '<div style="font-weight:700;color:#c84b00;margin-bottom:4px">&#9888; D\u00e9adline dans <strong>' + dl.diffDays + ' jours</strong> \u2014 30 juin ' + year + '</div>'
+      + '<div style="font-size:13px;color:#7f1d1d">D\u00e9clarez l\'occupation de chaque logement sur <strong>impots.gouv.fr</strong> avant le 30 juin.</div>'
+      + '</div>'
+    : '<div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:13px;color:var(--color-text-secondary)">'
+      + '&#128197; Prochaine deadline : <strong>30 juin ' + year + '</strong> (' + dl.diffDays + ' jours). V\u00e9rifiez les informations de vos logements.'
+      + '</div>';
+
+  var progressHtml = total > 0
+    ? '<div style="margin-bottom:20px">'
+      + '<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:12px;color:var(--color-text-secondary)">'
+      + '<span>Logements d\u00e9clar\u00e9s</span><span>' + doneCount + ' / ' + total + ' (' + pct + '%)</span></div>'
+      + '<div style="height:8px;background:var(--color-border);border-radius:4px;overflow:hidden">'
+      + '<div style="height:100%;width:' + pct + '%;background:#1a56db;border-radius:4px;transition:width .3s"></div>'
+      + '</div></div>'
+    : '';
+
+  var cardsHtml = leases.length === 0
+    ? '<div style="text-align:center;padding:32px;color:var(--color-text-secondary);font-size:13px">Aucun bail actif trouv\u00e9.</div>'
+    : leases.map(function(lease, idx) {
+        var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+        var isDone = !!done[lease.id];
+        var color = COLORS[idx % COLORS.length];
+        var loyer = parseFloat(f.rent) || 0;
+        var dob = f.tenantDOB ? new Date(f.tenantDOB).toLocaleDateString('fr-FR') : '\u2014';
+        var dateDebut = f.effectiveDate ? new Date(f.effectiveDate).toLocaleDateString('fr-FR') : '\u2014';
+
+        var statusHtml = isDone
+          ? '<span style="background:#dcfce7;color:#166534;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700">\u2713 D\u00e9clar\u00e9 le ' + done[lease.id] + '</span>'
+            + '<button onclick="occupSetDone(\'' + lease.id + '\',false);ouvrirOccupation()" style="font-size:11px;padding:3px 8px;border:1px solid var(--color-border);border-radius:6px;background:none;cursor:pointer;color:var(--color-text-secondary)">Annuler</button>'
+          : '<button onclick="occupSetDone(\'' + lease.id + '\',true);ouvrirOccupation()" style="padding:6px 14px;background:#1a56db;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">\u2714 Marquer d\u00e9clar\u00e9</button>';
+
+        return '<div style="border:1px solid var(--color-border);border-left:4px solid ' + color + ';border-radius:10px;margin-bottom:12px;overflow:hidden;' + (isDone?'opacity:.65':'') + '">'
+          + '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;cursor:pointer" onclick="occupToggleDetails(\'' + lease.id + '\')">'
+          + '<div>'
+          + '<div style="font-weight:600;font-size:14px">' + (f.propertyAddress||'\u2014') + '</div>'
+          + '<div style="font-size:12px;color:var(--color-text-secondary);margin-top:2px">' + (f.tenantName||'\u2014') + ' \u00b7 ' + fc.format(loyer) + '/mois</div>'
+          + '</div>'
+          + '<div style="display:flex;gap:8px;align-items:center;flex-shrink:0">' + statusHtml
+          + '<span style="font-size:18px;color:var(--color-text-secondary)" id="occup-arrow-' + lease.id + '">\u25be</span>'
+          + '</div></div>'
+          + '<div id="occup-body-' + lease.id + '" style="display:none;border-top:1px solid var(--color-border);padding:14px 16px;background:var(--color-bg-secondary)">'
+          + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-secondary);margin-bottom:10px">Informations \u00e0 saisir sur impots.gouv.fr</div>'
+          + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
+          + '<div><div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Adresse du logement</div><div style="font-size:13px;font-weight:600">' + (f.propertyAddress||'\u2014') + '</div></div>'
+          + '<div><div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Surface</div><div style="font-size:13px;font-weight:600">' + (f.surface||'\u2014') + '</div></div>'
+          + '<div><div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Occupant</div><div style="font-size:13px;font-weight:600">' + (f.tenantName||'\u2014') + '</div></div>'
+          + '<div><div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Date de naissance</div><div style="font-size:13px;font-weight:600">' + dob + '</div></div>'
+          + '<div><div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Nature occupation</div><div style="font-size:13px;font-weight:600">Locataire \u2014 R\u00e9sidence principale</div></div>'
+          + '<div><div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Depuis le</div><div style="font-size:13px;font-weight:600">' + dateDebut + '</div></div>'
+          + '<div><div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Loyer mensuel HC</div><div style="font-size:13px;font-weight:600">' + fc.format(loyer) + '</div></div>'
+          + '<div><div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Type de bail</div><div style="font-size:13px;font-weight:600">' + (f.leaseType||'Location vide') + '</div></div>'
+          + '</div>'
+          + '<div style="display:flex;gap:8px">'
+          + '<button onclick="occupCopierInfos(\'' + lease.id + '\')" style="padding:6px 12px;font-size:12px;border:1px solid var(--color-border);border-radius:7px;background:none;cursor:pointer;color:var(--color-text)">\uD83D\uDCCB Copier les infos</button>'
+          + '</div></div></div>';
+      }).join('');
+
+  var html = '<div id="occup-overlay" style="position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto">'
+    + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:16px;padding:28px;width:640px;max-width:100%;margin:auto;max-height:90vh;overflow-y:auto">'
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">'
+    + '<h3 style="font-size:1.1rem;font-weight:700">&#127968; D\u00e9claration d\'occupation</h3>'
+    + '<button onclick="document.getElementById(\'occup-overlay\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--color-text-secondary)">\u00d7</button>'
+    + '</div>'
+    + '<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:20px">Formulaire en ligne sur <strong>impots.gouv.fr</strong> \u2014 \u00e0 faire avant le 30 juin ' + year + '</p>'
+    + deadlineHtml
+    + progressHtml
+    + cardsHtml
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;padding-top:16px;border-top:1px solid var(--color-border)">'
+    + '<button onclick="occupResetAll()" style="font-size:12px;padding:7px 14px;border:1px solid var(--color-border);border-radius:8px;background:none;cursor:pointer;color:var(--color-text-secondary)">R\u00e9initialiser tout</button>'
+    + '<a href="https://www.impots.gouv.fr/particulier/declaration-doccupation-et-de-loyer" target="_blank" rel="noopener" style="padding:9px 18px;background:#1a56db;color:#fff;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600">Ouvrir impots.gouv.fr \u2197</a>'
+    + '</div></div></div>';
+
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function occupToggleDetails(leaseId) {
+  var body = document.getElementById('occup-body-' + leaseId);
+  var arrow = document.getElementById('occup-arrow-' + leaseId);
+  if (!body) return;
+  var visible = body.style.display !== 'none';
+  body.style.display = visible ? 'none' : 'block';
+  if (arrow) arrow.textContent = visible ? '\u25be' : '\u25b4';
+}
+
+function occupCopierInfos(leaseId) {
+  var lease = (_allLeases||[]).find(function(l){ return l.id === leaseId; });
+  if (!lease) return;
+  var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+  var fc = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0});
+  var dob = f.tenantDOB ? new Date(f.tenantDOB).toLocaleDateString('fr-FR') : '\u2014';
+  var dateDebut = f.effectiveDate ? new Date(f.effectiveDate).toLocaleDateString('fr-FR') : '\u2014';
+  var text = 'DECLARATION OCCUPATION \u2014 ' + new Date().getFullYear()
+    + '\n\nLogement\n--------'
+    + '\nAdresse      : ' + (f.propertyAddress||'\u2014')
+    + '\nSurface      : ' + (f.surface||'\u2014')
+    + '\nType de bail : ' + (f.leaseType||'Location vide')
+    + '\n\nOccupant\n--------'
+    + '\nNom          : ' + (f.tenantName||'\u2014')
+    + '\nDate naiss.  : ' + dob
+    + '\nOccupation   : Locataire \u2014 R\u00e9sidence principale'
+    + '\nDepuis le    : ' + dateDebut
+    + '\nLoyer HC/mois: ' + fc.format(parseFloat(f.rent)||0);
+  navigator.clipboard.writeText(text).then(function() {
+    showToast('Infos copi\u00e9es \uD83D\uDCCB');
+  }).catch(function() {
+    showToast('Copie impossible', 'error');
+  });
 }
 
 
