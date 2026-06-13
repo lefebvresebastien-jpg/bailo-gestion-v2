@@ -1182,7 +1182,10 @@ async function handleLogout() {
   document.getElementById('auth-password').value = '';
 }
 
+var _currentUserId = null;
+
 function onAuthSuccess(user) {
+  _currentUserId = user.id;
   // Update UI with user info
   const name = user.user_metadata?.full_name || user.email.split('@')[0];
   const initials = name.charAt(0).toUpperCase();
@@ -6746,20 +6749,18 @@ function initApp() {
 }
 
 function injectAdminLink() {
-  var session = null;
-  db.auth.getSession().then(function(res) {
-    if (!res.data || !res.data.session) return;
-    if (res.data.session.user.id !== 'd762ecb9-c06d-49b6-b058-f0aacfa7952c') return;
-    var nav = document.querySelector('nav');
-    if (!nav || document.getElementById('admin-nav-link')) return;
-    var div = document.createElement('div');
-    div.id = 'admin-nav-link';
-    div.innerHTML = '<div class="nav-group-label" style="margin-top:8px;color:#f97316">Admin</div>'
-      + '<a href="https://bailo.pro/admin" target="_blank" class="nav-item" style="color:#f97316">'
-      + '<span class="nav-icon">&#9881;</span>'
-      + '<span class="nav-label">Dashboard admin</span></a>';
-    nav.appendChild(div);
-  });
+  if (_currentUserId !== 'd762ecb9-c06d-49b6-b058-f0aacfa7952c') return;
+  var nav = document.querySelector('nav');
+  if (!nav || document.getElementById('admin-nav-link')) return;
+  var div = document.createElement('div');
+  div.id = 'admin-nav-link';
+  div.innerHTML = '<div class="nav-group-label" style="margin-top:8px;color:#f97316">Admin</div>'
+    + '<a href="https://bailo.pro/admin" target="_blank" class="nav-item" style="color:#f97316">'
+    + '<span class="nav-icon">&#9881;</span>'
+    + '<span class="nav-label">Dashboard admin</span></a>';
+  nav.appendChild(div);
+  // Fix overflow sidebar
+  nav.style.overflowY = 'auto';
 }
 
 // Boot on DOM ready
