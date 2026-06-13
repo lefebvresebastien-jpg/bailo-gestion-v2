@@ -1004,11 +1004,28 @@ async function exportRegu() {
     '</div>' +
     '</body></html>';
 
-  // Ouvrir dans nouvelle fenêtre
-  const win = window.open('', '_blank', 'width=900,height=700');
-  win.document.write(html);
-  win.document.close();
-  win.focus();
+  // Afficher dans une modale plein ecran (compatible mobile)
+  var overlay = document.getElementById('pdf-overlay');
+  if (overlay) overlay.remove();
+  overlay = document.createElement('div');
+  overlay.id = 'pdf-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:white;overflow-y:auto';
+  var closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕ Fermer';
+  closeBtn.style.cssText = 'position:fixed;top:12px;right:12px;z-index:10000;padding:8px 16px;background:#1a1208;color:white;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-family:Inter,sans-serif';
+  closeBtn.onclick = function() { overlay.remove(); };
+  var printBtn = document.createElement('button');
+  printBtn.textContent = '🖨 Imprimer / PDF';
+  printBtn.style.cssText = 'position:fixed;top:12px;right:120px;z-index:10000;padding:8px 16px;background:#e8793a;color:white;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-family:Inter,sans-serif';
+  printBtn.onclick = function() { window.print(); };
+  var frame = document.createElement('div');
+  // Extraire le body du HTML genere
+  var bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+  frame.innerHTML = bodyMatch ? bodyMatch[1] : html;
+  overlay.appendChild(closeBtn);
+  overlay.appendChild(printBtn);
+  overlay.appendChild(frame);
+  document.body.appendChild(overlay);
 }
 
 // ============================================================
