@@ -2134,6 +2134,168 @@ async function envoyerRegul(leaseId) {
 }
 
 
+
+// ══════════════════════════════════════════════════════════════
+//  MODULE CAF — D\u00e9claration loyers APL/AL
+// ══════════════════════════════════════════════════════════════
+
+var CAF_DONE_KEY = 'bailo_caf_done_v2';
+
+function cafGetDone() {
+  try { return JSON.parse(localStorage.getItem(CAF_DONE_KEY) || '{}'); } catch(e) { return {}; }
+}
+function cafSetDone(leaseId, done) {
+  var map = cafGetDone();
+  done ? (map[leaseId] = true) : delete map[leaseId];
+  localStorage.setItem(CAF_DONE_KEY, JSON.stringify(map));
+}
+function cafResetAll() { localStorage.removeItem(CAF_DONE_KEY); ouvrirCAF(); }
+function isCafSeason() { var m = new Date().getMonth() + 1; return m >= 7 || m <= 3; }
+function cafGetYear() { var n = new Date(); return n.getMonth() + 1 >= 7 ? n.getFullYear() : n.getFullYear() - 1; }
+function cafGetEligibleLeases() {
+  return (_allLeases||[]).filter(function(l) {
+    var f = (l.data && l.data.formData) ? l.data.formData : {};
+    return f.cafBeneficiary && f.cafBeneficiary.trim();
+  });
+}
+
+function ouvrirCAF() {
+  document.getElementById('caf-overlay')?.remove();
+  var eligible = cafGetEligibleLeases();
+  var done = cafGetDone();
+  var year = cafGetYear();
+  var season = isCafSeason();
+  var m = new Date().getMonth() + 1;
+  var daysLeft = (season && m >= 7) ? Math.ceil((new Date(year+1, 2, 31) - new Date()) / 86400000) : null;
+  var fc = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0});
+
+  var bannerHtml = season
+    ? '<div style="background:#fff8ed;border:1px solid #fcd34d;border-radius:10px;padding:14px 18px;margin-bottom:20px">'
+      + '<div style="font-weight:700;color:#92400e;margin-bottom:4px">\uD83D\uDCE2 Campagne ' + year + ' en cours'
+      + (daysLeft ? ' \u2014 <span style="color:#c84b00">' + daysLeft + ' jours restants</span>' : '') + '</div>'
+      + '<div style="font-size:13px;color:#78350f">Vous avez re\u00e7u (ou allez recevoir) un email de la CAF pour d\u00e9clarer les loyers de juillet ' + year + '. D\u00e9clarez avant mars ' + (year+1) + '.</div>'
+      + '</div>'
+    : '<div style="background:var(--color-bg-secondary);border:1px solid var(--color-border);border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:13px;color:var(--color-text-secondary)">'
+      + '\uD83D\uDCC5 Hors campagne \u2014 prochaine ouverture en juillet. V\u00e9rifiez que les champs APL de vos baux sont bien renseign\u00e9s.'
+      + '</div>';
+
+  var doneCount = eligible.filter(function(l){ return done[l.id]; }).length;
+  var total = eligible.length;
+  var pct = total > 0 ? Math.round(doneCount/total*100) : 0;
+
+  var progressHtml = total > 0
+    ? '<div style="margin-bottom:20px">'
+      + '<div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:12px;color:var(--color-text-secondary)">'
+      + '<span>Progression d\u00e9clarations</span><span>' + doneCount + ' / ' + total + ' (' + pct + '%)</span></div>'
+      + '<div style="height:8px;background:var(--color-border);border-radius:4px;overflow:hidden">'
+      + '<div style="height:100%;width:' + pct + '%;background:#16a34a;border-radius:4px;transition:width .3s"></div>'
+      + '</div></div>'
+    : '';
+
+  var COLORS = ['#1a56db','#057a55','#b45309','#6c2bd9','#c81e1e','#0694a2'];
+
+  var cardsHtml = eligible.length === 0
+    ? '<div style="text-align:center;padding:32px;color:var(--color-text-secondary);font-size:13px">'
+      + 'Aucun locataire b\u00e9n\u00e9ficiaire APL/AL enregistr\u00e9.<br>'
+      + 'Renseignez le champ <strong>\"B\u00e9n\u00e9ficiaire APL\"</strong> dans la fiche bail.'
+      + '</div>'
+    : eligible.map(function(lease, idx) {
+        var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+        var isDone = !!done[lease.id];
+        var rent = parseFloat(f.rent) || 0;
+        var charges = parseFloat(f.charges) || 0;
+        var color = COLORS[idx % COLORS.length];
+        var statusHtml = isDone
+          ? '<span style="background:#dcfce7;color:#166534;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700">\u2713 D\u00e9clar\u00e9</span>'
+            + '<button onclick="cafToggleDone(\'' + lease.id + '\',false)" style="font-size:11px;padding:3px 8px;border:1px solid var(--color-border);border-radius:6px;background:none;cursor:pointer;color:var(--color-text-secondary)">Annuler</button>'
+          : '<button onclick="cafToggleDone(\'' + lease.id + '\',true)" style="padding:6px 14px;background:#166534;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">\u2714 Marquer d\u00e9clar\u00e9</button>';
+
+        return '<div id="caf-card-' + lease.id + '" style="border:1px solid var(--color-border);border-left:4px solid ' + color + ';border-radius:10px;margin-bottom:12px;overflow:hidden;' + (isDone?'opacity:.7':'') + '">'
+          + '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;cursor:pointer" onclick="cafToggleDetails(\'' + lease.id + '\')">'
+          + '<div><div style="font-weight:600;font-size:14px">' + (f.tenantName||'\u2014') + '</div>'
+          + '<div style="font-size:12px;color:var(--color-text-secondary);margin-top:2px">' + (f.propertyAddress||'\u2014') + ' \u00b7 ' + (f.cafBeneficiary||'') + '</div></div>'
+          + '<div style="display:flex;gap:8px;align-items:center;flex-shrink:0">' + statusHtml
+          + '<span style="font-size:18px;color:var(--color-text-secondary)" id="caf-arrow-' + lease.id + '">\u25be</span>'
+          + '</div></div>'
+          + '<div id="caf-body-' + lease.id + '" style="display:none;border-top:1px solid var(--color-border);padding:12px 16px;background:var(--color-bg-secondary)">'
+          + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">'
+          + '<div><div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.04em">Loyer HC juillet ' + year + '</div><div style="font-weight:700;font-size:15px">' + fc.format(rent) + '</div></div>'
+          + '<div><div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.04em">Charges</div><div style="font-weight:700;font-size:15px">' + fc.format(charges) + '</div></div>'
+          + '<div><div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.04em">Loyer CC</div><div style="font-weight:700;font-size:15px">' + fc.format(rent+charges) + '</div></div>'
+          + '</div>'
+          + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
+          + '<div><div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.04em">N\u00b0 allocataire</div><div style="font-size:13px;font-weight:600">' + (f.cafAllocNumber||'\u2014 (non renseign\u00e9)') + '</div></div>'
+          + '<div><div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.04em">Id. bailleur CAF</div><div style="font-size:13px;font-weight:600">' + (f.cafBailleurId||'\u2014') + '</div></div>'
+          + '</div>'
+          + '<div style="display:flex;gap:8px">'
+          + '<button onclick="cafCopierInfos(\'' + lease.id + '\')" style="padding:6px 12px;font-size:12px;border:1px solid var(--color-border);border-radius:7px;background:none;cursor:pointer;color:var(--color-text)">\uD83D\uDCCB Copier les infos</button>'
+          + '</div></div></div>';
+      }).join('');
+
+  var html = '<div id="caf-overlay" style="position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto">'
+    + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:16px;padding:28px;width:640px;max-width:100%;margin:auto;max-height:90vh;overflow-y:auto">'
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">'
+    + '<h3 style="font-size:1.1rem;font-weight:700">\uD83C\uDFE0 CAF \u2014 D\u00e9claration loyers APL/AL</h3>'
+    + '<button onclick="document.getElementById(\'caf-overlay\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--color-text-secondary)">\u00d7</button>'
+    + '</div>'
+    + '<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:20px">Ann\u00e9e de d\u00e9claration : <strong>' + year + '</strong> (loyer de juillet)</p>'
+    + bannerHtml
+    + progressHtml
+    + cardsHtml
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;padding-top:16px;border-top:1px solid var(--color-border)">'
+    + '<button onclick="cafResetAll()" style="font-size:12px;padding:7px 14px;border:1px solid var(--color-border);border-radius:8px;background:none;cursor:pointer;color:var(--color-text-secondary)">R\u00e9initialiser tout</button>'
+    + '<a href="https://www.caf.fr/professionnels/offres-et-services/services-en-ligne/espace-bailleur" target="_blank" rel="noopener" style="padding:9px 18px;background:var(--color-primary);color:#fff;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600">Ouvrir espace bailleur CAF \u2197</a>'
+    + '</div></div></div>';
+
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function cafToggleDetails(leaseId) {
+  var body = document.getElementById('caf-body-' + leaseId);
+  var arrow = document.getElementById('caf-arrow-' + leaseId);
+  if (!body) return;
+  var visible = body.style.display !== 'none';
+  body.style.display = visible ? 'none' : 'block';
+  if (arrow) arrow.textContent = visible ? '\u25be' : '\u25b4';
+}
+
+function cafToggleDone(leaseId, done) {
+  cafSetDone(leaseId, done);
+  ouvrirCAF();
+}
+
+function cafCopierInfos(leaseId) {
+  var lease = (_allLeases||[]).find(function(l){ return l.id === leaseId; });
+  if (!lease) return;
+  var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+  var year = cafGetYear();
+  var fc = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0});
+  var rent = parseFloat(f.rent)||0;
+  var charges = parseFloat(f.charges)||0;
+  var text = 'Locataire    : ' + (f.tenantName||'\u2014')
+    + '\nN\u00b0 allocataire : ' + (f.cafAllocNumber||'\u00e0 v\u00e9rifier')
+    + '\nAdresse      : ' + (f.propertyAddress||'\u2014')
+    + '\nType d\'aide  : ' + (f.cafBeneficiary||'\u2014')
+    + '\nLoyer HC juil. ' + year + ' : ' + fc.format(rent)
+    + '\nCharges      : ' + fc.format(charges)
+    + '\nLoyer CC     : ' + fc.format(rent+charges)
+    + '\nDPE          : ' + (f.dpeClass||'\u2014')
+    + '\nId. bailleur : ' + (f.cafBailleurId||'\u2014');
+  navigator.clipboard.writeText(text).then(function() {
+    showToast('Infos CAF copi\u00e9es \uD83D\uDCCB');
+  }).catch(function() {
+    showToast('Copie impossible (HTTPS requis)', 'error');
+  });
+}
+
+function checkCafAlerts() {
+  if (!isCafSeason()) return [];
+  var eligible = cafGetEligibleLeases();
+  var done = cafGetDone();
+  return eligible.filter(function(l){ return !done[l.id]; });
+}
+
+
 function showToast(msg, type = '', duration = 3000) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -4397,6 +4559,19 @@ const WIZARD_STEPS_CONTENT = {
         '<div class="form-group"><label>Immatriculation RCS</label>' +
         '<input type="text" id="w-tenantRCS" value="' + (d.tenantRCS||'') + '" placeholder="Paris B 123 456 789" /></div>'
       : '') +
+        (isCommercialOrPro ? '' :
+          '<div class="wizard-section-title" style="margin-top:var(--space-md)">CAF / APL (optionnel)</div>' +
+          '<div class="form-row">' +
+            '<div class="form-group"><label>Bénéficiaire APL/AL</label>' +
+            '<select id="w-cafBeneficiary">' +
+            '<option value="">Non bénéficiaire</option>' +
+            '<option value="APL"' + (d.cafBeneficiary==="APL"?' selected':'') + '>APL (Aide Personnalisée au Logement)</option>' +
+            '<option value="AL"' + (d.cafBeneficiary==="AL"?' selected':'') + '>AL (Allocation Logement)</option>' +
+            '<option value="ALS"' + (d.cafBeneficiary==="ALS"?' selected':'') + '>ALS (Allocation Logement Sociale)</option>' +
+            '</select></div>' +
+            '<div class="form-group"><label>N° allocataire CAF</label>' +
+            '<input type="text" id="w-cafAllocNumber" value="' + (d.cafAllocNumber||'') + '" placeholder="1234567A" /></div>' +
+          '</div>') +
       '<div class="wizard-section-title" style="margin-top:var(--space-lg)">Le garant (optionnel)</div>' +
       '<div class="form-row">' +
         '<div class="form-group"><label>Nom du garant</label>' +
@@ -4773,6 +4948,11 @@ function collectStepData() {
       _wizardData.tenantLegalForm = g('w-tenantLegalForm');
       _wizardData.tenantSiret = g('w-tenantSiret');
       _wizardData.tenantRCS = g('w-tenantRCS');
+      _wizardData.cafBeneficiary = g('w-cafBeneficiary');
+      _wizardData.cafAllocNumber = g('w-cafAllocNumber');
+      _wizardData.cafBeneficiary = g('w-cafBeneficiary');
+      _wizardData.cafAllocNumber = g('w-cafAllocNumber');
+      _wizardData.cafBailleurId = g('w-cafBailleurId');
       break;
     case 4:
       _wizardData.rent = g('w-rent');
