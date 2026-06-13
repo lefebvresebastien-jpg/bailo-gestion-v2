@@ -1203,6 +1203,12 @@ function onAuthSuccess(user) {
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
 
+  // Afficher lien admin si Sebastien
+  if (user.id === 'd762ecb9-c06d-49b6-b058-f0aacfa7952c') {
+    var adminLink = document.getElementById('admin-nav-link');
+    if (adminLink) adminLink.style.display = 'block';
+  }
+
   // Load initial data
   initApp();
 }
