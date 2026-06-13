@@ -4060,7 +4060,7 @@ async function pwNext() {
     if (_pwStep === 3 && bt !== 'Immeuble') {
       // Créer un lot auto et passer directement a la creation
       if (_pwLots.length === 0) {
-        _pwLots = [{ designation: bt || 'Logement', type: bt || 'Appartement', surface: _pwData.surface || '', floor: '', occupant: '' }];
+        _pwLots = [{ label: bt || 'Logement', designation: bt || 'Logement', type: bt || 'Appartement', surface: _pwData.surface || '', floor: '', occupant: '' }];
       }
       // Executer directement la sauvegarde
       _pwStep = PW_TOTAL; pwNext(); return;
