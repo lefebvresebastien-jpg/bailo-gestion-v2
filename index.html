@@ -5267,7 +5267,8 @@ function validateStep() {
       if (!document.getElementById('w-landlordName')?.value.trim()) {
         showToast("Le nom du bailleur est obligatoire.", 'error'); return false;
       }
-      if (!document.getElementById('w-effectiveDate')?.value) {
+      // Valider date d'effet seulement si le champ est present dans le DOM
+      if (document.getElementById('w-effectiveDate') && !document.getElementById('w-effectiveDate').value) {
         showToast("La date de prise d'effet est obligatoire.", 'error'); return false;
       }
       break;
