@@ -4053,7 +4053,20 @@ async function pwNext() {
   pwCollect();
   if (_pwStep === 1 && !_pwData.name) { showToast('Le nom est obligatoire.', 'error'); return; }
   if (_pwStep === 2 && !_pwData.address) { showToast("L'adresse est obligatoire.", 'error'); return; }
-  if (_pwStep < PW_TOTAL) { _pwStep++; pwRender(); return; }
+  if (_pwStep < PW_TOTAL) {
+    _pwStep++;
+    // Sauter l'etape Lots si pas un immeuble
+    var bt = _pwData.buildingType || '';
+    if (_pwStep === 3 && bt !== 'Immeuble') {
+      // Créer un lot auto et passer directement a la creation
+      if (_pwLots.length === 0) {
+        _pwLots = [{ designation: bt || 'Logement', type: bt || 'Appartement', surface: _pwData.surface || '', floor: '', occupant: '' }];
+      }
+      // Executer directement la sauvegarde
+      pwSave(); return;
+    }
+    pwRender(); return;
+  }
 
   // Etape 3 : créer/modifier le bien + ses lots
   var btn = document.getElementById('pw-next');
