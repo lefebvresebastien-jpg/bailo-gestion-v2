@@ -3287,8 +3287,11 @@ function ouvrirContratV1(leaseId) {
   if (!leaseId) { showToast('Bail introuvable.', 'error'); return; }
   var lease = _allLeases.find(function(l){ return l.id === leaseId; });
   var lt = lease && lease.data && lease.data.formData ? (lease.data.formData.leaseType||'') : '';
-  var isComm = lt.includes('commercial') || lt.includes('Commercial');
-  window.open((isComm ? '/contrat-commercial.html' : '/contrat.html') + '?lease=' + leaseId, '_blank');
+  var url = '/contrat.html';
+  if (lt.includes('commercial') || lt.includes('Commercial')) url = '/contrat-commercial.html';
+  else if (lt.toLowerCase().includes('mobilit')) url = '/contrat-mobilite.html';
+  else if (lt.toLowerCase().includes('meubl')) url = '/contrat-meuble.html';
+  window.open(url + '?lease=' + leaseId, '_blank');
 }
 
 
@@ -5230,6 +5233,8 @@ function collectStepData() {
       _wizardData.rentDueDay = g('w-rentDueDay');
       _wizardData.duration = g('w-duration');
       _wizardData.irlReference = g('w-irlReference');
+      _wizardData.mobilityDuration = g('w-mobilityDuration');
+      _wizardData.mobilitySituation = g('w-mobilitySituation');
       _wizardData.chargesRegime = g('w-chargesRegime');
       _wizardData.paymentTerms = g('w-paymentTerms');
       break;
