@@ -499,7 +499,6 @@
           <span class="nav-icon">&#127968;</span>
           <span class="nav-label">CAF / APL</span>
         </a>
-
         <a href="#" class="nav-item" onclick="ouvrirOccupation()">
           <span class="nav-icon">&#127968;</span>
           <span class="nav-label">Décl. occupation</span>
@@ -663,6 +662,8 @@
               📈 Révision IRL
             </button>
             <button class="btn-secondary" onclick="ouvrirRegularisation(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
+              📊 Régularisation
+            </button>
               📊 Régularisation
             </button>
             <button class="btn-primary" id="btn-voir-contrat" onclick="ouvrirContratV1(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
@@ -1889,9 +1890,7 @@ function imprimerRegul(leaseId) {
     '<div style="margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:40px">' +
     '<div><p>Fait a __________, le __________</p><p style="margin-top:40px">Signature Bailleur :</p><div style="border-bottom:1px solid #222;margin-top:40px"></div></div>' +
     '<div><p>&nbsp;</p><p style="margin-top:40px">Signature Locataire :</p><div style="border-bottom:1px solid #222;margin-top:40px"></div></div>' +
-    '</div>  <script src="https://bailo.pro/bailo-nav.js" defer></script>
-  <script src="https://bailo.pro/bailo-nav.js" defer></script>
-</body></html>';
+    '</div></body></html>';
 
   var win = window.open('', '_blank');
   win.document.write(html);
@@ -1936,7 +1935,61 @@ async function envoyerRegul(leaseId) {
 //  MODULE RELANCES — Loyers en retard
 // ══════════════════════════════════════════════════════════════
 
+function checkRelances() {
+  if (!_allLeases || !_allLeases.length) return [];
+  var today = new Date();
+  var yearMonth = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0');
+  var alerts = [];
+  _allLeases.forEach(function(lease) {
+    var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+    if (!f.rent || !f.tenantName) return;
+    var key = lease.id + '_' + yearMonth;
+    var paye = _loyersStatus && _loyersStatus[key] === 'paye';
+    if (paye) return;
+    var dueDay = parseInt((f.rentDueDay||'Le 1').replace(/\D/g,'')) || 1;
+    var dueDate = new Date(today.getFullYear(), today.getMonth(), dueDay);
+    var diffDays = Math.floor((today - dueDate) / (1000*60*60*24));
+    if (diffDays >= 0) {
+      alerts.push({
+        leaseId: lease.id,
+        tenantName: f.tenantName,
+        rent: parseFloat(f.rent) + (parseFloat(f.charges)||0),
+        diffDays: diffDays,
+        tenantEmail: f.tenantEmail || '',
+        propertyAddress: f.propertyAddress || ''
+      });
+    }
+  });
+  return alerts.sort(function(a,b){ return b.diffDays - a.diffDays; });
+}
 
+function renderRelanceBanner() {
+  var existing = document.getElementById('relance-banner');
+  if (existing) existing.remove();
+  if (!_allLeases || !_allLeases.length) return;
+  var alerts = checkRelances();
+  if (!alerts.length) return;
+  var fc = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0});
+  var banner = document.createElement('div');
+  banner.id = 'relance-banner';
+  banner.style.cssText = 'background:rgba(220,38,38,.07);border:1px solid rgba(220,38,38,.25);border-radius:var(--radius-lg);padding:14px 18px;margin-bottom:16px;cursor:pointer';
+  banner.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between">'
+    + '<div><strong style="color:var(--color-danger);font-size:13px">&#9200; ' + alerts.length + ' loyer(s) non confirm\u00e9(s) ce mois</strong>'
+    + '<div style="margin-top:6px;font-size:12px;color:var(--color-text-secondary)">'
+    + alerts.map(function(a) {
+        return a.tenantName + ' \u2014 ' + fc.format(a.rent)
+          + (a.diffDays > 7 ? ' <span style="color:var(--color-danger);font-weight:600">(' + a.diffDays + 'j de retard)</span>' : ' <span style="color:var(--color-text-secondary)">(&#224; confirmer)</span>');
+      }).join(' &nbsp;&bull;&nbsp; ')
+    + '</div></div>'
+    + '<button onclick="ouvrirModalRelances()" style="padding:7px 14px;background:var(--color-danger);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">G\u00e9rer les relances</button>'
+    + '</div>';
+  var dashEl = document.getElementById('page-dashboard');
+  if (dashEl) {
+    var firstChild = dashEl.querySelector('.kpi-grid') || dashEl.querySelector('h1') || dashEl.firstElementChild;
+    if (firstChild) firstChild.parentNode.insertBefore(banner, firstChild);
+    else dashEl.prepend(banner);
+  }
+}
 
 function ouvrirModalRelances() {
   document.getElementById('relances-overlay')?.remove();
@@ -6901,6 +6954,7 @@ async function sendBailoMessage() {
   }
 }
 </script>
+  <script src="https://bailo.pro/bailo-nav.js" defer></script>
 </body>
 </html>
 
