@@ -6741,6 +6741,25 @@ function initApp() {
   // Charger le profil bailleur des le demarrage
   loadSettings();
   loadBanks();
+  // Lien admin pour Sebastien
+  injectAdminLink();
+}
+
+function injectAdminLink() {
+  var session = null;
+  db.auth.getSession().then(function(res) {
+    if (!res.data || !res.data.session) return;
+    if (res.data.session.user.id !== 'd762ecb9-c06d-49b6-b058-f0aacfa7952c') return;
+    var nav = document.querySelector('nav');
+    if (!nav || document.getElementById('admin-nav-link')) return;
+    var div = document.createElement('div');
+    div.id = 'admin-nav-link';
+    div.innerHTML = '<div class="nav-group-label" style="margin-top:8px;color:#f97316">Admin</div>'
+      + '<a href="https://bailo.pro/admin" target="_blank" class="nav-item" style="color:#f97316">'
+      + '<span class="nav-icon">&#9881;</span>'
+      + '<span class="nav-label">Dashboard admin</span></a>';
+    nav.appendChild(div);
+  });
 }
 
 // Boot on DOM ready
