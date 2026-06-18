@@ -457,6 +457,31 @@ function renderEDL() {
   const edlExit = leaseData.edlExit;
   const sigs = leaseData.edlSign || {};
 
+  const ETAT_LABELS = { 'bon': '✅ Bon état', 'usage': '⚠️ État d\'usage', 'degrade': '❌ Dégradé', '': '—' };
+
+  function renderRooms(rooms) {
+    if (!rooms || !rooms.length) return '';
+    return rooms.map(function(room) {
+      var obs = room.observations || '';
+      var etat = ETAT_LABELS[room.etat] || room.etat || '—';
+      var photosHtml = '';
+      if (room.photos && room.photos.length) {
+        photosHtml = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">'
+          + room.photos.map(function(p) {
+            return '<img src="' + p + '" style="width:90px;height:70px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb">';
+          }).join('') + '</div>';
+      }
+      return '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:8px">'
+        + '<div style="font-weight:600;font-size:.92rem;margin-bottom:6px">🏠 ' + (room.name || room.nom || 'Pièce') + '</div>'
+        + '<div style="display:flex;gap:16px;font-size:.82rem;color:#4b5563;margin-bottom:4px">'
+          + '<span>État : <strong>' + etat + '</strong></span>'
+        + '</div>'
+        + (obs ? '<div style="font-size:.82rem;color:#374151;margin-top:4px;background:#fff;padding:6px 8px;border-radius:4px;border:1px solid #e5e7eb">📝 ' + obs + '</div>' : '')
+        + photosHtml
+      + '</div>';
+    }).join('');
+  }
+
   // Entrée
   const entryEl = document.getElementById('edl-entry-info');
   const entrySigEl = document.getElementById('edl-entry-sig');
@@ -470,9 +495,12 @@ function renderEDL() {
       <div class="info-row"><span class="info-label">Statut</span><span class="badge badge-green">Renseigné</span></div>
       <div class="info-row"><span class="info-label">Nombre de pièces</span><span class="info-value">${nbPieces}</span></div>
       <div class="info-row"><span class="info-label">Date</span><span class="info-value">${edlEntry.savedAt ? formatDate(edlEntry.savedAt) : '—'}</span></div>
+      <div style="margin-top:14px">
+        <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin-bottom:8px">Détail pièce par pièce</div>
+        ${renderRooms(edlEntry.rooms)}
+      </div>
     `;
 
-    // Signature locataire entrée
     if (sigs.locataire) {
       entrySigEl.innerHTML = `<div class="sig-validated">✅ Signé par le locataire<br><img src="${sigs.locataire}" style="max-height:50px;margin-top:6px;display:block;margin-left:auto;margin-right:auto"></div>`;
     } else {
@@ -499,6 +527,10 @@ function renderEDL() {
     exitEl.innerHTML = `
       <div class="info-row"><span class="info-label">Statut</span><span class="badge badge-orange">Renseigné</span></div>
       <div class="info-row"><span class="info-label">Nombre de pièces</span><span class="info-value">${edlExit.rooms.length}</span></div>
+      <div style="margin-top:14px">
+        <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin-bottom:8px">Détail pièce par pièce</div>
+        ${renderRooms(edlExit.rooms)}
+      </div>
     `;
 
     if (sigs.locataireExit) {
