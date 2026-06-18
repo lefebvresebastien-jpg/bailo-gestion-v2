@@ -462,21 +462,35 @@ function renderEDL() {
   function renderRooms(rooms) {
     if (!rooms || !rooms.length) return '';
     return rooms.map(function(room) {
+      var ETAT = { 'Bon état': '✅', 'bon': '✅', 'État d\'usage': '⚠️', 'usage': '⚠️', 'Dégradé': '❌', 'degrade': '❌' };
+      function badge(val) {
+        if (!val) return '—';
+        var icon = ETAT[val] || '';
+        return icon + ' ' + val;
+      }
+      var rows = [
+        ['Sol', room.floor], ['Murs', room.walls], ['Plafond', room.ceiling],
+        ['Fenêtres', room.windows], ['Équipements', room.equipment]
+      ].filter(r => r[1]).map(r =>
+        '<div style="display:flex;justify-content:space-between;font-size:.82rem;padding:3px 0;border-bottom:1px solid #f3f4f6">'
+        + '<span style="color:#6b7280">' + r[0] + '</span><span style="font-weight:500">' + badge(r[1]) + '</span></div>'
+      ).join('');
+
       var obs = room.observations || '';
-      var etat = ETAT_LABELS[room.etat] || room.etat || '—';
       var photosHtml = '';
-      if (room.photos && room.photos.length) {
+      var photos = room.photos || [];
+      if (photos.length) {
         photosHtml = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">'
-          + room.photos.map(function(p) {
-            return '<img src="' + p + '" style="width:90px;height:70px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb">';
+          + photos.map(function(p) {
+            var url = typeof p === 'object' ? (p.url || p.src || '') : p;
+            return url ? '<img src="' + url + '" style="width:90px;height:70px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb">' : '';
           }).join('') + '</div>';
       }
+
       return '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:8px">'
-        + '<div style="font-weight:600;font-size:.92rem;margin-bottom:6px">🏠 ' + (room.name || room.nom || 'Pièce') + '</div>'
-        + '<div style="display:flex;gap:16px;font-size:.82rem;color:#4b5563;margin-bottom:4px">'
-          + '<span>État : <strong>' + etat + '</strong></span>'
-        + '</div>'
-        + (obs ? '<div style="font-size:.82rem;color:#374151;margin-top:4px;background:#fff;padding:6px 8px;border-radius:4px;border:1px solid #e5e7eb">📝 ' + obs + '</div>' : '')
+        + '<div style="font-weight:600;font-size:.92rem;margin-bottom:8px">🏠 ' + (room.name || room.nom || 'Pièce') + '</div>'
+        + (rows || '')
+        + (obs ? '<div style="font-size:.82rem;color:#374151;margin-top:6px;background:#fff;padding:6px 8px;border-radius:4px;border:1px solid #e5e7eb">📝 ' + obs + '</div>' : '')
         + photosHtml
       + '</div>';
     }).join('');
