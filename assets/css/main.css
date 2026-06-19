@@ -556,7 +556,7 @@ input, select, textarea { font-family: var(--font); font-size: 14px; }
    ============================================================ */
 @media (max-width: 768px) {
   .topbar { display: flex; }
-  .sidebar { position: fixed; left: 0; top: 0; bottom: 0; height: 100vh; height: 100dvh; transform: translateX(-100%); box-shadow: var(--shadow-lg); overflow-y: auto; }
+  .sidebar { position: fixed; left: 0; top: 0; transform: translateX(-100%); box-shadow: var(--shadow-lg); overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .sidebar.open { transform: translateX(0); }
   .sidebar-close { display: block; }
   .sidebar-nav { flex: none; overflow-y: visible; }
