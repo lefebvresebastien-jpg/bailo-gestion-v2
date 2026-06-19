@@ -1154,6 +1154,29 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   window.db = db; // expose pour bailo-nav.js
 
+// Connexion en lecture seule à la base Chantier/Finance, où vit la table
+// "subscriptions" (plan Solo/Duo/Pro de l'utilisateur). Nécessaire pour
+// appliquer les limites du plan (ex: 1 bail max en Solo) côté Gestion.
+const dbBilling = supabase.createClient(
+  'https://hvkguyddmhqbvarujlyr.supabase.co',
+  'sb_publishable_BZHU49hkN70MgEypJZ7K5A_AwlIQF7W'
+);
+async function checkPlan() {
+  try {
+    const { data } = await dbBilling.from('subscriptions')
+      .select('modules, active, plan')
+      .eq('user_id', _currentUserId)
+      .single()
+    window.userModules = data?.modules || []
+    window.planActive = data?.active || false
+    window.userPlan = data?.plan || 'free'
+  } catch(e) {
+    window.userModules = []
+    window.planActive = false
+    window.userPlan = 'free'
+  }
+}
+
 
 /* v3 */
 // ============================================================
@@ -1217,8 +1240,9 @@ function onAuthSuccess(user) {
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
 
-  // Load initial data
-  initApp();
+  // Charger le plan (Solo/Duo/Pro) avant d'initialiser l'app pour que les
+  // limites de plan soient appliquées dès le premier rendu
+  checkPlan().then(initApp);
 
   // Injecter lien admin si Sebastien
   if (user.id === 'd762ecb9-c06d-49b6-b058-f0aacfa7952c') {
@@ -5356,6 +5380,17 @@ async function createLease() {
   if (!session) {
     showToast('Session expirée. Reconnectez-vous.', 'error');
     return;
+  }
+
+  // ── GATE : 1 bail max en plan Solo (Duo et Pro = illimité) ──
+  if (window.userPlan === 'solo') {
+    const { count } = await db.from('leases').select('id', { count: 'exact', head: true })
+    if ((count || 0) >= 1) {
+      showToast('Limite d\'1 bail atteinte en plan Solo. Passez au Duo pour des baux illimités.', 'error', 5000);
+      nextBtn.disabled = false;
+      nextBtn.textContent = 'Créer le bail';
+      return;
+    }
   }
 
   // Génerer un UUID v4
