@@ -530,12 +530,14 @@
           <a href="https://finance.bailo.pro" target="_self" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;color:rgba(255,255,255,.6);text-decoration:none;font-size:.82rem;transition:background .1s" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">💰 Finance</a>
           <a href="https://chantier.bailo.pro" target="_self" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;color:rgba(255,255,255,.6);text-decoration:none;font-size:.82rem;transition:background .1s" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">🏗 Chantier</a>
         </div>
-        <div class="user-avatar" id="user-avatar">?</div>
-        <div class="user-details">
-          <span class="user-name" id="user-name">—</span>
-          <span class="user-email" id="user-email">—</span>
+        <div class="sidebar-footer-user">
+          <div class="user-avatar" id="user-avatar">?</div>
+          <div class="user-details">
+            <span class="user-name" id="user-name">—</span>
+            <span class="user-email" id="user-email">—</span>
+          </div>
+          <button class="btn-logout" onclick="handleLogout()" title="Se déconnecter">⏻</button>
         </div>
-        <button class="btn-logout" onclick="handleLogout()" title="Se déconnecter">⏻</button>
       </div>
     </aside>
 
@@ -7028,4 +7030,5 @@ async function sendBailoMessage() {
 </script>
 </body>
 </html>
+
 
