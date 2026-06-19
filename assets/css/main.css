@@ -556,10 +556,10 @@ input, select, textarea { font-family: var(--font); font-size: 14px; }
    ============================================================ */
 @media (max-width: 768px) {
   .topbar { display: flex; }
-  .sidebar { position: fixed; left: 0; top: 0; transform: translateX(-100%); box-shadow: var(--shadow-lg); overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .sidebar { position: fixed; left: 0; top: 0; transform: translateX(-100%); box-shadow: var(--shadow-lg); }
   .sidebar.open { transform: translateX(0); }
   .sidebar-close { display: block; }
-  .sidebar-nav { flex: none; overflow-y: visible; }
+  .sidebar-nav { -webkit-overflow-scrolling: touch; }
   .sidebar-footer { flex-shrink: 0; padding-bottom: max(var(--space-md), env(safe-area-inset-bottom)); }
   .page { padding: var(--space-md); }
   .page-header h1 { font-size: 19px; }
