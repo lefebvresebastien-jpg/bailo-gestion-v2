@@ -1306,6 +1306,20 @@ function navigate(page, linkEl) {
 function toggleSidebar() {
   document.getElementById('sidebar').classList.toggle('open');
 }
+// Fix mobile Safari: vh/% height calculations peuvent etre peu fiables
+// (barre d'adresse dynamique). On fixe la hauteur reelle en pixels via JS.
+function fixSidebarHeight() {
+  const sb = document.getElementById('sidebar');
+  if (sb && window.innerWidth <= 768) {
+    sb.style.height = window.innerHeight + 'px';
+  } else if (sb) {
+    sb.style.height = '';
+  }
+}
+window.addEventListener('resize', fixSidebarHeight);
+window.addEventListener('orientationchange', fixSidebarHeight);
+fixSidebarHeight();
+setTimeout(fixSidebarHeight, 300);
 
 // ---- Toast ----
 let _toastTimer = null;
