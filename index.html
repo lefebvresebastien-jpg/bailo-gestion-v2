@@ -3582,7 +3582,9 @@ async function saveSettings() {
     signatureCity: (document.getElementById('s-signatureCity')||{}).value || '',
     landlordSiret: (document.getElementById('s-landlordSiret')||{}).value || ''
   };
-  // Capturer la signature du canvas
+  // Capturer la signature du canvas — si le canvas est vide (rien dessiné
+  // dans cette session), on conserve l'ancienne signature déjà enregistrée
+  // au lieu de la perdre silencieusement à chaque sauvegarde du profil.
   var canvas = document.getElementById('canvas-sig-bailleur');
   if (canvas) {
     var blank = document.createElement('canvas'); blank.width=canvas.width; blank.height=canvas.height;
@@ -3590,6 +3592,8 @@ async function saveSettings() {
     if (!isBlank) {
       profile.sig_bailleur = canvas.toDataURL('image/png');
       document.getElementById('sig-saved-indicator').style.display = '';
+    } else if (_landlordProfile && _landlordProfile.sig_bailleur) {
+      profile.sig_bailleur = _landlordProfile.sig_bailleur;
     }
   }
 
@@ -6759,11 +6763,11 @@ async function genererEtEnvoyerQuittance(leaseId, month) {
   // Récupérer profil bailleur + signature
   var sigRes = await db.from('settings').select('value').eq('key','landlord_profile').maybeSingle();
   var profile = sigRes.data ? JSON.parse(sigRes.data.value) : {};
-  var sigBailleur = profile.sig_bailleur || '';
   var keyRes = await db.from('settings').select('value').eq('key','resend_api_key').maybeSingle();
   var resendKey = keyRes.data ? keyRes.data.value : '';
 
   var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
+  var sigBailleur = f.sig_bailleur || profile.sig_bailleur || '';
   var rent = parseFloat(f.rent||0);
   var charges = parseFloat(f.charges||0);
   var total = rent + charges;
