@@ -6259,6 +6259,35 @@ async function renvoyerQuittance(receiptId) {
   showToast('Quittance renvoyée !', 'success');
 }
 
+// Synchronise une quittance générée dans Gestion vers la base Chantier/Finance
+// (table quittances_sync), pour qu'elle apparaisse automatiquement dans le
+// Récap fiscal de Bailo Finance. Utilise la clé anon publique de l'autre
+// projet Supabase — la table a des policies RLS permissives en écriture.
+async function syncQuittanceToFinance(leaseId, month, tenantName, rent, charges) {
+  try {
+    const FINANCE_URL = 'https://hvkguyddmhqbvarujlyr.supabase.co'
+    const FINANCE_ANON_KEY = 'sb_publishable_BZHU49hkN70MgEypJZ7K5A_AwlIQF7W'
+    const row = {
+      id: leaseId + '_' + month,
+      lease_id: leaseId,
+      tenant_name: tenantName || '',
+      month: month,
+      rent: rent,
+      charges: charges
+    }
+    await fetch(FINANCE_URL + '/rest/v1/quittances_sync?on_conflict=id', {
+      method: 'POST',
+      headers: {
+        'apikey': FINANCE_ANON_KEY,
+        'Authorization': 'Bearer ' + FINANCE_ANON_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify(row)
+    })
+  } catch (e) { console.warn('[Bailo] syncQuittanceToFinance error:', e) }
+}
+
 async function _doQSend(lease, month, rent, charges, isResend) {
   var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
   var total = rent + charges;
@@ -6294,6 +6323,11 @@ async function _doQSend(lease, month, rent, charges, isResend) {
       body: body
     });
     if (insertRes.error) { console.error('Insert quittance error:', JSON.stringify(insertRes.error)); showToast('Erreur enregistrement: ' + insertRes.error.message, 'error'); }
+
+    // Synchroniser vers quittances_sync (base Chantier/Finance) pour que
+    // la quittance apparaisse dans le Récap fiscal de Bailo Finance.
+    // Best-effort : un échec ici n'empêche pas l'envoi de la quittance.
+    syncQuittanceToFinance(lease.id, month, f.tenantName || f.locataireName || '', rent, charges)
   }
 
   // Envoyer via Edge Function
