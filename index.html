@@ -4647,6 +4647,29 @@ async function submitLierBail() {
 // ============================================================
 // LOCATAIRES
 // ============================================================
+// Édition rapide email/téléphone d'un locataire, sans passer par tout le
+// wizard de bail — utile quand l'email manquait à la création du bail.
+async function quickEditTenantContact(leaseId) {
+  var lease = _allLeases.find(function(l){ return l.id === leaseId; });
+  if (!lease) { showToast('Bail introuvable.', 'error'); return; }
+  var f = fd(lease);
+  var newEmail = prompt('Email du locataire (' + (f.tenantName || '—') + ') :', f.tenantEmail || '');
+  if (newEmail === null) return; // annulé
+  var newPhone = prompt('Téléphone (optionnel) :', f.tenantPhone || '');
+  if (newPhone === null) newPhone = f.tenantPhone || '';
+
+  var updatedFormData = Object.assign({}, f, { tenantEmail: newEmail.trim(), tenantPhone: newPhone.trim() });
+  var updatedData = Object.assign({}, lease.data, { formData: updatedFormData });
+  var res = await db.from('leases').update({ data: updatedData }).eq('id', leaseId);
+  if (res.error) { showToast('Erreur : ' + res.error.message, 'error'); return; }
+
+  showToast('Coordonnées mises à jour ✅', 'success');
+  // Mettre à jour le cache local et rafraîchir l'affichage
+  var idx = _allLeases.findIndex(function(l){ return l.id === leaseId; });
+  if (idx >= 0) _allLeases[idx].data = updatedData;
+  loadTenants();
+}
+
 async function loadTenants() {
   const el = document.getElementById('tenants-list');
   if (!el) return;
@@ -4669,7 +4692,11 @@ async function loadTenants() {
           <div class="tenant-email">${f.tenantEmail || '—'}</div>
           <div class="tenant-lease">${f.propertyAddress || '—'}</div>
           <div>${leaseStatusBadge(leaseStatus(l))}</div>
-          <div>
+          <div style="display:flex;gap:6px">
+            <button onclick="quickEditTenantContact('${l.id}')"
+              style="padding:5px 10px;background:var(--color-bg);color:var(--color-text);border:1px solid var(--color-border);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">
+              ✏️
+            </button>
             <button onclick="envoyerLienLocataire('${l.id}','${(f.tenantName||'').replace(/'/g,'')}','${f.tenantEmail||''}')"
               style="padding:5px 10px;background:#2563eb;color:white;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">
               📧 Envoyer le lien
@@ -4877,14 +4904,18 @@ const WIZARD_STEPS_CONTENT = {
         '</div>';
     }
 
-    // Si locataire existant sélectionné : masquer le formulaire manuel
-    var newTenantForm = tenantSelected ? '' :
-      '<div class="form-row">' +
-        '<div class="form-group"><label>Nom complet *</label>' +
-        '<input type="text" id="w-tenantName" value="' + (d.tenantName||'') + '" placeholder="M. Jean Dupont" /></div>' +
-        '<div class="form-group"><label>Date de naissance</label>' +
-        '<input type="date" id="w-tenantDOB" value="' + (d.tenantDOB||'') + '" /></div>' +
-      '</div>' +
+    // Si locataire existant sélectionné : on garde les champs email/téléphone/
+    // adresse/garant modifiables (utile si l'email manquait au moment de la
+    // création), seul le champ Nom reste verrouillé sur le locataire choisi.
+    var newTenantForm =
+      (tenantSelected ? '' :
+        '<div class="form-row">' +
+          '<div class="form-group"><label>Nom complet *</label>' +
+          '<input type="text" id="w-tenantName" value="' + (d.tenantName||'') + '" placeholder="M. Jean Dupont" /></div>' +
+          '<div class="form-group"><label>Date de naissance</label>' +
+          '<input type="date" id="w-tenantDOB" value="' + (d.tenantDOB||'') + '" /></div>' +
+        '</div>'
+      ) +
       '<div class="form-row">' +
         '<div class="form-group"><label>Email</label>' +
         '<input type="email" id="w-tenantEmail" value="' + (d.tenantEmail||'') + '" placeholder="locataire@mail.fr" /></div>' +
@@ -5263,10 +5294,14 @@ function collectStepData() {
       // dpeFileUrl déjà stocké par handleDpeFile
       break;
     case 3:
-      // Si champ visible (nouveau locataire), on écrase. Sinon on garde _wizardData (locataire sélectionné via carte)
+      // tenantEmail/Phone/Address/IdDoc sont toujours visibles (modifiables
+      // même avec un locataire existant sélectionné). Seul tenantName reste
+      // verrouillé sur le nom du locataire choisi dans ce cas.
       if (document.getElementById('w-tenantName')) {
         _wizardData.tenantName = g('w-tenantName') || _wizardData.tenantName;
         _wizardData.tenantDOB = g('w-tenantDOB') || _wizardData.tenantDOB;
+      }
+      if (document.getElementById('w-tenantEmail')) {
         _wizardData.tenantEmail = g('w-tenantEmail') || _wizardData.tenantEmail;
         _wizardData.tenantPhone = g('w-tenantPhone') || _wizardData.tenantPhone;
         _wizardData.tenantAddress = g('w-tenantAddress') || _wizardData.tenantAddress;
