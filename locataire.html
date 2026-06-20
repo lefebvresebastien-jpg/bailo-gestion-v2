@@ -410,7 +410,8 @@ function renderBail() {
   <div class="info-row"><span class="info-label">Adresse du bailleur</span><span class="info-value">${_profile.landlordAddress || f.landlordAddress || '—'}</span></div>
   <div class="info-row"><span class="info-label">Adresse du logement</span><span class="info-value">${f.propertyAddress || '—'}</span></div>
   <div class="info-row"><span class="info-label">Loyer hors charges</span><span class="info-value">${f.rent ? fmtCur(f.rent) : '—'}</span></div>
-  <div class="info-row"><span class="info-label">Charges</span><span class="info-value">${f.charges ? fmtCur(f.charges) : '—'}</span></div>`;
+  <div class="info-row"><span class="info-label">Charges</span><span class="info-value">${f.charges ? fmtCur(f.charges) : '—'}</span></div>
+  <a href="https://www.caf.fr/allocataires/aides-et-demarches/droits-et-prestations/estimation-en-ligne/calculer-vos-aides" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:14px;padding:10px 16px;background:var(--color-primary);color:#fff;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600">🧮 Simuler mes droits aux aides sur caf.fr ↗</a>`;
 }
 
 // ============================================================
@@ -978,3 +979,4 @@ if (isIOS) {
 </script>
 </body>
 </html>
+
