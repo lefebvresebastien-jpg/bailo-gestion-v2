@@ -7076,6 +7076,14 @@ async function sendBailoMessage() {
     scrollBailoChat();
   }
 }
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('sw.js')
+      .then(function() { console.log('[Bailo] SW ok'); })
+      .catch(function(e) { console.log('[Bailo] SW err', e); });
+  });
+}
 </script>
 </body>
 </html>
