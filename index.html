@@ -919,6 +919,13 @@
               </div>
             </div>
           </div>
+          <!-- Notifications push -->
+          <div class="card" style="padding:var(--space-xl);margin-bottom:var(--space-lg)">
+            <h3 style="font-size:14px;font-weight:700;margin-bottom:var(--space-lg);padding-bottom:8px;border-bottom:1px solid var(--color-border)">🔔 Notifications</h3>
+            <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:14px">Recevez une notification sur cet appareil pour les nouveaux messages, quittances et alertes — même quand Bailo est fermé.</p>
+            <button class="btn-primary" id="btn-push-toggle" onclick="togglePushNotifications()">🔔 Activer les notifications</button>
+            <div id="push-status-msg" style="display:none;margin-top:10px;padding:10px 14px;border-radius:var(--radius-md);font-size:13px"></div>
+          </div>
           <!-- Mes banques -->
           <div class="card" style="padding:var(--space-xl);margin-bottom:var(--space-lg)">
             <h3 style="font-size:14px;font-weight:700;margin-bottom:var(--space-lg);padding-bottom:8px;border-bottom:1px solid var(--color-border)">🏦 Mes banques</h3>
@@ -7077,10 +7084,104 @@ async function sendBailoMessage() {
   }
 }
 
+// ── NOTIFICATIONS PUSH ──────────────────────────────────────
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+async function getPushSubscriptionStatus() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  const reg = await navigator.serviceWorker.ready;
+  return reg.pushManager.getSubscription();
+}
+
+async function updatePushButtonUI() {
+  const btn = document.getElementById('btn-push-toggle');
+  if (!btn) return;
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    btn.textContent = 'Non disponible sur ce navigateur';
+    btn.disabled = true;
+    return;
+  }
+  const sub = await getPushSubscriptionStatus();
+  btn.textContent = sub ? '🔕 Désactiver les notifications' : '🔔 Activer les notifications';
+}
+
+async function togglePushNotifications() {
+  const btn = document.getElementById('btn-push-toggle');
+  const msgEl = document.getElementById('push-status-msg');
+  const showMsg = (text, ok) => {
+    msgEl.style.display = 'block';
+    msgEl.textContent = text;
+    msgEl.style.background = ok ? 'var(--color-success-light)' : '#fef2f2';
+    msgEl.style.color = ok ? 'var(--color-success)' : '#dc2626';
+    msgEl.style.border = '1px solid ' + (ok ? 'var(--color-success)' : '#fca5a5');
+  };
+
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    showMsg('Les notifications push ne sont pas supportées sur ce navigateur.', false);
+    return;
+  }
+
+  btn.disabled = true;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+
+    if (existing) {
+      // Désactivation
+      await fetch('/.netlify/functions/subscribe-push', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: existing.endpoint })
+      });
+      await existing.unsubscribe();
+      showMsg('Notifications désactivées sur cet appareil.', true);
+    } else {
+      // Activation
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        showMsg('Permission refusée. Activez les notifications dans les réglages de votre navigateur.', false);
+        btn.disabled = false;
+        return;
+      }
+      const { publicKey } = await fetch('/.netlify/functions/get-vapid-key').then(r => r.json());
+      if (!publicKey) {
+        showMsg('Configuration serveur incomplète (clé VAPID manquante).', false);
+        btn.disabled = false;
+        return;
+      }
+      const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+      });
+      await fetch('/.netlify/functions/subscribe-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: _currentUserId,
+          role: 'bailleur',
+          subscription: subscription.toJSON()
+        })
+      });
+      showMsg('✅ Notifications activées sur cet appareil.', true);
+    }
+  } catch (e) {
+    showMsg('Erreur : ' + e.message, false);
+  }
+  btn.disabled = false;
+  updatePushButtonUI();
+}
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
     navigator.serviceWorker.register('sw.js')
-      .then(function() { console.log('[Bailo] SW ok'); })
+      .then(function() { console.log('[Bailo] SW ok'); updatePushButtonUI(); })
       .catch(function(e) { console.log('[Bailo] SW err', e); });
   });
 }
