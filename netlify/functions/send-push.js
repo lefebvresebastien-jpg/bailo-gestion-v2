@@ -45,10 +45,10 @@ exports.handler = async function(event) {
 
     const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY;
     const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
-    const VAPID_EMAIL = process.env.VAPID_EMAIL || 'mailto:contact@bailo.pro';
+    const VAPID_EMAIL = process.env.VAPID_EMAIL;
 
-    if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
-      return { statusCode: 500, headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ error: 'Clés VAPID manquantes' }) };
+    if (!VAPID_PUBLIC || !VAPID_PRIVATE || !VAPID_EMAIL) {
+      return { statusCode: 500, headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ error: 'Configuration VAPID incomplète' }) };
     }
     webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC, VAPID_PRIVATE);
 
