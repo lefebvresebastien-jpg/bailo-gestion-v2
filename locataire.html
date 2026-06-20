@@ -175,6 +175,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
         <div class="card-title">🏛️ Aide au logement (CAF)</div>
         <div id="caf-info"></div>
       </div>
+      <div class="card">
+        <div class="card-title">🔔 Notifications</div>
+        <p style="font-size:13px;color:var(--ink-3);margin-bottom:12px">Recevez une alerte sur cet appareil pour vos nouvelles quittances et messages — même quand l'app est fermée.</p>
+        <button class="btn btn-primary btn-sm" id="btn-push-toggle" onclick="togglePushNotifications()">🔔 Activer les notifications</button>
+        <div id="push-status-msg" style="display:none;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:13px"></div>
+      </div>
     </div>
 
     <!-- QUITTANCES -->
@@ -975,6 +981,105 @@ if (isIOS) {
       }
     }
   }, 3000);
+}
+
+// ── NOTIFICATIONS PUSH ──────────────────────────────────────
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+async function updatePushButtonUI() {
+  const btn = document.getElementById('btn-push-toggle');
+  if (!btn) return;
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    btn.textContent = 'Non disponible sur ce navigateur';
+    btn.disabled = true;
+    return;
+  }
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  btn.textContent = sub ? '🔕 Désactiver les notifications' : '🔔 Activer les notifications';
+}
+
+async function togglePushNotifications() {
+  const btn = document.getElementById('btn-push-toggle');
+  const msgEl = document.getElementById('push-status-msg');
+  const showMsg = (text, ok) => {
+    msgEl.style.display = 'block';
+    msgEl.textContent = text;
+    msgEl.style.background = ok ? '#dcfce7' : '#fef2f2';
+    msgEl.style.color = ok ? '#166534' : '#dc2626';
+    msgEl.style.border = '1px solid ' + (ok ? '#86efac' : '#fca5a5');
+  };
+
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    showMsg('Les notifications push ne sont pas supportées sur ce navigateur.', false);
+    return;
+  }
+  if (!_lease || !_lease.id) {
+    showMsg('Bail non chargé, réessayez dans quelques secondes.', false);
+    return;
+  }
+
+  btn.disabled = true;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+
+    if (existing) {
+      await fetch('/.netlify/functions/subscribe-push', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: existing.endpoint })
+      });
+      await existing.unsubscribe();
+      showMsg('Notifications désactivées sur cet appareil.', true);
+    } else {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        showMsg('Permission refusée. Activez les notifications dans les réglages de votre navigateur.', false);
+        btn.disabled = false;
+        return;
+      }
+      const { publicKey } = await fetch('/.netlify/functions/get-vapid-key').then(r => r.json());
+      if (!publicKey) {
+        showMsg('Configuration serveur incomplète (clé VAPID manquante).', false);
+        btn.disabled = false;
+        return;
+      }
+      const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+      });
+      await fetch('/.netlify/functions/subscribe-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lease_id: _lease.id,
+          role: 'locataire',
+          subscription: subscription.toJSON()
+        })
+      });
+      showMsg('✅ Notifications activées sur cet appareil.', true);
+    }
+  } catch (e) {
+    showMsg('Erreur : ' + e.message, false);
+  }
+  btn.disabled = false;
+  updatePushButtonUI();
+}
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('sw.js')
+      .then(function() { updatePushButtonUI(); })
+      .catch(function(e) { console.log('[Bailo] SW err', e); });
+  });
 }
 </script>
 </body>
