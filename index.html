@@ -5603,6 +5603,18 @@ async function submitNewMessage() {
   document.getElementById('new-message-overlay').classList.add('hidden');
   if (btn) { btn.disabled = false; btn.textContent = 'Envoyer'; }
 
+  // Notification push au locataire (best-effort, n'empeche pas le reste si ça échoue)
+  fetch('/.netlify/functions/send-push', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      target: { lease_id: leaseId },
+      title: (kind === 'Incident' ? '🚨 ' : '🏠 ') + 'Nouveau message de votre bailleur',
+      body: subject,
+      url: 'https://gestion.bailo.pro/locataire.html'
+    })
+  }).catch(() => {});
+
   // Envoyer email au locataire
   const lse = _allLeases.find(l => l.id === leaseId);
   const fd2 = (lse?.data?.formData) || {};
@@ -6735,6 +6747,18 @@ async function genererEtEnvoyerQuittance(leaseId, month) {
     subject: subject,
     body: body
   });
+
+  // Notification push au locataire (best-effort)
+  fetch('/.netlify/functions/send-push', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      target: { lease_id: leaseId },
+      title: '🧾 Nouvelle quittance disponible',
+      body: subject,
+      url: 'https://gestion.bailo.pro/locataire.html'
+    })
+  }).catch(() => {});
 
   // Envoyer par email
   if (f.tenantEmail && resendKey) {
