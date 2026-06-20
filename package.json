@@ -1,0 +1,8 @@
+{
+  "name": "bailo-gestion-v2",
+  "version": "1.0.0",
+  "description": "Bailo Gestion v2 — Application de gestion locative",
+  "dependencies": {
+    "web-push": "^3.6.7"
+  }
+}
