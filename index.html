@@ -1582,7 +1582,8 @@ async function appliquerRevisionIRL(leaseId, loyerActuel, trimestreRef) {
 
   var lease = _allLeases.find(function(l) { return l.id === leaseId; });
   if (!lease) return;
-  var ld = JSON.parse(JSON.stringify(lease.data || {}));
+  const { data: freshLeaseIRL } = await db.from('leases').select('data').eq('id', leaseId).single();
+  var ld = JSON.parse(JSON.stringify(freshLeaseIRL?.data || lease.data || {}));
   var fd = ld.formData || {};
   var nouveauLoyer = revision.nouveauLoyer;
   var latest = getLatestIRL();
@@ -3285,9 +3286,9 @@ async function envoyerLienSignature(leaseId) {
     showToast('Lien envoyé à ' + f.tenantEmail + ' ✅');
   }
 
-  // Marquer comme "lien envoyé" dans Supabase
-  const leaseData = lease.data || {};
-  leaseData.linkSentAt = new Date().toISOString();
+  // Marquer comme "lien envoyé" dans Supabase — recharger data frais pour ne pas ecraser edlEntry
+  const { data: freshLease1 } = await db.from('leases').select('data').eq('id', leaseId).single();
+  const leaseData = Object.assign({}, freshLease1?.data || lease.data || {}, { linkSentAt: new Date().toISOString() });
   await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
   renderSignatureStatus(leaseId);
 }
@@ -4748,8 +4749,8 @@ async function envoyerLienLocataire(leaseId, tenantName, tenantEmail) {
   // Sauvegarder date d'envoi
   const lease = _allLeases.find(l => l.id === leaseId);
   if (lease) {
-    const ld = lease.data || {};
-    ld.linkSentAt = new Date().toISOString();
+    const { data: freshLease2 } = await db.from('leases').select('data').eq('id', leaseId).single();
+    const ld = Object.assign({}, freshLease2?.data || lease.data || {}, { linkSentAt: new Date().toISOString() });
     await db.from('leases').update({ data: ld }).eq('id', leaseId);
     lease.data = ld;
   }
