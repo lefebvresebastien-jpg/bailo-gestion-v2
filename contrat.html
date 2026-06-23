@@ -885,6 +885,26 @@
 
       // Mode locataire : masquer éléments bailleur-only + activer sauvegarde sig locataire
       if (modeLocataire) {
+        // Bloquer le canvas bailleur - locataire ne peut pas signer a la place du bailleur
+        setTimeout(function() {
+          var canvasBailleur = document.getElementById('sig-bailleur');
+          if (canvasBailleur) {
+            canvasBailleur.style.pointerEvents = 'none';
+            canvasBailleur.style.opacity = '0.5';
+            canvasBailleur.style.cursor = 'not-allowed';
+            var wrapper = canvasBailleur.parentElement;
+            if (wrapper) {
+              var overlay = document.createElement('div');
+              overlay.style.cssText = 'position:absolute;inset:0;background:rgba(200,200,200,0.3);border-radius:8px;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:10';
+              overlay.innerHTML = '<span style="font-size:12px;color:#888;font-style:italic">Signature bailleur</span>';
+              wrapper.style.position = 'relative';
+              wrapper.appendChild(overlay);
+            }
+          }
+          // Masquer aussi le bouton Effacer du bailleur
+          var btnEffacer = document.querySelector('[onclick*="clearCanvas(\'sig-bailleur"]');
+          if (btnEffacer) btnEffacer.style.display = 'none';
+        }, 300);
         // Masquer les rectangles vides de signature
         function maskSigBlocks() {
           document.querySelectorAll('p').forEach(function(p) {
