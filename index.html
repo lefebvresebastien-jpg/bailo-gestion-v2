@@ -1158,7 +1158,8 @@
 const SUPABASE_URL = 'https://nltuysmnxsomlhgvbtwz.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0';
 
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_UtH7OZskOMab-vCsoKKRsQ_rVkm5mRC';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
   window.db = db; // expose pour bailo-nav.js
 
 // Connexion en lecture seule à la base Chantier/Finance, où vit la table
@@ -1644,8 +1645,10 @@ async function envoyerEmailIRL(leaseId) {
   if (!emailDest) { showToast('Aucun email bailleur configuré dans Paramètres.', 'error'); return; }
 
   try {
-    var res = await db.functions.invoke('send-email', {
-      body: { to: emailDest, subject: subject, text: body }
+    var res = await fetch('/.netlify/functions/send-email-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: emailDest, subject: subject, text: body })
     });
     if (res.error) throw res.error;
     showToast('Email envoyé à ' + emailDest + ' ✅');
@@ -1774,8 +1777,10 @@ async function envoyerRelanceEmail(leaseId) {
     'En cas d\'erreur, veuillez ignorer ce message.\n\n' +
     'Cordialement,\n' + (f.landlordName || 'Votre bailleur');
   try {
-    var res = await db.functions.invoke('send-email', {
-      body: { to: f.tenantEmail, subject: 'Rappel loyer — ' + (f.propertyAddress||''), text: body }
+    var res = await fetch('/.netlify/functions/send-email-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: f.tenantEmail, subject: 'Rappel loyer — ' + (f.propertyAddress||''), text: body })
     });
     if (res.error) throw res.error;
     showToast('Relance envoyee a ' + f.tenantEmail + ' ✅');
@@ -2003,8 +2008,10 @@ async function envoyerRegul(leaseId) {
     'Cordialement,\n' + (f.landlordName || 'Votre bailleur');
 
   try {
-    var res = await db.functions.invoke('send-email', {
-      body: { to: f.tenantEmail, subject: 'Decompte annuel des charges — ' + (f.propertyAddress||''), text: body }
+    var res = await fetch('/.netlify/functions/send-email-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: f.tenantEmail, subject: 'Decompte annuel des charges — ' + (f.propertyAddress||''), text: body })
     });
     if (res.error) throw res.error;
     showToast('Decompte envoye a ' + f.tenantEmail + ' ✅');
@@ -2129,8 +2136,10 @@ async function envoyerRelanceEmail(leaseId) {
     + 'Merci de proceder au reglement dans les meilleurs delais.\n\n'
     + 'Cordialement,\n' + (f.landlordName || 'Votre bailleur');
   try {
-    var res = await db.functions.invoke('send-email', {
-      body: { to: f.tenantEmail, subject: 'Rappel loyer — ' + (f.propertyAddress||''), text: body }
+    var res = await fetch('/.netlify/functions/send-email-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: f.tenantEmail, subject: 'Rappel loyer — ' + (f.propertyAddress||''), text: body })
     });
     if (res.error) throw res.error;
     showToast('Relance envoyee a ' + f.tenantEmail + ' \u2705');
@@ -2284,7 +2293,11 @@ async function envoyerRegul(leaseId) {
     + '\n\n'+soldeLabel+' : '+(data.solde>0?'+':'')+fc.format(data.solde)
     + '\n\nConform\u00e9ment \u00e0 l\'article 23 de la loi du 6 juillet 1989.\n\nCordialement,\n'+(f.landlordName||'Votre bailleur');
   try {
-    var res = await db.functions.invoke('send-email', { body: { to: f.tenantEmail, subject: 'D\u00e9compte annuel charges \u2014 '+(f.propertyAddress||''), text: body } });
+    var res = await fetch('/.netlify/functions/send-email-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: f.tenantEmail, subject: 'D\u00e9compte annuel charges \u2014 '+(f.propertyAddress||''), text: body })
+    });
     if (res.error) throw res.error;
     showToast('D\u00e9compte envoy\u00e9 \u2705'); document.getElementById('reg-overlay')?.remove();
   } catch(e) { showToast('Erreur : '+(e.message||e),'error'); }
@@ -3011,11 +3024,11 @@ async function envoyerMessageAssurance(leaseId) {
         '<p style="white-space:pre-line;font-size:13px;line-height:1.7">' + texte.replace(/&#39;/g,"'") + '</p>' +
         '<div style="margin-top:16px"><a href="https://v2.gestion.bailo.pro/locataire.html?id=' + leaseId + '" style="background:#2563eb;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Répondre depuis mon espace</a></div>' +
         '</div></div>';
-      await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0' },
-        body: JSON.stringify({ to: [f.tenantEmail], subject: 'Renouvellement de votre attestation assurance habitation', html, resend_key: resendKey })
-      });
+    await fetch('/.netlify/functions/send-email-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: [f.tenantEmail], subject: 'Renouvellement de votre attestation assurance habitation', html, resend_key: resendKey })
+    });
     }
   }
 
@@ -3256,11 +3269,11 @@ async function envoyerLienSignature(leaseId) {
     '<p style="font-size:11px;color:#9a8a70;border-top:1px solid #e0d5c8;padding-top:12px">Ce lien est personnel et permanent — gardez cet email. Ne le partagez pas.</p>' +
     '</div></div>';
 
-  await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0' },
-    body: JSON.stringify({ to: [f.tenantEmail], subject: 'Votre bail est prêt à signer — ' + (f.propertyAddress||''), html: htmlLocataire, resend_key: resendKey })
-  });
+  await fetch('/.netlify/functions/send-email-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: [f.tenantEmail], subject: 'Votre bail est prêt à signer — ' + (f.propertyAddress||''), html: htmlLocataire, resend_key: resendKey })
+    });
 
   // Email garant si présent
   if (f.guarantorEmail) {
@@ -3276,9 +3289,9 @@ async function envoyerLienSignature(leaseId) {
       '<p style="font-size:12px;color:#6a5a40;margin-top:20px">Ce lien vous est personnel. Ne le partagez pas.</p>' +
       '</div></div>';
 
-    await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
+  await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to: [f.guarantorEmail], subject: 'Acte de caution à signer — ' + (f.tenantName||''), html: htmlGarant, resend_key: resendKey })
     });
     showToast('Lien envoyé au locataire et au garant ✅');
@@ -3473,11 +3486,11 @@ async function alerterBailleurSignature(lease, f, qui) {
     '<a href="https://v2.gestion.bailo.pro" style="display:inline-block;background:#2563eb;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Voir le bail signé</a>' +
     '</div></div>';
 
-  await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0' },
-    body: JSON.stringify({ to: [baillleurEmail], subject: (qui==='garant' ? (f.guarantorName||'Le garant') + ' a signé l\'acte de caution' : (f.tenantName||'Votre locataire') + ' a signé le bail') + ' — ' + (f.propertyAddress||''), html, resend_key: resendKey })
-  });
+  await fetch('/.netlify/functions/send-email-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: [baillleurEmail], subject: (qui==='garant' ? (f.guarantorName||'Le garant') + ' a signé l\'acte de caution' : (f.tenantName||'Votre locataire') + ' a signé le bail') + ' — ' + (f.propertyAddress||''), html, resend_key: resendKey })
+    });
   showToast('✅ ' + (qui==='garant' ? (f.guarantorName||'Garant') : (f.tenantName||'Locataire')) + ' a signé ! Email envoyé.', 'success');
 }
 
@@ -4740,11 +4753,11 @@ async function envoyerLienLocataire(leaseId, tenantName, tenantEmail) {
     '<p style="font-size:11px;color:#9a8a70;margin-top:16px;border-top:1px solid #e0d5c8;padding-top:12px">Lien personnel et permanent — gardez cet email.</p>' +
     '</div></div>';
 
-  const r = await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0' },
-    body: JSON.stringify({ to: [tenantEmail], subject: 'Votre espace locataire Bailo', html, resend_key: resendKey })
-  });
+  await fetch('/.netlify/functions/send-email-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: [tenantEmail], subject: 'Votre espace locataire Bailo', html, resend_key: resendKey })
+    });
 
   // Sauvegarder date d'envoi
   const lease = _allLeases.find(l => l.id === leaseId);
@@ -5670,11 +5683,11 @@ async function submitNewMessage() {
         '<p>' + body.split('\n').join('<br>') + '</p>' +
         '<p style="color:#666;font-size:.85rem;margin-top:16px">Cordialement,<br><strong>' + (fd2.landlordName || 'Votre bailleur') + '</strong></p>' +
         '</div></div>';
-      await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0' },
-        body: JSON.stringify({ to: [fd2.tenantEmail], subject: subject, html: eHtml, resend_key: rKey })
-      });
+    await fetch('/.netlify/functions/send-email-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: [fd2.tenantEmail], subject: subject, html: eHtml, resend_key: rKey })
+    });
     }
   }
 
@@ -6020,11 +6033,11 @@ async function sendReply(messageId) {
         '<p>' + body.split('\n').join('<br>') + '</p>' +
         '<p style="color:#666;font-size:.85rem;margin-top:16px">Cordialement,<br><strong>' + (f.landlordName || 'Votre bailleur') + '</strong></p>' +
         '</div></div>';
-      await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0' },
-        body: JSON.stringify({ to: [f.tenantEmail], subject: 'Message de votre bailleur : ' + (msg.subject||''), html: emailHtml, resend_key: resendKey })
-      });
+    await fetch('/.netlify/functions/send-email-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: [f.tenantEmail], subject: 'Message de votre bailleur : ' + (msg.subject||''), html: emailHtml, resend_key: resendKey })
+    });
     }
   }
 
@@ -6296,6 +6309,7 @@ async function renvoyerQuittance(receiptId) {
   var rent = parseFloat(f.rent || 0);
   var charges = parseFloat(f.charges || 0);
   await _doQSend(lease, month, rent, charges, true);
+  showToast('Quittance renvoyée !', 'success');
 }
 
 // Synchronise une quittance générée dans Gestion vers la base Chantier/Finance
@@ -6371,9 +6385,9 @@ async function _doQSend(lease, month, rent, charges, isResend) {
 
   // Envoyer via Edge Function
   if (f.tenantEmail && resendKey) {
-    var sendRes = await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
+  var sendRes = await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         to: [f.tenantEmail],
         subject: subject,
@@ -6381,10 +6395,10 @@ async function _doQSend(lease, month, rent, charges, isResend) {
         resend_key: resendKey
       })
     });
-    if (sendRes.ok) {
+    if (!sendRes.error) {
       showToast('Quittance envoyée à ' + f.tenantEmail, 'success');
     } else {
-      showToast('Enregistrée mais erreur envoi email (' + sendRes.status + ')', 'error');
+      showToast('Enregistrée mais erreur envoi email', 'error');
     }
   } else {
     showToast('Quittance enregistrée (email locataire manquant ou clé Resend non configurée).', 'info');
@@ -6835,9 +6849,9 @@ async function genererEtEnvoyerQuittance(leaseId, month) {
 
   // Envoyer par email
   if (f.tenantEmail && resendKey) {
-    var sendRes = await fetch('https://nltuysmnxsomlhgvbtwz.supabase.co/functions/v1/send-email', {
+  await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to: [f.tenantEmail], subject: subject, html: body, resend_key: resendKey })
     });
     if (sendRes.ok) {
@@ -7285,5 +7299,4 @@ if ('serviceWorker' in navigator) {
 </script>
 </body>
 </html>
-
 
