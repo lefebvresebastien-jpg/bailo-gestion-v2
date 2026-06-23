@@ -6296,7 +6296,6 @@ async function renvoyerQuittance(receiptId) {
   var rent = parseFloat(f.rent || 0);
   var charges = parseFloat(f.charges || 0);
   await _doQSend(lease, month, rent, charges, true);
-  showToast('Quittance renvoyée !', 'success');
 }
 
 // Synchronise une quittance générée dans Gestion vers la base Chantier/Finance
