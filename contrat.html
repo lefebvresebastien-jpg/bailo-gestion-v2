@@ -1009,6 +1009,23 @@
         setTimeout(function() { initSigCanvasBas(); }, 300);
       }
 
+      // Mode bailleur normal : bouton enregistrer signature bailleur
+      if (!modeLocataire && !modeGarant) {
+        setTimeout(function() {
+          var canvasBailleur = document.getElementById('sig-bailleur');
+          if (!canvasBailleur) return;
+          var wrapper = canvasBailleur.closest('.sig-box');
+          if (!wrapper) return;
+          // Ne pas ajouter si déjà signé
+          if (f.sig_bailleur) return;
+          var btnSave = document.createElement('button');
+          btnSave.textContent = '💾 Enregistrer ma signature';
+          btnSave.style.cssText = 'margin-top:10px;width:100%;padding:10px 20px;background:#e8793a;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif';
+          btnSave.onclick = function() { saveBailleurSig(leaseId); };
+          wrapper.appendChild(btnSave);
+        }, 600);
+      }
+
       // Afficher
       // Avertissement bail commercial
       const leaseType = f.leaseType || '';
@@ -1038,6 +1055,26 @@
 
       document.getElementById('loading').style.display = 'none';
       document.getElementById('page-wrapper').style.display = 'block';
+    }
+
+    async function saveBailleurSig(leaseId) {
+      var canvas = document.getElementById('sig-bailleur');
+      if (!canvas) { alert('Erreur: canvas introuvable.'); return; }
+      var blank = document.createElement('canvas'); blank.width=canvas.width; blank.height=canvas.height;
+      if (canvas.toDataURL() === blank.toDataURL()) { alert('Veuillez signer dans la zone de signature avant de valider.'); return; }
+      var sig = canvas.toDataURL('image/png');
+      var resp = await db.from('leases').select('data').eq('id', leaseId).single();
+      if (!resp.data) { alert('Erreur : bail introuvable.'); return; }
+      var leaseData = resp.data.data || {};
+      var fd = leaseData.formData || {};
+      fd.sig_bailleur = sig;
+      fd.sig_bailleur_at = new Date().toISOString();
+      leaseData.formData = fd;
+      var res = await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
+      if (res.error) { alert('Erreur sauvegarde : ' + res.error.message); return; }
+      var btn = document.querySelector('[onclick*="saveBailleurSig"]');
+      if (btn) { btn.textContent = '✅ Signature enregistrée !'; btn.style.background = '#6b7280'; btn.disabled = true; btn.style.pointerEvents = 'none'; }
+      alert('Votre signature bailleur a été enregistrée.');
     }
 
     loadAndRender();
