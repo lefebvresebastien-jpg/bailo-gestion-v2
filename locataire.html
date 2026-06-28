@@ -343,26 +343,21 @@ async function init() {
   }
 
   try {
-    const { data: lease, error } = await db.from('leases').select('*').eq('id', leaseId).single();
-    if (error || !lease) {
-      const errScreen = document.getElementById('error-screen');
-      if (errScreen) {
-        const dbg = document.createElement('p');
-        dbg.style.cssText = 'font-size:11px;color:#999;margin-top:8px;word-break:break-all;padding:0 20px';
-        dbg.textContent = 'Debug: id=' + leaseId + ' | ' + (error ? error.message || error.code || JSON.stringify(error) : 'lease null');
-        errScreen.appendChild(dbg);
-      }
-      showError(); return;
-    }
+    // Lecture via Netlify Function (bypass RLS, compatible PWA iOS)
+    const resp = await fetch('/.netlify/functions/get-lease?id=' + encodeURIComponent(leaseId));
+    if (!resp.ok) { showError(); return; }
+    const payload = await resp.json();
+    if (!payload.lease) { showError(); return; }
 
-    _lease = lease;
-    _fd = lease.data?.formData || {};
+    _lease = payload.lease;
+    _fd = _lease.data?.formData || {};
 
-    // Charger profil bailleur
-    const pRes = await db.from('settings').select('value').eq('key', 'landlord_profile').maybeSingle();
-    _profile = pRes.data ? JSON.parse(pRes.data.value) : {};
-    const cfgRes = await db.from('settings').select('value').eq('key','compteurs_config').maybeSingle();
-    const cptCfg = cfgRes.data ? JSON.parse(cfgRes.data.value) : {};
+    // Settings bailleur depuis la fonction
+    const settingsArr = payload.settings || [];
+    const profileSetting = settingsArr.find(s => s.key === 'landlord_profile');
+    const cptSetting = settingsArr.find(s => s.key === 'compteurs_config');
+    _profile = profileSetting ? JSON.parse(profileSetting.value) : {};
+    const cptCfg = cptSetting ? JSON.parse(cptSetting.value) : {};
     window._cptDateRef = cptCfg.dateRef || null;
     window._cptPrixM3 = parseFloat(cptCfg.prixM3) || 4.2;
 
