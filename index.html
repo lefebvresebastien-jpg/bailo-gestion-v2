@@ -2863,7 +2863,7 @@ function ouvrirEDL(leaseId) {
 
 function ouvrirEspaceLocataire(leaseId) {
   if (!leaseId) return;
-  window.open('locataire.html?id=' + leaseId, '_blank');
+  window.open('locataire.html?id=' + leaseId + '&bailleur=1', '_blank');
 }
 
 // ============================================================
