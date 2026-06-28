@@ -332,7 +332,7 @@ async function init() {
     try { sessionStorage.setItem('bailo-tenant-lease-id', leaseIdFromUrl); } catch(e) {}
   }
 
-  if (!leaseId) { showError(); return; }
+  if (!leaseId) { showError('Etape 1: leaseId manquant dans URL et storage'); return; }
   try { localStorage.setItem('bailo-tenant-lease-id', leaseId); } catch(e) {}
   try { sessionStorage.setItem('bailo-tenant-lease-id', leaseId); } catch(e) {}
 
@@ -345,9 +345,9 @@ async function init() {
   try {
     // Lecture via Netlify Function (bypass RLS, compatible PWA iOS)
     const resp = await fetch('https://v2.gestion.bailo.pro/.netlify/functions/get-lease?id=' + encodeURIComponent(leaseId));
-    if (!resp.ok) { showError(); return; }
+    if (!resp.ok) { showError('Etape 2: fetch KO status=' + resp.status + ' url=' + resp.url); return; }
     const payload = await resp.json();
-    if (!payload.lease) { showError(); return; }
+    if (!payload.lease) { showError('Etape 3: payload sans lease. payload=' + JSON.stringify(payload).substring(0,100)); return; }
 
     _lease = payload.lease;
     _fd = _lease.data?.formData || {};
@@ -384,13 +384,19 @@ async function init() {
 
   } catch(e) {
     console.error(e);
-    showError();
+    showError('Etape 4 catch: ' + e.message);
   }
 }
 
-function showError() {
+function showError(msg) {
   document.getElementById('loading-screen').style.display = 'none';
-  document.getElementById('error-screen').style.display = 'flex';
+  const errScreen = document.getElementById('error-screen');
+  errScreen.style.display = 'flex';
+  if (msg) {
+    let dbg = document.getElementById('err-debug');
+    if (!dbg) { dbg = document.createElement('p'); dbg.id='err-debug'; dbg.style.cssText='font-size:11px;color:#666;margin-top:12px;word-break:break-all;padding:0 20px;max-width:340px;text-align:left'; errScreen.appendChild(dbg); }
+    dbg.textContent = msg;
+  }
 }
 
 // ============================================================
