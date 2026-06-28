@@ -320,21 +320,21 @@ let _profile = {};
 let _chart = null;
 let _pollingInterval = null;
 
-// ============================================================
-// INIT
-// ============================================================
 async function init() {
   const params = new URLSearchParams(location.search);
-  const leaseIdFromUrl = params.get('id');
-  const leaseId = leaseIdFromUrl || localStorage.getItem('bailo-tenant-lease-id');
+  const leaseIdFromUrl = params.get('id') || new URLSearchParams(location.hash.replace('#','?')).get('id');
+  const leaseId = leaseIdFromUrl
+    || sessionStorage.getItem('bailo-tenant-lease-id')
+    || localStorage.getItem('bailo-tenant-lease-id');
 
-  // Bug 2 fix: persister le leaseId dès que l'URL le contient (avant install PWA)
   if (leaseIdFromUrl) {
-    localStorage.setItem('bailo-tenant-lease-id', leaseIdFromUrl);
+    try { localStorage.setItem('bailo-tenant-lease-id', leaseIdFromUrl); } catch(e) {}
+    try { sessionStorage.setItem('bailo-tenant-lease-id', leaseIdFromUrl); } catch(e) {}
   }
 
   if (!leaseId) { showError(); return; }
-  localStorage.setItem('bailo-tenant-lease-id', leaseId);
+  try { localStorage.setItem('bailo-tenant-lease-id', leaseId); } catch(e) {}
+  try { sessionStorage.setItem('bailo-tenant-lease-id', leaseId); } catch(e) {}
 
   // Bug 1 fix: afficher bouton retour si le bailleur consulte (?bailleur=1)
   if (params.get('bailleur') === '1') {
