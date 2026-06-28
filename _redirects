@@ -1,1 +1,11 @@
+# Fichiers HTML servis directement
+/locataire.html /locataire.html 200
+/contrat.html /contrat.html 200
+/contrat-meuble.html /contrat-meuble.html 200
+/contrat-mobilite.html /contrat-mobilite.html 200
+/contrat-commercial.html /contrat-commercial.html 200
+/edl.html /edl.html 200
+/compteurs.html /compteurs.html 200
+
+# SPA fallback pour le reste
 /* /index.html 200
