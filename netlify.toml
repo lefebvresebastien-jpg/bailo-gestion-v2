@@ -4,6 +4,48 @@
   functions = "netlify/functions"
 
 [[redirects]]
+  from = "/locataire.html"
+  to = "/locataire.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/contrat.html"
+  to = "/contrat.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/contrat-meuble.html"
+  to = "/contrat-meuble.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/contrat-mobilite.html"
+  to = "/contrat-mobilite.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/contrat-commercial.html"
+  to = "/contrat-commercial.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/edl.html"
+  to = "/edl.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/compteurs.html"
+  to = "/compteurs.html"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
