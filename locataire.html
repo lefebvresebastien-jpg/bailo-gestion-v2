@@ -344,7 +344,16 @@ async function init() {
 
   try {
     const { data: lease, error } = await db.from('leases').select('*').eq('id', leaseId).single();
-    if (error || !lease) { showError(); return; }
+    if (error || !lease) {
+      const errScreen = document.getElementById('error-screen');
+      if (errScreen) {
+        const dbg = document.createElement('p');
+        dbg.style.cssText = 'font-size:11px;color:#999;margin-top:8px;word-break:break-all;padding:0 20px';
+        dbg.textContent = 'Debug: id=' + leaseId + ' | ' + (error ? error.message || error.code || JSON.stringify(error) : 'lease null');
+        errScreen.appendChild(dbg);
+      }
+      showError(); return;
+    }
 
     _lease = lease;
     _fd = lease.data?.formData || {};
