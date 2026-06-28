@@ -344,7 +344,7 @@ async function init() {
 
   try {
     // Lecture via Netlify Function (bypass RLS, compatible PWA iOS)
-    const resp = await fetch('/.netlify/functions/get-lease?id=' + encodeURIComponent(leaseId));
+    const resp = await fetch('https://v2.gestion.bailo.pro/.netlify/functions/get-lease?id=' + encodeURIComponent(leaseId));
     if (!resp.ok) { showError(); return; }
     const payload = await resp.json();
     if (!payload.lease) { showError(); return; }
