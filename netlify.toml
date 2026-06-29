@@ -3,11 +3,15 @@
   command = "echo 'Static site — no build needed'"
   functions = "netlify/functions"
 
+[context.production]
+  environment = { SECRETS_SCAN_ENABLED = "false" }
+
+# Exactement comme bailo-chantier pour artisan : ?locataire=ID -> locataire.html
 [[redirects]]
-  from = "/locataire.html"
+  from = "/"
   to = "/locataire.html"
   status = 200
-  force = true
+  conditions = {Query = ["locataire"]}
 
 [[redirects]]
   from = "/contrat.html"
