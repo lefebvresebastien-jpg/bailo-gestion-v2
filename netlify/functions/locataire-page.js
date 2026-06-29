@@ -1,35 +1,1153 @@
-const fs = require('fs');
-const path = require('path');
-
 exports.handler = async (event) => {
   const leaseId = (event.queryStringParameters && event.queryStringParameters.id) || '';
   if (!leaseId) {
-    return { statusCode: 400, body: 'ID manquant' };
+    return { statusCode: 400, headers: {'Content-Type': 'text/plain'}, body: 'ID manquant' };
   }
 
-  // Sur Netlify, le dossier publish est /var/task
-  let html;
-  const candidates = [
-    path.join('/var/task', 'locataire.html'),
-    path.join(process.cwd(), 'locataire.html'),
-    path.join(__dirname, '..', '..', 'locataire.html'),
-    path.join(__dirname, '../../locataire.html'),
-  ];
-  
-  for (const p of candidates) {
-    try { html = fs.readFileSync(p, 'utf8'); break; } catch(e) {}
-  }
-  
-  if (!html) {
-    return { statusCode: 500, body: 'locataire.html introuvable. Paths tried: ' + candidates.join(', ') };
-  }
-
-  // Injecter le manifest avec le bon start_url COTE SERVEUR
   const manifestUrl = 'https://v2.gestion.bailo.pro/.netlify/functions/manifest-locataire-dynamic?id=' + leaseId;
-  html = html.replace(
-    '<link rel="manifest" href="manifest-locataire.json" id="pwa-manifest">',
-    '<link rel="manifest" href="' + manifestUrl + '" id="pwa-manifest">'
-  );
+  
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Espace locataire — Bailo</title>
+<meta name="description" content="Votre espace locataire Bailo — bail, quittances, messages">
+<meta name="theme-color" content="#1a1208">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mon Bail">
+<link rel="manifest" href="MANIFEST_URL_PLACEHOLDER" id="pwa-manifest">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231a1208' rx='20'/><text y='.9em' font-size='70' x='15'>🏠</text></svg>">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --primary: #2563eb; --success: #16a34a; --danger: #dc2626; --warning: #d97706;
+  --ink: #1a1208; --ink-2: #3a2a18; --ink-3: #6a5a40;
+  --border: #e2d9cc; --bg: #f8f4ee; --bg-card: #ffffff; --r: 10px;
+  --green: #16a34a; --orange: #d97706;
+  --success-light: #dcfce7; --warning-light: #fef3c7; --danger-light: #fee2e2;
+  --sidebar-bg: #1a1208; --sidebar-text: rgba(255,255,255,.75);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); min-height: 100vh; }
+
+/* Loading / Error */
+#loading-screen { display:flex; align-items:center; justify-content:center; min-height:100vh; flex-direction:column; gap:12px; }
+#error-screen { display:none; align-items:center; justify-content:center; min-height:100vh; flex-direction:column; gap:16px; text-align:center; padding:24px; }
+.spinner { width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--primary); border-radius:50%; animation:spin .7s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* App layout */
+#app { display:none; min-height:100vh; }
+
+/* Header */
+.app-header { background: var(--sidebar-bg); color:white; padding:14px 20px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
+.app-header-left h1 { font-size:.95rem; font-weight:700; }
+.app-header-left p { font-size:.72rem; opacity:.6; margin-top:1px; }
+.tenant-avatar { width:36px; height:36px; border-radius:50%; background:var(--primary); color:white; font-size:14px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+
+/* Bottom nav (mobile) */
+.bottom-nav { display:none; }
+.top-nav { background:var(--sidebar-bg); display:flex; border-bottom:1px solid rgba(255,255,255,.1); overflow-x:auto; scrollbar-width:none; -ms-overflow-style:none; }
+.top-nav::-webkit-scrollbar { display:none; }
+.nav-btn { flex:1; min-width:70px; display:flex; flex-direction:column; align-items:center; gap:4px; padding:12px 6px 10px; border:none; background:transparent; color:var(--sidebar-text); cursor:pointer; font-size:.72rem; font-weight:600; position:relative; border-bottom:3px solid transparent; transition:all .15s; }
+.nav-btn .nav-icon { font-size:1.4rem; }
+.nav-btn.active { color:white; border-bottom-color:var(--primary); background:rgba(255,255,255,.07); }
+.nav-btn:hover:not(.active) { color:rgba(255,255,255,.9); background:rgba(255,255,255,.04); }
+.nav-badge { background:var(--danger); color:white; font-size:.58rem; font-weight:700; padding:2px 6px; border-radius:99px; min-width:16px; text-align:center; position:absolute; top:8px; right:calc(50% - 20px); }
+
+/* Content */
+.content { padding:16px 16px 24px; max-width:700px; margin:0 auto; }
+
+/* Cards */
+.card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r); padding:16px 18px; margin-bottom:12px; }
+.card-title { font-size:13px; font-weight:700; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.info-row { display:flex; justify-content:space-between; align-items:flex-start; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.info-row:last-child { border-bottom:none; }
+.info-label { color:var(--ink-3); font-size:12px; }
+.info-value { font-weight:600; text-align:right; max-width:60%; }
+
+/* Badges */
+.badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700; }
+.badge-green { background:#dcfce7; color:#166534; }
+.badge-orange { background:#fff7ed; color:#9a3412; }
+.badge-blue { background:#dbeafe; color:#1e40af; }
+.badge-red { background:#fee2e2; color:#991b1b; }
+
+/* Messages / Chat */
+.msg-list { display:flex; flex-direction:column; gap:8px; max-height:360px; overflow-y:auto; padding:4px 0; margin-bottom:12px; }
+.msg-bubble { max-width:78%; padding:10px 13px; border-radius:12px; font-size:13px; line-height:1.5; }
+.msg-bubble.bailleur { background:#f0f0f0; border-radius:12px 12px 12px 3px; align-self:flex-start; }
+.msg-bubble.locataire { background:var(--primary); color:white; border-radius:12px 12px 3px 12px; align-self:flex-end; }
+.msg-bubble.incident { background:#fff3cd; border:1px solid #ffc107; border-radius:12px; align-self:flex-start; }
+.msg-meta { font-size:10px; opacity:.6; margin-top:4px; }
+.msg-input-bar { display:flex; gap:8px; align-items:flex-end; }
+.msg-input-bar textarea { flex:1; padding:9px 12px; border:1.5px solid var(--border); border-radius:8px; font-size:13px; resize:none; min-height:40px; max-height:100px; }
+.msg-input-bar button { padding:9px 14px; border-radius:8px; background:var(--primary); color:white; border:none; font-size:13px; font-weight:600; cursor:pointer; }
+
+/* Quittances */
+.quittance-item { display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border); }
+.quittance-item:last-child { border-bottom:none; }
+
+/* Upload documents */
+.upload-zone { border:2px dashed var(--border); border-radius:var(--r); padding:24px; text-align:center; cursor:pointer; transition:.15s; }
+.upload-zone:hover { border-color:var(--primary); background:#f0f7ff; }
+.doc-item { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:var(--bg); border-radius:8px; margin-bottom:6px; font-size:13px; }
+
+/* Signature */
+.sig-canvas { width:100%; height:100px; border:1.5px solid var(--border); border-radius:8px; cursor:crosshair; background:white; touch-action:none; display:block; }
+.sig-validated { background:var(--success-light); border:1px solid #86efac; border-radius:8px; padding:10px; text-align:center; font-size:13px; color:#166534; margin-top:8px; }
+
+/* Compteur */
+.chart-wrap { position:relative; height:220px; margin-top:12px; }
+
+/* Buttons */
+.btn { padding:8px 16px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; }
+.btn-primary { background:var(--primary); color:white; }
+.btn-secondary { background:var(--bg-card); color:var(--ink-2); border:1.5px solid var(--border); }
+.btn-danger { background:var(--danger); color:white; }
+.btn-success { background:var(--success); color:white; }
+.btn-sm { padding:5px 10px; font-size:.78rem; }
+.btn-block { width:100%; }
+
+/* Toast */
+#toast { position:fixed; bottom:90px; left:50%; transform:translateX(-50%); background:#1a1208; color:white; padding:10px 20px; border-radius:8px; font-size:13px; display:none; z-index:9999; white-space:nowrap; }
+
+/* Sections */
+.section { display:none; }
+.section.active { display:block; }
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <p style="font-size:13px;color:var(--ink-3)">Chargement de votre espace…</p>
+</div>
+
+<!-- Error -->
+<div id="error-screen">
+  <div style="font-size:48px">🔒</div>
+  <h2 style="font-size:18px">Lien invalide ou expiré</h2>
+  <p style="font-size:13px;color:var(--ink-3)">Ce lien n'est pas valide. Contactez votre bailleur.</p>
+</div>
+
+<!-- App -->
+<div id="app">
+  <div class="app-header">
+    <div class="app-header-left">
+      <h1 id="header-title">Espace locataire</h1>
+      <p id="header-sub">Bailo Gestion</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <a id="btn-retour-bailleur" href="https://gestion.bailo.pro" style="display:none;padding:6px 12px;background:rgba(255,255,255,0.15);color:white;border-radius:7px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid rgba(255,255,255,0.3);">Retour bailleur</a>
+      <div id="tenant-avatar" class="tenant-avatar">?</div>
+    </div>
+  </div>
+
+  <!-- Top Nav -->
+  <nav class="top-nav">
+    <button class="nav-btn active" onclick="showSection('bail', this)">
+      <span class="nav-icon">🏠</span>Mon bail
+    </button>
+    <button class="nav-btn" onclick="showSection('quittances', this)">
+      <span class="nav-icon">🧾</span>Quittances
+    </button>
+    <button class="nav-btn" onclick="showSection('edl', this)">
+      <span class="nav-icon">📋</span>EDL
+    </button>
+    <button class="nav-btn" onclick="showSection('compteurs', this)">
+      <span class="nav-icon">💧</span>Compteurs
+    </button>
+    <button class="nav-btn" onclick="showSection('messages', this)">
+      <span class="nav-icon">💬</span>Messages
+      <span class="nav-badge" id="badge-msg" style="display:none">!</span>
+    </button>
+    <button class="nav-btn" onclick="showSection('documents', this)">
+      <span class="nav-icon">📎</span>Docs
+    </button>
+  </nav>
+
+  <div class="content">
+    <!-- MON BAIL -->
+    <div id="section-bail" class="section active">
+      <div class="card">
+        <div class="card-title">
+          🏠 Mon bail
+          <button class="btn btn-primary btn-sm" id="btn-voir-contrat" onclick="voirContrat()">📋 Voir et signer le bail</button>
+        </div>
+        <div id="bail-info"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🏛️ Aide au logement (CAF)</div>
+        <div id="caf-info"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🔔 Notifications</div>
+        <p style="font-size:13px;color:var(--ink-3);margin-bottom:12px">Recevez une alerte sur cet appareil pour vos nouvelles quittances et messages — même quand l'app est fermée.</p>
+        <button class="btn btn-primary btn-sm" id="btn-push-toggle" onclick="togglePushNotifications()">🔔 Activer les notifications</button>
+        <div id="push-status-msg" style="display:none;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:13px"></div>
+      </div>
+    </div>
+
+    <!-- QUITTANCES -->
+    <div id="section-quittances" class="section">
+      <div class="card">
+        <div class="card-title">🧾 Mes quittances</div>
+        <div id="quittances-list">
+          <div style="padding:24px;text-align:center;color:var(--ink-3)">Chargement…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EDL & SIGNATURE -->
+    <div id="section-edl" class="section">
+      <div class="card">
+        <div class="card-title">📋 État des lieux — Entrée</div>
+        <div id="edl-entry-info"></div>
+        <div id="edl-entry-sig"></div>
+      </div>
+      <div class="card" id="edl-exit-card" style="display:none">
+        <div class="card-title">📋 État des lieux — Sortie</div>
+        <div id="edl-exit-info"></div>
+        <div id="edl-exit-sig"></div>
+      </div>
+    </div>
+
+    <!-- COMPTEURS -->
+    <div id="section-compteurs" class="section">
+      <div class="card">
+        <div class="card-title">💧 Ma consommation d'eau</div>
+        <div id="compteurs-info"></div>
+        <div class="chart-wrap">
+          <canvas id="chart-tenant"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- MESSAGES -->
+    <div id="section-messages" class="section">
+      <div class="card">
+        <div class="card-title">
+          💬 Messagerie
+          <button class="btn btn-danger btn-sm" onclick="openIncident()">🚨 Déclarer incident</button>
+        </div>
+        <div class="msg-list" id="msg-list"></div>
+        <div class="msg-input-bar">
+          <textarea id="msg-input" placeholder="Votre message…" rows="2"></textarea>
+          <button onclick="sendMsg()">Envoyer</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- DOCUMENTS -->
+    <div id="section-documents" class="section">
+      <div class="card">
+        <div class="card-title">📎 Mes documents</div>
+        <div id="docs-list" style="margin-bottom:14px"></div>
+        <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:16px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:12px;color:var(--ink)">📤 Envoyer un document</div>
+          <select id="doc-type" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);margin-bottom:10px;display:block">
+            <option value="Assurance">🛡 Attestation assurance habitation</option>
+            <option value="Caution">🤝 Acte de caution</option>
+            <option value="Facture">🧾 Facture</option>
+            <option value="Autre">📎 Autre document</option>
+          </select>
+          <div id="doc-file-zone" style="border:2px dashed var(--border);border-radius:8px;padding:20px;text-align:center;margin-bottom:10px;background:var(--bg)">
+            <div id="doc-file-name" style="font-size:13px;color:var(--ink-3)">Aucun fichier sélectionné</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <label for="doc-file-input" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:white;color:var(--ink-2)">
+              📎 Choisir un fichier
+              <input type="file" id="doc-file-input" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" onchange="onDocFileSelected(this)" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
+            </label>
+            <button id="btn-send-doc" onclick="sendDoc()" disabled style="flex:1;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;opacity:.4">
+              📤 Envoyer au bailleur
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Nav kept for compatibility -->
+  <nav class="bottom-nav"></nav>
+</div>
+
+<!-- Modal incident -->
+<div id="incident-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:9000;align-items:center;justify-content:center">
+  <div style="background:white;border-radius:12px;padding:20px;max-width:420px;width:90%;margin:16px">
+    <h3 style="font-size:15px;margin-bottom:14px">🚨 Déclarer un incident</h3>
+    <div style="margin-bottom:10px">
+      <select id="incident-type" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);margin-bottom:10px">
+        <option value="Dégât des eaux">💧 Dégât des eaux</option>
+        <option value="Problème chauffage">🔥 Problème chauffage</option>
+        <option value="Problème électrique">⚡ Problème électrique</option>
+        <option value="Serrure / porte">🔑 Serrure / porte</option>
+        <option value="Nuisibles">🐛 Nuisibles</option>
+        <option value="Autre">📌 Autre</option>
+      </select>
+      <textarea id="incident-desc" rows="4" placeholder="Décrivez l'incident…" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;resize:none"></textarea>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-secondary" onclick="document.getElementById('incident-modal').style.display='none'">Annuler</button>
+      <button class="btn btn-danger" onclick="sendIncident()">🚨 Envoyer</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Bannière PWA install -->
+<div id="pwa-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#1a1208;color:white;padding:14px 16px;z-index:9999;display:flex;align-items:center;justify-content:space-between;gap:12px;font-family:Inter,sans-serif">
+  <div style="display:flex;align-items:center;gap:10px">
+    <span style="font-size:28px">🏠</span>
+    <div>
+      <div style="font-size:13px;font-weight:700">Ajouter à l'écran d'accueil</div>
+      <div style="font-size:11px;opacity:.7">Accédez à votre espace en 1 tap</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-shrink:0">
+    <button onclick="document.getElementById('pwa-banner').style.display='none'" style="padding:7px 12px;border:1px solid rgba(255,255,255,.3);border-radius:7px;background:transparent;color:white;font-size:12px;cursor:pointer">Plus tard</button>
+    <button id="pwa-install-btn" style="padding:7px 14px;border:none;border-radius:7px;background:#2563eb;color:white;font-size:12px;font-weight:700;cursor:pointer">Installer</button>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://nltuysmnxsomlhgvbtwz.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_UtH7OZskOMab-vCsoKKRsQ_rVkm5mRC';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let _lease = null;
+let _fd = {};
+let _profile = {};
+let _chart = null;
+let _pollingInterval = null;
+
+async function init() {
+  const params = new URLSearchParams(location.search);
+  const leaseIdFromUrl = params.get('locataire') || params.get('id') || new URLSearchParams(location.hash.replace('#','?')).get('id');
+  const leaseId = leaseIdFromUrl
+    || sessionStorage.getItem('bailo-tenant-lease-id')
+    || localStorage.getItem('bailo-tenant-lease-id');
+
+  if (leaseIdFromUrl) {
+    try { localStorage.setItem('bailo-tenant-lease-id', leaseIdFromUrl); } catch(e) {}
+    try { sessionStorage.setItem('bailo-tenant-lease-id', leaseIdFromUrl); } catch(e) {}
+    // Mettre à jour le manifest PWA avec le start_url contenant le leaseId
+    const manifestLink = document.getElementById('pwa-manifest');
+    if (manifestLink) {
+      manifestLink.href = '/.netlify/functions/manifest-locataire-dynamic?id=' + leaseIdFromUrl;
+    }
+  }
+
+  if (!leaseId) { showError('Etape 1: leaseId manquant dans URL et storage'); return; }
+  try { localStorage.setItem('bailo-tenant-lease-id', leaseId); } catch(e) {}
+  try { sessionStorage.setItem('bailo-tenant-lease-id', leaseId); } catch(e) {}
+
+  // Bug 1 fix: afficher bouton retour si le bailleur consulte (?bailleur=1)
+  if (params.get('bailleur') === '1') {
+    const btn = document.getElementById('btn-retour-bailleur');
+    if (btn) btn.style.display = 'inline-block';
+  }
+
+  try {
+    // Lecture via Netlify Function (bypass RLS, compatible PWA iOS)
+    const resp = await fetch('https://v2.gestion.bailo.pro/.netlify/functions/get-lease?id=' + encodeURIComponent(leaseId));
+    if (!resp.ok) { showError('Etape 2: fetch KO status=' + resp.status + ' url=' + resp.url); return; }
+    const payload = await resp.json();
+    if (!payload.lease) { showError('Etape 3: payload sans lease. payload=' + JSON.stringify(payload).substring(0,100)); return; }
+
+    _lease = payload.lease;
+    _fd = _lease.data?.formData || {};
+
+    // Settings bailleur depuis la fonction
+    const settingsArr = payload.settings || [];
+    const profileSetting = settingsArr.find(s => s.key === 'landlord_profile');
+    const cptSetting = settingsArr.find(s => s.key === 'compteurs_config');
+    _profile = profileSetting ? JSON.parse(profileSetting.value) : {};
+    const cptCfg = cptSetting ? JSON.parse(cptSetting.value) : {};
+    window._cptDateRef = cptCfg.dateRef || null;
+    window._cptPrixM3 = parseFloat(cptCfg.prixM3) || 4.2;
+
+    // Afficher l'app
+    document.getElementById('loading-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+
+    // Header
+    const name = _fd.tenantName || 'Locataire';
+    document.getElementById('header-title').textContent = name;
+    document.getElementById('header-sub').textContent = (_fd.propertyAddress || '').split(',')[0];
+    document.getElementById('tenant-avatar').textContent = name.charAt(0).toUpperCase();
+
+    // Charger les sections
+    renderBail();
+    loadQuittances();
+    renderEDL();
+    renderCompteurs();
+    loadMessages();
+    loadDocuments();
+
+    // Polling messages toutes les 30s
+    _pollingInterval = setInterval(loadMessages, 30000);
+
+  } catch(e) {
+    console.error(e);
+    showError('Etape 4 catch: ' + e.message);
+  }
+}
+
+function showError(msg) {
+  document.getElementById('loading-screen').style.display = 'none';
+  const errScreen = document.getElementById('error-screen');
+  errScreen.style.display = 'flex';
+  if (msg) {
+    let dbg = document.getElementById('err-debug');
+    if (!dbg) { dbg = document.createElement('p'); dbg.id='err-debug'; dbg.style.cssText='font-size:11px;color:#666;margin-top:12px;word-break:break-all;padding:0 20px;max-width:340px;text-align:left'; errScreen.appendChild(dbg); }
+    dbg.textContent = msg;
+  }
+}
+
+// ============================================================
+// MON BAIL
+// ============================================================
+function voirContrat() {
+  if (!_lease?.id) return;
+  window.open('contrat.html?lease=' + _lease.id + '&mode=locataire', '_blank');
+}
+
+function renderBail() {
+  const f = _fd;
+  const bail = document.getElementById('bail-info');
+
+  const sigLocataire = _fd.sig_locataire;
+  const rows = [
+    ['Locataire', f.tenantName || '—'],
+    ['Adresse', f.propertyAddress || '—'],
+    ['Type de bail', f.leaseType || '—'],
+    ['Durée', f.duration || '—'],
+    ['Date de prise d\\'effet', f.effectiveDate ? formatDate(f.effectiveDate) : '—'],
+    ['Loyer hors charges', f.rent ? fmtCur(f.rent) : '—'],
+    ['Charges', f.charges ? fmtCur(f.charges) : '—'],
+    ['Total mensuel', (f.rent && f.charges) ? '<strong>' + fmtCur(parseFloat(f.rent) + parseFloat(f.charges)) + '</strong>' : '—'],
+    ['Dépôt de garantie', f.deposit ? fmtCur(f.deposit) : '—'],
+    ['Jour d\\'échéance', f.rentDueDay || '—'],
+    ['Mode de paiement', f.paymentTerms || '—'],
+    ['Bailleur', _profile.landlordName || f.landlordName || '—'],
+  ].map(([label, value]) =>
+    \`<div class="info-row"><span class="info-label">\${label}</span><span class="info-value">\${value}</span></div>\`
+  ).join('');
+
+  let sigStatus = sigLocataire
+    ? '<div style="margin-top:10px;background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:10px 14px;font-size:13px;color:#166534;font-weight:600">✅ Bail signé électroniquement<br><img src="' + sigLocataire + '" style="max-height:40px;margin-top:6px;display:block"></div>'
+    : '<div style="margin-top:10px;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:13px;color:#92400e">⚠️ Bail non encore signé — cliquez sur <strong>Voir et signer le bail</strong></div>';
+  bail.innerHTML = rows + sigStatus;
+
+  // CAF
+  const caf = document.getElementById('caf-info');
+  caf.innerHTML = \`<p style="font-size:13px;color:var(--ink-3);margin-bottom:12px">Ces informations sont nécessaires pour votre demande d'aide au logement (APL/ALS).</p>
+  <div class="info-row"><span class="info-label">Nom du bailleur</span><span class="info-value">\${_profile.landlordName || f.landlordName || '—'}</span></div>
+  <div class="info-row"><span class="info-label">Adresse du bailleur</span><span class="info-value">\${_profile.landlordAddress || f.landlordAddress || '—'}</span></div>
+  <div class="info-row"><span class="info-label">Adresse du logement</span><span class="info-value">\${f.propertyAddress || '—'}</span></div>
+  <div class="info-row"><span class="info-label">Loyer hors charges</span><span class="info-value">\${f.rent ? fmtCur(f.rent) : '—'}</span></div>
+  <div class="info-row"><span class="info-label">Charges</span><span class="info-value">\${f.charges ? fmtCur(f.charges) : '—'}</span></div>
+  <a href="https://www.caf.fr/allocataires/aides-et-demarches/droits-et-prestations/estimation-en-ligne/calculer-vos-aides" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:14px;padding:10px 16px;background:var(--color-primary);color:#fff;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600">🧮 Simuler mes droits aux aides sur caf.fr ↗</a>\`;
+}
+
+// ============================================================
+// QUITTANCES
+// ============================================================
+async function loadQuittances() {
+  const el = document.getElementById('quittances-list');
+  const { data: msgs } = await db.from('messages')
+    .select('id, subject, created_at, body')
+    .eq('lease_id', _lease.id)
+    .eq('kind', 'Quittance')
+    .order('created_at', { ascending: false });
+
+  if (!msgs || !msgs.length) {
+    el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--ink-3)">Aucune quittance reçue.</div>';
+    return;
+  }
+
+  el.innerHTML = msgs.map(m => \`
+    <div class="quittance-item">
+      <div>
+        <div style="font-size:13px;font-weight:600">\${m.subject || 'Quittance'}</div>
+        <div style="font-size:11px;color:var(--ink-3)">\${formatRelative(m.created_at)}</div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="viewQuittance('\${m.id}')">Voir</button>
+    </div>
+  \`).join('');
+}
+
+async function viewQuittance(id) {
+  const { data: msgs } = await db.from('messages').select('body').eq('id', id).single();
+  if (!msgs?.body) return;
+  const w = window.open('', '_blank');
+  w.document.write(msgs.body);
+  w.document.close();
+}
+
+// ============================================================
+// EDL & SIGNATURE
+// ============================================================
+function renderEDL() {
+  const leaseData = _lease.data || {};
+  const edlEntry = leaseData.edlEntry;
+  const edlExit = leaseData.edlExit;
+  const sigs = leaseData.edlSign || {};
+
+  const ETAT_LABELS = { 'bon': '✅ Bon état', 'usage': '⚠️ État d\\'usage', 'degrade': '❌ Dégradé', '': '—' };
+
+  function renderRooms(rooms) {
+    if (!rooms || !rooms.length) return '';
+    return rooms.map(function(room) {
+      var ETAT = { 'Bon état': '✅', 'bon': '✅', 'État d\\'usage': '⚠️', 'usage': '⚠️', 'Dégradé': '❌', 'degrade': '❌' };
+      function badge(val) {
+        if (!val) return '—';
+        var icon = ETAT[val] || '';
+        return icon + ' ' + val;
+      }
+      var rows = [
+        ['Sol', room.floor], ['Murs', room.walls], ['Plafond', room.ceiling],
+        ['Fenêtres', room.windows], ['Équipements', room.equipment]
+      ].filter(r => r[1]).map(r =>
+        '<div style="display:flex;justify-content:space-between;font-size:.82rem;padding:3px 0;border-bottom:1px solid #f3f4f6">'
+        + '<span style="color:#6b7280">' + r[0] + '</span><span style="font-weight:500">' + badge(r[1]) + '</span></div>'
+      ).join('');
+
+      var obs = room.observations || '';
+      var photosHtml = '';
+      var photos = room.photos || [];
+      if (photos.length) {
+        photosHtml = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">'
+          + photos.map(function(p) {
+            var url = typeof p === 'object' ? (p.url || p.src || '') : p;
+            return url ? '<img src="' + url + '" style="width:90px;height:70px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb">' : '';
+          }).join('') + '</div>';
+      }
+
+      return '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:8px">'
+        + '<div style="font-weight:600;font-size:.92rem;margin-bottom:8px">🏠 ' + (room.name || room.nom || 'Pièce') + '</div>'
+        + (rows || '')
+        + (obs ? '<div style="font-size:.82rem;color:#374151;margin-top:6px;background:#fff;padding:6px 8px;border-radius:4px;border:1px solid #e5e7eb">📝 ' + obs + '</div>' : '')
+        + photosHtml
+      + '</div>';
+    }).join('');
+  }
+
+  // Entrée
+  const entryEl = document.getElementById('edl-entry-info');
+  const entrySigEl = document.getElementById('edl-entry-sig');
+
+  if (!edlEntry || !edlEntry.rooms?.length) {
+    entryEl.innerHTML = '<p style="font-size:13px;color:var(--ink-3);padding:12px 0">L\\'état des lieux d\\'entrée n\\'a pas encore été renseigné.</p>';
+    entrySigEl.innerHTML = '';
+  } else {
+    const nbPieces = edlEntry.rooms.length;
+    entryEl.innerHTML = \`
+      <div class="info-row"><span class="info-label">Statut</span><span class="badge badge-green">Renseigné</span></div>
+      <div class="info-row"><span class="info-label">Nombre de pièces</span><span class="info-value">\${nbPieces}</span></div>
+      <div class="info-row"><span class="info-label">Date</span><span class="info-value">\${edlEntry.savedAt ? formatDate(edlEntry.savedAt) : '—'}</span></div>
+      <div style="margin-top:14px">
+        <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin-bottom:8px">Détail pièce par pièce</div>
+        \${renderRooms(edlEntry.rooms)}
+      </div>
+    \`;
+
+    if (sigs.locataire) {
+      entrySigEl.innerHTML = \`<div class="sig-validated">✅ Signé par le locataire<br><img src="\${sigs.locataire}" style="max-height:50px;margin-top:6px;display:block;margin-left:auto;margin-right:auto"></div>\`;
+    } else {
+      entrySigEl.innerHTML = \`
+        <div style="margin-top:14px">
+          <p style="font-size:13px;font-weight:600;margin-bottom:8px">✍️ Votre signature</p>
+          <canvas id="sig-canvas-locataire" class="sig-canvas" width="600" height="100"></canvas>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="btn btn-secondary btn-sm" onclick="clearSig()">🗑 Effacer</button>
+            <button class="btn btn-success" onclick="saveSig('entry')">✅ Signer l'EDL d'entrée</button>
+          </div>
+        </div>
+      \`;
+      setTimeout(() => initSigCanvas(), 100);
+    }
+  }
+
+  // Sortie
+  if (edlExit && edlExit.rooms?.length) {
+    document.getElementById('edl-exit-card').style.display = '';
+    const exitEl = document.getElementById('edl-exit-info');
+    const exitSigEl = document.getElementById('edl-exit-sig');
+
+    exitEl.innerHTML = \`
+      <div class="info-row"><span class="info-label">Statut</span><span class="badge badge-orange">Renseigné</span></div>
+      <div class="info-row"><span class="info-label">Nombre de pièces</span><span class="info-value">\${edlExit.rooms.length}</span></div>
+      <div style="margin-top:14px">
+        <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin-bottom:8px">Détail pièce par pièce</div>
+        \${renderRooms(edlExit.rooms)}
+      </div>
+    \`;
+
+    if (sigs.locataireExit) {
+      exitSigEl.innerHTML = \`<div class="sig-validated">✅ EDL de sortie signé<br><img src="\${sigs.locataireExit}" style="max-height:50px;margin-top:6px;display:block;margin-left:auto;margin-right:auto"></div>\`;
+    } else {
+      exitSigEl.innerHTML = \`
+        <div style="margin-top:14px">
+          <canvas id="sig-canvas-exit" class="sig-canvas" width="600" height="100"></canvas>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="btn btn-secondary btn-sm" onclick="clearSig('exit')">🗑 Effacer</button>
+            <button class="btn btn-success" onclick="saveSig('exit')">✅ Signer l'EDL de sortie</button>
+          </div>
+        </div>
+      \`;
+      setTimeout(() => initSigCanvas('exit'), 100);
+    }
+  }
+}
+
+function initSigCanvas(type) {
+  const id = type === 'exit' ? 'sig-canvas-exit' : 'sig-canvas-locataire';
+  const canvas = document.getElementById(id);
+  if (!canvas || canvas._inited) return;
+  canvas._inited = true;
+  const ctx = canvas.getContext('2d');
+  let drawing = false;
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const sx = canvas.width / rect.width, sy = canvas.height / rect.height;
+    const src = e.touches ? e.touches[0] : e;
+    return { x: (src.clientX - rect.left) * sx, y: (src.clientY - rect.top) * sy };
+  }
+  canvas.addEventListener('mousedown', e => { drawing=true; const p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); });
+  canvas.addEventListener('mousemove', e => { if(!drawing) return; const p=getPos(e); ctx.lineTo(p.x,p.y); ctx.strokeStyle='#1a1208'; ctx.lineWidth=2; ctx.lineCap='round'; ctx.stroke(); });
+  canvas.addEventListener('mouseup', () => drawing=false);
+  canvas.addEventListener('mouseleave', () => drawing=false);
+  canvas.addEventListener('touchstart', e => { e.preventDefault(); drawing=true; const p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }, {passive:false});
+  canvas.addEventListener('touchmove', e => { e.preventDefault(); if(!drawing) return; const p=getPos(e); ctx.lineTo(p.x,p.y); ctx.strokeStyle='#1a1208'; ctx.lineWidth=2; ctx.lineCap='round'; ctx.stroke(); }, {passive:false});
+  canvas.addEventListener('touchend', () => drawing=false);
+}
+
+function clearSig(type) {
+  const id = type === 'exit' ? 'sig-canvas-exit' : 'sig-canvas-locataire';
+  const canvas = document.getElementById(id);
+  if (canvas) { canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height); canvas._inited=false; initSigCanvas(type); }
+}
+
+async function saveSig(type) {
+  const id = type === 'exit' ? 'sig-canvas-exit' : 'sig-canvas-locataire';
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  const blank = document.createElement('canvas'); blank.width=canvas.width; blank.height=canvas.height;
+  if (canvas.toDataURL() === blank.toDataURL()) { showToast('Veuillez signer avant de valider.'); return; }
+
+  const sigKey = type === 'exit' ? 'locataireExit' : 'locataire';
+  const leaseData = _lease.data || {};
+  leaseData.edlSign = { ...leaseData.edlSign, [sigKey]: canvas.toDataURL(), [\`\${sigKey}At\`]: new Date().toISOString() };
+
+  const { error } = await db.from('leases').update({ data: leaseData }).eq('id', _lease.id);
+  if (error) { showToast('Erreur lors de la sauvegarde.'); return; }
+
+  _lease.data = leaseData;
+  showToast('Signature enregistrée ✅');
+  renderEDL();
+}
+
+// ============================================================
+// COMPTEURS
+// ============================================================
+function renderCompteurs() {
+  const el = document.getElementById('compteurs-info');
+  const leaseData = _lease.data || {};
+  const compteurs = leaseData.compteurs || {};
+  const sc = compteurs.sousCompteurs || [];
+  const releves = compteurs.releves || [];
+
+  if (!sc.length) {
+    el.innerHTML = '<p style="font-size:13px;color:var(--ink-3);padding:8px 0">Aucun sous-compteur configuré par votre bailleur.</p>';
+    return;
+  }
+
+  // Dernier relevé
+  // Filtrer par date de référence
+  let relevesF = releves;
+  if (window._cptDateRef) {
+    const ridx = releves.findIndex(r => r.date >= window._cptDateRef);
+    if (ridx > 0) relevesF = releves.slice(ridx - 1);
+  }
+  const last = relevesF[relevesF.length - 1];
+  const prev = relevesF[relevesF.length - 2];
+
+  let html = sc.map((s, i) => {
+    const lastIdx = last?.sousCompteurs?.[i]?.index ?? '—';
+    const prevIdx = prev?.sousCompteurs?.[i]?.index;
+    const conso = (last && prev && lastIdx !== '—' && prevIdx != null) ? (lastIdx - prevIdx).toLocaleString('fr-FR', {minimumFractionDigits:0, maximumFractionDigits:3}) : '—';
+    return \`<div class="info-row">
+      <span class="info-label">💧 \${escH(s.label || 'Sous-compteur ' + (i+1))}</span>
+      <span class="info-value">Index: <strong>\${lastIdx}</strong> m³ \${conso !== '—' ? '· Conso: <strong>' + conso + ' m³</strong>' : ''}</span>
+    </div>\`;
+  }).join('');
+
+  if (last) html += \`<div class="info-row"><span class="info-label">Dernier relevé</span><span class="info-value">\${formatDate(last.date)}</span></div>\`;
+  // Total période
+  if (relevesF.length >= 2) {
+    const premier = relevesF[0];
+    let totalConso = 0;
+    sc.forEach((s, i) => {
+      const idxE = premier.sousCompteurs?.[i]?.index;
+      const idxF = last.sousCompteurs?.[i]?.index;
+      if (idxE != null && idxF != null) totalConso += idxF - idxE;
+    });
+    const montant = (totalConso * (window._cptPrixM3||4.2)).toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
+    const dateRef = window._cptDateRef ? ' depuis ' + formatDate(window._cptDateRef) : '';
+    html += '<div style="margin-top:12px;background:#dbeafe;border:1px solid #93c5fd;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:700;color:#1e40af">Total consommé' + dateRef + ' : ' + totalConso.toLocaleString('fr-FR',{maximumFractionDigits:3}) + ' m³ · ' + montant + '</div>';
+  }
+  el.innerHTML = html;
+
+  // Graphique sous-compteurs uniquement
+  if (releves.length >= 2) {
+    const scColors = ['#16a34a','#2563eb','#d97706','#dc2626'];
+    // Supprimer le premier relevé (pas de consommation calculable)
+    const relevesConso = relevesF.slice(1);
+    const labelsChart = relevesConso.map(r => formatDate(r.date));
+    const datasets = sc.map((s, idx) => ({
+      label: s.label || 'Sous-cpt ' + (idx+1),
+      data: relevesConso.map((r, i) => {
+        const ci = r.sousCompteurs?.[idx]?.index;
+        const pi = relevesF[i].sousCompteurs?.[idx]?.index;
+        return (ci != null && pi != null) ? parseFloat((ci-pi).toFixed(3)) : 0;
+      }),
+      borderColor: scColors[idx % scColors.length],
+      backgroundColor: scColors[idx % scColors.length] + '30',
+      tension: 0.3,
+      fill: true
+    }));
+
+    if (_chart) _chart.destroy();
+    _chart = new Chart(document.getElementById('chart-tenant'), {
+      type: 'bar',
+      data: { labels: labelsChart, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'top' } },
+        scales: { y: { beginAtZero: true, title: { display: true, text: 'm³' } } }
+      }
+    });
+  }
+}
+
+// ============================================================
+// MESSAGES
+// ============================================================
+async function loadMessages() {
+  const el = document.getElementById('msg-list');
+  const { data: msgs } = await db.from('messages')
+    .select('id, sender, subject, body, kind, created_at, replies, status, incident_status')
+    .eq('lease_id', _lease.id)
+    .in('kind', ['Renseignement', 'Incident', 'Information'])
+    .order('created_at', { ascending: true });
+
+  if (!msgs?.length) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--ink-3);font-size:13px">Aucun message. Envoyez un message à votre bailleur.</div>';
+    return;
+  }
+
+  const unread = msgs.filter(m => m.sender === 'Bailleur' && m.status !== 'lu-locataire');
+  if (unread.length) {
+    document.getElementById('badge-msg').style.display = '';
+    document.getElementById('badge-msg').textContent = unread.length;
+  } else {
+    document.getElementById('badge-msg').style.display = 'none';
+  }
+
+  el.innerHTML = msgs.map(m => {
+    const isMe = m.sender === 'Locataire';
+    const cls = m.kind === 'Incident' ? 'incident' : (isMe ? 'locataire' : 'bailleur');
+    const replies = Array.isArray(m.replies) ? m.replies : [];
+
+    // Badge statut incident
+    const incSt = m.incident_status || 'en-attente';
+    const incBadge = {
+      'en-attente': { label: '🔴 En attente', bg: '#fee2e2', color: '#dc2626', border: '#fca5a5' },
+      'en-cours':   { label: '🟡 En cours de traitement', bg: '#fef3c7', color: '#d97706', border: '#fcd34d' },
+      'resolu':     { label: '✅ Résolu', bg: '#dcfce7', color: '#16a34a', border: '#86efac' },
+    }[incSt] || { label: '🔴 En attente', bg: '#fee2e2', color: '#dc2626', border: '#fca5a5' };
+
+    let html = \`<div class="msg-bubble \${cls}">
+      \${m.kind === 'Incident' ?
+        '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:8px">' +
+        '<div style="font-size:12px;font-weight:700;color:#856404">🚨 INCIDENT — ' + escH(m.subject||'') + '</div>' +
+        '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:' + incBadge.bg + ';color:' + incBadge.color + ';border:1px solid ' + incBadge.border + '">' + incBadge.label + '</span>' +
+        '</div>' :
+        (m.subject ? '<div style="font-size:11px;font-weight:700;margin-bottom:4px">' + escH(m.subject) + '</div>' : '')}
+      \${escH(m.body || '')}
+      <div class="msg-meta">\${formatRelative(m.created_at)}</div>
+    </div>\`;
+
+    replies.forEach(r => {
+      const rCls = r.sender === 'Locataire' ? 'locataire' : 'bailleur';
+      html += \`<div class="msg-bubble \${rCls}">\${escH(r.body||'')}<div class="msg-meta">\${formatRelative(r.date)}</div></div>\`;
+    });
+
+    return html;
+  }).join('');
+
+  el.scrollTop = el.scrollHeight;
+
+  // Marquer comme lus
+  const unreadIds = unread.map(m => m.id);
+  if (unreadIds.length) {
+    await db.from('messages').update({ status: 'lu-locataire' }).in('id', unreadIds);
+  }
+}
+
+async function sendMsg() {
+  const input = document.getElementById('msg-input');
+  const body = input.value.trim();
+  if (!body) return;
+
+  const { error } = await db.from('messages').insert({
+    lease_id: _lease.id,
+    sender: 'Locataire',
+    kind: 'Renseignement',
+    subject: 'Message du locataire',
+    body: body,
+    status: 'en-attente',
+    replies: []
+  });
+
+  if (error) { showToast('Erreur envoi.'); return; }
+  input.value = '';
+  loadMessages();
+  showToast('Message envoyé ✅');
+
+  // Notification push au bailleur (best-effort)
+  fetch('/.netlify/functions/send-push', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      target: { role: 'bailleur' },
+      title: '💬 Nouveau message locataire',
+      body: body.slice(0, 100),
+      url: 'https://gestion.bailo.pro'
+    })
+  }).catch(() => {});
+}
+
+function openIncident() {
+  document.getElementById('incident-modal').style.display = 'flex';
+}
+
+async function sendIncident() {
+  const type = document.getElementById('incident-type').value;
+  const desc = document.getElementById('incident-desc').value.trim();
+  if (!desc) { showToast('Décrivez l\\'incident.'); return; }
+
+  await db.from('messages').insert({
+    lease_id: _lease.id,
+    sender: 'Locataire',
+    kind: 'Incident',
+    subject: type,
+    body: desc,
+    status: 'en-attente',
+    incident_status: 'en-attente',
+    replies: []
+  });
+
+  document.getElementById('incident-modal').style.display = 'none';
+  document.getElementById('incident-desc').value = '';
+  loadMessages();
+  showToast('Incident déclaré ✅');
+
+  // Notification push au bailleur (best-effort)
+  fetch('/.netlify/functions/send-push', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      target: { role: 'bailleur' },
+      title: '🚨 Incident déclaré — ' + type,
+      body: desc.slice(0, 100),
+      url: 'https://gestion.bailo.pro'
+    })
+  }).catch(() => {});
+}
+
+// ============================================================
+// DOCUMENTS
+// ============================================================
+async function loadDocuments() {
+  const el = document.getElementById('docs-list');
+  const { data: docs } = await db.from('messages')
+    .select('id, subject, body, file_name, file_data, created_at, sender')
+    .eq('lease_id', _lease.id)
+    .eq('kind', 'Document')
+    .order('created_at', { ascending: false });
+
+  if (!docs?.length) {
+    el.innerHTML = '<p style="font-size:13px;color:var(--ink-3)">Aucun document.</p>';
+    return;
+  }
+
+  el.innerHTML = docs.map(d => \`
+    <div class="doc-item">
+      <div>
+        <div style="font-weight:600">\${d.subject || 'Document'}</div>
+        <div style="font-size:11px;color:var(--ink-3)">\${d.file_name || d.body || ''} · \${formatRelative(d.created_at)}</div>
+      </div>
+      \${d.file_data ? \`<a href="\${d.file_data}" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration:none">⬇</a>\` : ''}
+    </div>
+  \`).join('');
+}
+
+var _selectedDocFile = null;
+
+function onDocFileSelected(input) {
+  const file = input.files[0];
+  if (!file) return;
+  _selectedDocFile = file;
+  const zone = document.getElementById('doc-file-zone');
+  const nameEl = document.getElementById('doc-file-name');
+  const btn = document.getElementById('btn-send-doc');
+  if (nameEl) {
+    nameEl.innerHTML = '<span style="font-size:20px">📄</span><br><strong style="font-size:13px">' + escH(file.name) + '</strong><br><span style="font-size:11px;color:var(--ink-3)">' + (file.size > 1024*1024 ? (file.size/1024/1024).toFixed(1)+' Mo' : Math.round(file.size/1024)+' Ko') + '</span>';
+  }
+  if (zone) zone.style.borderColor = '#2563eb';
+  if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+}
+
+async function sendDoc() {
+  if (!_selectedDocFile || !_lease.id) return;
+  const btn = document.getElementById('btn-send-doc');
+  if (btn) { btn.disabled = true; btn.textContent = 'Envoi en cours…'; }
+  showToast('Envoi en cours…');
+
+  const path = _lease.id + '/docs/' + Date.now() + '_' + _selectedDocFile.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+  const { error } = await db.storage.from('documents').upload(path, _selectedDocFile, {upsert:true});
+  if (error) {
+    showToast('Erreur : ' + error.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Envoyer au bailleur'; btn.style.opacity = '1'; }
+    return;
+  }
+
+  const { data: urlData } = db.storage.from('documents').getPublicUrl(path);
+  const type = document.getElementById('doc-type').value;
+
+  await db.from('messages').insert({
+    lease_id: _lease.id,
+    sender: 'Locataire',
+    kind: 'Document',
+    subject: type,
+    body: _selectedDocFile.name,
+    file_name: _selectedDocFile.name,
+    file_type: _selectedDocFile.type,
+    file_data: urlData.publicUrl,
+    status: 'traité',
+    replies: []
+  });
+
+  // Reset
+  _selectedDocFile = null;
+  document.getElementById('doc-file-input').value = '';
+  document.getElementById('doc-file-name').textContent = 'Aucun fichier sélectionné';
+  document.getElementById('doc-file-zone').style.borderColor = 'var(--border)';
+  if (btn) { btn.disabled = true; btn.textContent = 'Envoyer au bailleur'; btn.style.opacity = '.4'; }
+
+  loadDocuments();
+  showToast('Document envoyé au bailleur ✅');
+}
+
+// ============================================================
+// UI
+// ============================================================
+function showSection(name, btn) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('section-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+function formatDate(d) {
+  if (!d) return '—';
+  try { return new Intl.DateTimeFormat('fr-FR').format(new Date(d)); } catch(e) { return d; }
+}
+
+function formatRelative(d) {
+  if (!d) return '';
+  const diff = Date.now() - new Date(d).getTime();
+  const h = diff / 3600000;
+  if (h < 1) return 'À l\\'instant';
+  if (h < 24) return 'Il y a ' + Math.floor(h) + 'h';
+  const days = Math.floor(h / 24);
+  if (days < 7) return 'Il y a ' + days + ' j';
+  return formatDate(d);
+}
+
+function fmtCur(n) {
+  return new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(n)||0);
+}
+
+function escH(s) {
+  return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.style.display = 'none', 3000);
+}
+
+document.addEventListener('DOMContentLoaded', init);
+
+// ── PWA Install ──
+let _pwaPrompt = null;
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();
+  _pwaPrompt = e;
+  // Afficher la bannière après 3s
+  setTimeout(function() {
+    var banner = document.getElementById('pwa-banner');
+    if (banner) banner.style.display = 'flex';
+  }, 3000);
+});
+
+document.getElementById('pwa-install-btn')?.addEventListener('click', async function() {
+  if (!_pwaPrompt) return;
+  _pwaPrompt.prompt();
+  const result = await _pwaPrompt.userChoice;
+  document.getElementById('pwa-banner').style.display = 'none';
+  _pwaPrompt = null;
+});
+
+window.addEventListener('appinstalled', function() {
+  document.getElementById('pwa-banner').style.display = 'none';
+});
+
+// Instructions manuelles pour iOS (pas de beforeinstallprompt)
+var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.navigator.standalone;
+if (isIOS) {
+  setTimeout(function() {
+    var banner = document.getElementById('pwa-banner');
+    if (banner && !_pwaPrompt) {
+      banner.style.display = 'flex';
+      var btn = document.getElementById('pwa-install-btn');
+      if (btn) {
+        btn.textContent = 'Comment faire ?';
+        btn.onclick = function() {
+          alert('Sur iPhone :\\n1. Appuyez sur le bouton Partager (carre avec fleche)\\n2. Faites defiler et appuyez sur Sur l&#39;ecran d&#39;accueil\\n3. Appuyez sur Ajouter');
+        };
+      }
+    }
+  }, 3000);
+}
+
+// ── NOTIFICATIONS PUSH ──────────────────────────────────────
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+async function updatePushButtonUI() {
+  const btn = document.getElementById('btn-push-toggle');
+  if (!btn) return;
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    btn.textContent = 'Non disponible sur ce navigateur';
+    btn.disabled = true;
+    return;
+  }
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  btn.textContent = sub ? '🔕 Désactiver les notifications' : '🔔 Activer les notifications';
+}
+
+async function togglePushNotifications() {
+  const btn = document.getElementById('btn-push-toggle');
+  const msgEl = document.getElementById('push-status-msg');
+  const showMsg = (text, ok) => {
+    msgEl.style.display = 'block';
+    msgEl.textContent = text;
+    msgEl.style.background = ok ? '#dcfce7' : '#fef2f2';
+    msgEl.style.color = ok ? '#166534' : '#dc2626';
+    msgEl.style.border = '1px solid ' + (ok ? '#86efac' : '#fca5a5');
+  };
+
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    showMsg('Les notifications push ne sont pas supportées sur ce navigateur.', false);
+    return;
+  }
+  if (!_lease || !_lease.id) {
+    showMsg('Bail non chargé, réessayez dans quelques secondes.', false);
+    return;
+  }
+
+  btn.disabled = true;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+
+    if (existing) {
+      await fetch('/.netlify/functions/subscribe-push', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: existing.endpoint })
+      });
+      await existing.unsubscribe();
+      showMsg('Notifications désactivées sur cet appareil.', true);
+    } else {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        showMsg('Permission refusée. Activez les notifications dans les réglages de votre navigateur.', false);
+        btn.disabled = false;
+        return;
+      }
+      const { publicKey } = await fetch('/.netlify/functions/get-vapid-key').then(r => r.json());
+      if (!publicKey) {
+        showMsg('Configuration serveur incomplète (clé VAPID manquante).', false);
+        btn.disabled = false;
+        return;
+      }
+      const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+      });
+      await fetch('/.netlify/functions/subscribe-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lease_id: _lease.id,
+          role: 'locataire',
+          subscription: subscription.toJSON()
+        })
+      });
+      showMsg('✅ Notifications activées sur cet appareil.', true);
+    }
+  } catch (e) {
+    showMsg('Erreur : ' + e.message, false);
+  }
+  btn.disabled = false;
+  updatePushButtonUI();
+}
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('sw.js')
+      .then(function() { updatePushButtonUI(); })
+      .catch(function(e) { console.log('[Bailo] SW err', e); });
+  });
+}
+</script>
+</body>
+</html>
+
+`.replace('MANIFEST_URL_PLACEHOLDER', manifestUrl);
 
   return {
     statusCode: 200,
