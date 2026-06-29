@@ -336,7 +336,7 @@
     }
 
 
-    function generateEDL(f) {
+    function generateEDL(f, lease) {
       var today = new Intl.DateTimeFormat('fr-FR').format(new Date());
       var entryDate = f.effectiveDate ? formatDate(f.effectiveDate) : today;
 
