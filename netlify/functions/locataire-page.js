@@ -7,15 +7,28 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: 'ID manquant' };
   }
 
-  // Lire locataire.html
-  const htmlPath = path.join(process.cwd(), 'locataire.html');
-  let html = fs.readFileSync(htmlPath, 'utf8');
+  // Sur Netlify, le dossier publish est /var/task
+  let html;
+  const candidates = [
+    path.join('/var/task', 'locataire.html'),
+    path.join(process.cwd(), 'locataire.html'),
+    path.join(__dirname, '..', '..', 'locataire.html'),
+    path.join(__dirname, '../../locataire.html'),
+  ];
+  
+  for (const p of candidates) {
+    try { html = fs.readFileSync(p, 'utf8'); break; } catch(e) {}
+  }
+  
+  if (!html) {
+    return { statusCode: 500, body: 'locataire.html introuvable. Paths tried: ' + candidates.join(', ') };
+  }
 
-  // Remplacer le lien manifest statique par l'URL de la fonction dynamique
-  // Cette substitution se fait COTE SERVEUR donc iOS voit directement le bon href
+  // Injecter le manifest avec le bon start_url COTE SERVEUR
+  const manifestUrl = 'https://v2.gestion.bailo.pro/.netlify/functions/manifest-locataire-dynamic?id=' + leaseId;
   html = html.replace(
     '<link rel="manifest" href="manifest-locataire.json" id="pwa-manifest">',
-    '<link rel="manifest" href="/.netlify/functions/manifest-locataire-dynamic?id=' + leaseId + '" id="pwa-manifest">'
+    '<link rel="manifest" href="' + manifestUrl + '" id="pwa-manifest">'
   );
 
   return {
