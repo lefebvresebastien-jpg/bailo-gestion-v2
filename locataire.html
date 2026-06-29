@@ -322,7 +322,7 @@ let _pollingInterval = null;
 
 async function init() {
   const params = new URLSearchParams(location.search);
-  const leaseIdFromUrl = params.get('id') || new URLSearchParams(location.hash.replace('#','?')).get('id');
+  const leaseIdFromUrl = params.get('locataire') || params.get('id') || new URLSearchParams(location.hash.replace('#','?')).get('id');
   const leaseId = leaseIdFromUrl
     || sessionStorage.getItem('bailo-tenant-lease-id')
     || localStorage.getItem('bailo-tenant-lease-id');
