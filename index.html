@@ -2884,7 +2884,7 @@ async function envoyerLienSignature(leaseId) {
   const resendKey = keyRes.data?.value || '';
   const profile = profRes.data ? JSON.parse(profRes.data.value) : {};
 
-  const lienLocataire = 'https://gestion.bailo.pro/locataire.html?id=' + leaseId + '#id=' + leaseId;
+  const lienLocataire = 'https://v2.gestion.bailo.pro/?locataire=' + leaseId;
 
   // Email locataire — un seul lien universel vers l'espace
   const htmlLocataire = '<div style="font-family:sans-serif;max-width:560px;color:#1a1208">' +
@@ -4380,7 +4380,7 @@ async function envoyerLienLocataire(leaseId, tenantName, tenantEmail) {
   const profile = profRes?.data?.value ? JSON.parse(profRes.data.value) : {};
   if (!resendKey) { showToast('Clé Resend non configurée.', 'error'); return; }
 
-  const lien = 'https://gestion.bailo.pro/locataire.html?id=' + leaseId + '#id=' + leaseId;
+  const lien = 'https://v2.gestion.bailo.pro/?locataire=' + leaseId;
   const html = '<div style="font-family:sans-serif;max-width:560px;color:#1a1208">' +
     '<div style="background:#1a1208;padding:16px 20px;border-radius:8px 8px 0 0"><span style="color:#e8793a;font-weight:700;font-size:16px">🏠 Bailo Gestion</span></div>' +
     '<div style="background:#fff;padding:24px;border:1px solid #e0d5c8;border-radius:0 0 8px 8px">' +
