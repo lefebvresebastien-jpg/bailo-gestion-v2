@@ -343,21 +343,39 @@
       var pieces = [];
       var nbPieces = parseInt(f.rooms) || 0;
 
-      // Pièces standards selon le nombre de pièces
-      var pieceNames = ['Entree / Couloir', 'Sejour / Salon', 'Chambre 1', 'Chambre 2',
-                        'Chambre 3', 'Cuisine', 'Salle de bain', 'WC', 'Balcon / Terrasse', 'Cave / Annexe'];
-      var piecesAffichees = nbPieces > 0
-        ? pieceNames.slice(0, Math.min(nbPieces + 2, pieceNames.length))
-        : ['Entree', 'Sejour', 'Cuisine', 'Salle de bain', 'WC'];
+      // Lire les pièces depuis l'EDL si disponible
+      var edlRooms = (lease.data && lease.data.edlEntry && lease.data.edlEntry.rooms) ? lease.data.edlEntry.rooms : null;
 
-      var lignesPieces = piecesAffichees.map(function(nom) {
-        return '<tr>' +
-          '<td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem">' + nom + '</td>' +
-          '<td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem;color:#8a7060">À compléter</td>' +
-          '<td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem;color:#8a7060">À compléter</td>' +
-          '<td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem;min-width:120px"> </td>' +
-        '</tr>';
-      }).join('');
+      var lignesPieces;
+      if (edlRooms && edlRooms.length > 0) {
+        // Utiliser les vraies données EDL
+        lignesPieces = edlRooms.map(function(room) {
+          var etatGeneral = room.floor || room.walls || room.ceiling ? 
+            [room.floor, room.walls, room.ceiling].filter(Boolean).join(' / ') : 'Bon état';
+          var observations = room.observations || room.equipment || '';
+          return '<tr>' +
+            '<td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem">' + (room.name || '—') + '</td>' +
+            '<td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem">' + etatGeneral + '</td>' +
+            '<td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem">' + observations + '</td>' +
+            '<td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem;min-width:120px"> </td>' +
+          '</tr>';
+        }).join('');
+      } else {
+        // Fallback : pièces standards
+        var pieceNames = ['Entree / Couloir', 'Sejour / Salon', 'Chambre 1', 'Chambre 2',
+                          'Chambre 3', 'Cuisine', 'Salle de bain', 'WC', 'Balcon / Terrasse', 'Cave / Annexe'];
+        var piecesAffichees = nbPieces > 0
+          ? pieceNames.slice(0, Math.min(nbPieces + 2, pieceNames.length))
+          : ['Entree', 'Sejour', 'Cuisine', 'Salle de bain', 'WC'];
+        lignesPieces = piecesAffichees.map(function(nom) {
+          return '<tr>' +
+            '<td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem">' + nom + '</td>' +
+            '<td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem;color:#8a7060">À compléter</td>' +
+            '<td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem;color:#8a7060">À compléter</td>' +
+            '<td style="padding:6px 10px;border:1px solid #e0d5c8;font-size:.82rem;min-width:120px"> </td>' +
+          '</tr>';
+        }).join('');
+      }
 
       return '<div id="annex-preview" class="annex-preview">' +
 
