@@ -118,6 +118,13 @@ exports.handler = async (event) => {
     leaseData.signwellCompleted = true;
     leaseData.signwellCompletedAt = new Date().toISOString();
 
+    // Capturer l'URL du document final signé (différents formats possibles selon SignWell)
+    const finalDocUrl = doc.files_url || doc.completed_document_url || doc.download_url || (doc.files && doc.files[0] && doc.files[0].url) || null;
+    if (finalDocUrl) {
+      leaseData.signwellFinalDocUrl = finalDocUrl;
+    }
+    leaseData.signwellDocId = docId;
+
     await fetch(
       `${SUPABASE_URL}/rest/v1/leases?id=eq.${lease.id}`,
       {
