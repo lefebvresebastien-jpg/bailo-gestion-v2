@@ -685,6 +685,9 @@
             <button class="btn-primary" id="btn-voir-contrat" onclick="ouvrirContratV1(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
               📄 Voir le contrat
             </button>
+            <button class="btn-success" id="btn-bail-signe" onclick="telechargerBailSigne(currentDetailLeaseId)" style="display:none;font-size:12px;padding:6px 12px;background:#16a34a;border-color:#16a34a">
+              ✅ Bail signé — Télécharger
+            </button>
             <button class="btn-secondary" onclick="supprimerBail(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px;color:var(--color-danger);border-color:var(--color-danger)">
               🗑️ Supprimer
             </button>
@@ -3000,6 +3003,45 @@ function ouvrirContratV1(leaseId) {
   window.open(url + '?lease=' + leaseId, '_blank');
 }
 
+async function telechargerBailSigne(leaseId) {
+  if (!leaseId) { showToast('Bail introuvable.', 'error'); return; }
+  var lease = _allLeases.find(function(l){ return l.id === leaseId; });
+  if (!lease || !lease.data) { showToast('Bail introuvable.', 'error'); return; }
+
+  var docId = lease.data.signwellDocId;
+  var finalUrl = lease.data.signwellFinalDocUrl;
+
+  if (finalUrl) {
+    window.open(finalUrl, '_blank');
+    return;
+  }
+
+  if (!docId) {
+    showToast('Document SignWell introuvable pour ce bail.', 'error');
+    return;
+  }
+
+  showToast('Récupération du document signé…', 'info');
+  try {
+    var resp = await fetch('/.netlify/functions/get-signed-doc?docId=' + encodeURIComponent(docId));
+    if (!resp.ok) {
+      showToast('Impossible de récupérer le document. Vérifiez vos emails SignWell.', 'error');
+      return;
+    }
+    var blob = await resp.blob();
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'Bail_signe_' + (lease.data.formData?.tenantName || leaseId) + '.pdf';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    showToast('Erreur: ' + e.message, 'error');
+  }
+}
+
 
 
 function renderLeaseDetail(lease) {
@@ -3015,6 +3057,13 @@ function renderLeaseDetail(lease) {
   const isCommercialLease = (f.leaseType||'').toLowerCase().includes('commercial') || (f.leaseType||'').toLowerCase().includes('professionnel');
   var warnZone = document.getElementById('commercial-lease-warn');
   if (warnZone) warnZone.style.display = isCommercialLease ? 'block' : 'none';
+
+  // Bouton bail signé électroniquement (SignWell)
+  var btnBailSigne = document.getElementById('btn-bail-signe');
+  if (btnBailSigne) {
+    var isSigned = lease.data && lease.data.signwellCompleted;
+    btnBailSigne.style.display = isSigned ? 'inline-flex' : 'none';
+  }
 
   // Helper pour créer un champ
   const field = (label, value) => value ? `
