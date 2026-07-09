@@ -427,6 +427,8 @@
       <input type="password" id="auth-password" placeholder="Mot de passe" autocomplete="current-password" />
       <button id="auth-btn" class="btn-primary" onclick="handleAuth()">Se connecter</button>
       <div id="auth-error" class="auth-error hidden"></div>
+      <div id="auth-success" class="auth-error hidden" style="background:rgba(52,211,153,.1);color:#34d399;border-color:#34d399"></div>
+      <p style="text-align:right;margin-top:6px"><a href="#" onclick="showResetPassword(event)" style="font-size:12px;color:var(--muted);text-decoration:none">Mot de passe oublié ?</a></p>
       <p class="auth-footer">Pas encore de compte ? <a href="#">Essai gratuit</a></p>
     </div>
   </div>
@@ -1193,6 +1195,34 @@ async function checkPlan() {
 // ============================================================
 // BAILO GESTION v2 — Auth
 // ============================================================
+
+function showResetPassword(e) {
+  e.preventDefault();
+  const email = document.getElementById('auth-email').value.trim();
+  if (!email) {
+    document.getElementById('auth-error').textContent = 'Saisissez votre email d\'abord.';
+    document.getElementById('auth-error').classList.remove('hidden');
+    return;
+  }
+  document.getElementById('auth-error').classList.add('hidden');
+  document.getElementById('auth-btn').disabled = true;
+  document.getElementById('auth-btn').textContent = 'Envoi en cours…';
+  
+  db.auth.resetPasswordForEmail(email, {
+    redirectTo: 'https://gestion.bailo.pro/reset-password.html'
+  }).then(({ error }) => {
+    document.getElementById('auth-btn').disabled = false;
+    document.getElementById('auth-btn').textContent = 'Se connecter';
+    const successEl = document.getElementById('auth-success');
+    if (error) {
+      document.getElementById('auth-error').textContent = 'Erreur : ' + error.message;
+      document.getElementById('auth-error').classList.remove('hidden');
+    } else {
+      successEl.textContent = 'Email de réinitialisation envoyé à ' + email + '. Vérifiez votre boîte mail.';
+      successEl.classList.remove('hidden');
+    }
+  });
+}
 
 async function handleAuth() {
   const email = document.getElementById('auth-email').value.trim();
