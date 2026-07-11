@@ -6031,29 +6031,16 @@ async function renvoyerQuittance(receiptId) {
 
 // Synchronise une quittance générée dans Gestion vers la base Chantier/Finance
 // (table quittances_sync), pour qu'elle apparaisse automatiquement dans le
-// Récap fiscal de Bailo Finance. Utilise la clé anon publique de l'autre
-// projet Supabase — la table a des policies RLS permissives en écriture.
+// Récap fiscal de Bailo Finance. Passe par une Netlify Function qui
+// retrouve le bon user_id côté Chantier/Finance via l'email (les deux bases
+// ont des systèmes Auth séparés, voir sync-quittance.js pour le détail).
 async function syncQuittanceToFinance(leaseId, month, tenantName, rent, charges) {
   try {
-    const FINANCE_URL = 'https://hvkguyddmhqbvarujlyr.supabase.co'
-    const FINANCE_ANON_KEY = 'sb_publishable_BZHU49hkN70MgEypJZ7K5A_AwlIQF7W'
-    const row = {
-      id: leaseId + '_' + month,
-      lease_id: leaseId,
-      tenant_name: tenantName || '',
-      month: month,
-      rent: rent,
-      charges: charges
-    }
-    await fetch(FINANCE_URL + '/rest/v1/quittances_sync?on_conflict=id', {
+    const sess = (await db.auth.getSession()).data.session;
+    await fetch('/.netlify/functions/sync-quittance', {
       method: 'POST',
-      headers: {
-        'apikey': FINANCE_ANON_KEY,
-        'Authorization': 'Bearer ' + FINANCE_ANON_KEY,
-        'Content-Type': 'application/json',
-        'Prefer': 'resolution=merge-duplicates'
-      },
-      body: JSON.stringify(row)
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (sess ? sess.access_token : '') },
+      body: JSON.stringify({ leaseId, month, tenantName, rent, charges })
     })
   } catch (e) { console.warn('[Bailo] syncQuittanceToFinance error:', e) }
 }
