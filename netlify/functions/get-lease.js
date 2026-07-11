@@ -38,9 +38,12 @@ exports.handler = async (event) => {
     const lease = Array.isArray(leases) && leases[0] ? leases[0] : null;
     if (!lease) return { statusCode: 404, headers: cors, body: JSON.stringify({ error: 'Bail introuvable' }) };
 
-    // Lire settings bailleur
+    // Lire settings du bailleur propriétaire de ce bail UNIQUEMENT.
+    // Cette fonction utilise la clé service (bypass RLS) : le filtre par
+    // bailleur_id doit donc être fait explicitement ici, sinon un locataire
+    // pourrait recevoir le profil ou les compteurs d'un AUTRE bailleur.
     const settings = await fetchJson(
-      GESTION_URL + '/rest/v1/settings?key=in.(landlord_profile,compteurs_config)&select=key,value',
+      GESTION_URL + '/rest/v1/settings?key=in.(landlord_profile,compteurs_config)&bailleur_id=eq.' + encodeURIComponent(lease.bailleur_id) + '&select=key,value',
       { 'apikey': GESTION_SERVICE, 'Authorization': 'Bearer ' + GESTION_SERVICE }
     );
 
