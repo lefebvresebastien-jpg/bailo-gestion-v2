@@ -3444,7 +3444,7 @@ async function importFromLeases() {
           var landlordName = f.landlordName || '';
           var propType = landlordName.toUpperCase().includes('SCI') ? 'SCI' : 'Particulier';
           var propRes = await db.from('properties').insert({
-            bailleur_id: 'default',
+            bailleur_id: _currentUserId,
             name: landlordName || addr,
             type: propType,
             address: addrParts[0].trim(),
@@ -3478,7 +3478,7 @@ async function importFromLeases() {
 
     // Recharger tout
     var [propR, unitR, leaseR] = await Promise.all([
-      db.from('properties').select('*').eq('bailleur_id', 'default'),
+      db.from('properties').select('*'),
       db.from('units').select('*'),
       db.from('leases').select('*')
     ]);
@@ -3878,7 +3878,7 @@ async function pwNext() {
     postal_code: d.postal || '',
     city: d.city || '',
     description: JSON.stringify(meta),
-    bailleur_id: 'default',
+    bailleur_id: _currentUserId,
     updated_at: new Date().toISOString()
   };
 
@@ -3919,7 +3919,7 @@ async function pwNext() {
   btn.disabled = false;
 
   var [propR, unitR] = await Promise.all([
-    db.from('properties').select('*').eq('bailleur_id', 'default'),
+    db.from('properties').select('*'),
     db.from('units').select('*')
   ]);
   _allProperties = propR.data || [];
@@ -4266,7 +4266,7 @@ async function submitLotWizard() {
 
     var leasePayload = {
       id: uuid,
-      bailleur_id: 'default',
+      bailleur_id: _currentUserId,
       unit_id: newUnit.id,
       data: { formData: {
         landlordName: d.landlordName||'', landlordAddress: d.landlordAddress||'',
@@ -5180,7 +5180,7 @@ async function createLease() {
 
   const payload = {
     id: uuid,
-    bailleur_id: 'default',
+    bailleur_id: _currentUserId,
     data: {
       formData: {
         leaseLabel: (_wizardData.tenantName || 'Nouveau bail') + ' — ' + (_wizardData.propertyAddress || ''),
