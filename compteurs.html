@@ -364,7 +364,8 @@ async function saveParams() {
   _config.regu = document.getElementById('sel-regu').value;
   _config.dateRef = (document.getElementById('p-date-ref')||{}).value || '';
 
-  await db.from('settings').upsert({ key: 'compteurs_config', value: JSON.stringify(_config) }, { onConflict: 'key' });
+  const { data: { user } } = await db.auth.getUser();
+  await db.from('settings').upsert({ bailleur_id: user?.id, key: 'compteurs_config', value: JSON.stringify(_config) }, { onConflict: 'bailleur_id,key' });
   showToast('Paramètres enregistrés ✅');
 }
 
