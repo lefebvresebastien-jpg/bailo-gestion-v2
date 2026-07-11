@@ -1678,9 +1678,10 @@ async function envoyerEmailIRL(leaseId) {
   if (!emailDest) { showToast('Aucun email bailleur configuré dans Paramètres.', 'error'); return; }
 
   try {
+    const __sess = (await db.auth.getSession()).data.session;
     var res = await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
       body: JSON.stringify({ to: emailDest, subject: subject, text: body })
     });
     if (res.error) throw res.error;
@@ -1810,9 +1811,10 @@ async function envoyerRelanceEmail(leaseId) {
     'En cas d\'erreur, veuillez ignorer ce message.\n\n' +
     'Cordialement,\n' + (f.landlordName || 'Votre bailleur');
   try {
+    const __sess = (await db.auth.getSession()).data.session;
     var res = await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
       body: JSON.stringify({ to: f.tenantEmail, subject: 'Rappel loyer — ' + (f.propertyAddress||''), text: body })
     });
     if (res.error) throw res.error;
@@ -1968,9 +1970,10 @@ async function envoyerRegul(leaseId) {
     + '\n\n'+soldeLabel+' : '+(data.solde>0?'+':'')+fc.format(data.solde)
     + '\n\nConform\u00e9ment \u00e0 l\'article 23 de la loi du 6 juillet 1989.\n\nCordialement,\n'+(f.landlordName||'Votre bailleur');
   try {
+    const __sess = (await db.auth.getSession()).data.session;
     var res = await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
       body: JSON.stringify({ to: f.tenantEmail, subject: 'D\u00e9compte annuel charges \u2014 '+(f.propertyAddress||''), text: body })
     });
     if (res.error) throw res.error;
@@ -2699,9 +2702,10 @@ async function envoyerMessageAssurance(leaseId) {
         '<p style="white-space:pre-line;font-size:13px;line-height:1.7">' + texte.replace(/&#39;/g,"'") + '</p>' +
         '<div style="margin-top:16px"><a href="https://v2.gestion.bailo.pro/locataire.html?id=' + leaseId + '" style="background:#2563eb;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Répondre depuis mon espace</a></div>' +
         '</div></div>';
+    const __sess = (await db.auth.getSession()).data.session;
     await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
       body: JSON.stringify({ to: [f.tenantEmail], subject: 'Renouvellement de votre attestation assurance habitation', html, resend_key: resendKey })
     });
     }
@@ -2944,9 +2948,10 @@ async function envoyerLienSignature(leaseId) {
     '<p style="font-size:11px;color:#9a8a70;border-top:1px solid #e0d5c8;padding-top:12px">Ce lien est personnel et permanent — gardez cet email. Ne le partagez pas.</p>' +
     '</div></div>';
 
+  const __sess = (await db.auth.getSession()).data.session;
   await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
       body: JSON.stringify({ to: [f.tenantEmail], subject: 'Votre bail est prêt à signer — ' + (f.propertyAddress||''), html: htmlLocataire, resend_key: resendKey })
     });
 
@@ -2964,9 +2969,10 @@ async function envoyerLienSignature(leaseId) {
       '<p style="font-size:12px;color:#6a5a40;margin-top:20px">Ce lien vous est personnel. Ne le partagez pas.</p>' +
       '</div></div>';
 
+  const __sess = (await db.auth.getSession()).data.session;
   await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
       body: JSON.stringify({ to: [f.guarantorEmail], subject: 'Acte de caution à signer — ' + (f.tenantName||''), html: htmlGarant, resend_key: resendKey })
     });
     showToast('Lien envoyé au locataire et au garant ✅');
@@ -3207,9 +3213,10 @@ async function alerterBailleurSignature(lease, f, qui) {
     '<a href="https://v2.gestion.bailo.pro" style="display:inline-block;background:#2563eb;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Voir le bail signé</a>' +
     '</div></div>';
 
+  const __sess = (await db.auth.getSession()).data.session;
   await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
       body: JSON.stringify({ to: [baillleurEmail], subject: (qui==='garant' ? (f.guarantorName||'Le garant') + ' a signé l\'acte de caution' : (f.tenantName||'Votre locataire') + ' a signé le bail') + ' — ' + (f.propertyAddress||''), html, resend_key: resendKey })
     });
   showToast('✅ ' + (qui==='garant' ? (f.guarantorName||'Garant') : (f.tenantName||'Locataire')) + ' a signé ! Email envoyé.', 'success');
@@ -3339,9 +3346,10 @@ async function saveSettings() {
 
   // Upsert dans settings
   var res = await db.from('settings').upsert({
+    bailleur_id: _currentUserId,
     key: 'landlord_profile',
     value: JSON.stringify(profile)
-  }, { onConflict: 'key' });
+  }, { onConflict: 'bailleur_id,key' });
 
   if (res.error) {
     showToast('Erreur : ' + res.error.message, 'error');
@@ -3909,7 +3917,7 @@ async function pwNext() {
   // Mettre a jour le profil bailleur avec SIRET si saisi
   if (d.siret && !_landlordProfile.landlordSiret) {
     _landlordProfile.landlordSiret = d.siret;
-    await db.from('settings').upsert({ key: 'landlord_profile', value: JSON.stringify(_landlordProfile) }, { onConflict: 'key' });
+    await db.from('settings').upsert({ bailleur_id: _currentUserId, key: 'landlord_profile', value: JSON.stringify(_landlordProfile) }, { onConflict: 'bailleur_id,key' });
   }
 
   showToast((propId ? 'Bien créé' : 'Bien modifié') + (_pwLots.length ? ' avec ' + _pwLots.length + ' lot(s) !' : ' !'), 'success');
@@ -4474,9 +4482,10 @@ async function envoyerLienLocataire(leaseId, tenantName, tenantEmail) {
     '<p style="font-size:11px;color:#9a8a70;margin-top:16px;border-top:1px solid #e0d5c8;padding-top:12px">Lien personnel et permanent — gardez cet email.</p>' +
     '</div></div>';
 
+  const __sess = (await db.auth.getSession()).data.session;
   await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
       body: JSON.stringify({ to: [tenantEmail], subject: 'Votre espace locataire Bailo', html, resend_key: resendKey })
     });
 
@@ -5130,7 +5139,7 @@ async function wizardNext() {
       landlordEmail: _wizardData.landlordEmail || '',
       signatureCity: _wizardData.signatureCity || ''
     };
-    await db.from('settings').upsert({ key: 'landlord_profile', value: JSON.stringify(profile) }, { onConflict: 'key' });
+    await db.from('settings').upsert({ bailleur_id: _currentUserId, key: 'landlord_profile', value: JSON.stringify(profile) }, { onConflict: 'bailleur_id,key' });
     _landlordProfile = profile;
     // Mettre à jour les champs dans Paramètres si visibles
     var fields = { landlordName: 's-landlordName', landlordRepresentative: 's-landlordRepresentative', landlordAddress: 's-landlordAddress', landlordEmail: 's-landlordEmail', signatureCity: 's-signatureCity' };
@@ -5404,9 +5413,10 @@ async function submitNewMessage() {
         '<p>' + body.split('\n').join('<br>') + '</p>' +
         '<p style="color:#666;font-size:.85rem;margin-top:16px">Cordialement,<br><strong>' + (fd2.landlordName || 'Votre bailleur') + '</strong></p>' +
         '</div></div>';
+    const __sess = (await db.auth.getSession()).data.session;
     await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
       body: JSON.stringify({ to: [fd2.tenantEmail], subject: subject, html: eHtml, resend_key: rKey })
     });
     }
@@ -5754,9 +5764,10 @@ async function sendReply(messageId) {
         '<p>' + body.split('\n').join('<br>') + '</p>' +
         '<p style="color:#666;font-size:.85rem;margin-top:16px">Cordialement,<br><strong>' + (f.landlordName || 'Votre bailleur') + '</strong></p>' +
         '</div></div>';
+    const __sess = (await db.auth.getSession()).data.session;
     await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
       body: JSON.stringify({ to: [f.tenantEmail], subject: 'Message de votre bailleur : ' + (msg.subject||''), html: emailHtml, resend_key: resendKey })
     });
     }
@@ -6106,9 +6117,10 @@ async function _doQSend(lease, month, rent, charges, isResend) {
 
   // Envoyer via Edge Function
   if (f.tenantEmail && resendKey) {
+  const __sess = (await db.auth.getSession()).data.session;
   var sendRes = await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
       body: JSON.stringify({
         to: [f.tenantEmail],
         subject: subject,
@@ -6521,8 +6533,8 @@ async function toggleLoyer(leaseId, month) {
 
 async function saveLoyersStatus() {
   await db.from('settings').upsert(
-    { key: 'loyers_status', value: JSON.stringify(_loyersStatus) },
-    { onConflict: 'key' }
+    { bailleur_id: _currentUserId, key: 'loyers_status', value: JSON.stringify(_loyersStatus) },
+    { onConflict: 'bailleur_id,key' }
   );
 }
 
@@ -6570,9 +6582,10 @@ async function genererEtEnvoyerQuittance(leaseId, month) {
 
   // Envoyer par email
   if (f.tenantEmail && resendKey) {
+  const __sess = (await db.auth.getSession()).data.session;
   await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
       body: JSON.stringify({ to: [f.tenantEmail], subject: subject, html: body, resend_key: resendKey })
     });
     if (sendRes.ok) {
