@@ -40,14 +40,17 @@ exports.handler = async (event) => {
     const authHeader = event.headers.authorization || event.headers.Authorization || '';
     const token = authHeader.replace(/^Bearer\s+/i, '');
     if (!token || !GESTION_ANON_KEY) {
+      console.log('check-plan: token ou GESTION_ANON_KEY manquant', { hasToken: !!token, hasAnonKey: !!GESTION_ANON_KEY });
       return { statusCode: 200, headers: cors, body: JSON.stringify(fallback) };
     }
 
     const userRes = await fetchJson(GESTION_URL + '/auth/v1/user', {
       apikey: GESTION_ANON_KEY, Authorization: 'Bearer ' + token
     });
+    console.log('check-plan: userRes status', userRes.status, 'body', JSON.stringify(userRes.body).slice(0,200));
     const email = userRes.status === 200 ? userRes.body?.email : null;
     if (!email || !CHANTIER_SERVICE_KEY) {
+      console.log('check-plan: email ou CHANTIER_SERVICE_KEY manquant', { email, hasServiceKey: !!CHANTIER_SERVICE_KEY });
       return { statusCode: 200, headers: cors, body: JSON.stringify(fallback) };
     }
 
@@ -55,6 +58,7 @@ exports.handler = async (event) => {
       CHANTIER_URL + '/rest/v1/subscriptions?email=eq.' + encodeURIComponent(email) + '&select=plan,active,modules,trial,expires_at&limit=1',
       { apikey: CHANTIER_SERVICE_KEY, Authorization: 'Bearer ' + CHANTIER_SERVICE_KEY }
     );
+    console.log('check-plan: subRes status', subRes.status, 'body', JSON.stringify(subRes.body).slice(0,300));
     const sub = Array.isArray(subRes.body) && subRes.body[0] ? subRes.body[0] : null;
     if (!sub) {
       return { statusCode: 200, headers: cors, body: JSON.stringify(fallback) };
@@ -73,6 +77,7 @@ exports.handler = async (event) => {
       })
     };
   } catch(e) {
+    console.log('check-plan: exception', e.message);
     return { statusCode: 200, headers: cors, body: JSON.stringify(fallback) };
   }
 };
