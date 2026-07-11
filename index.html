@@ -2692,9 +2692,6 @@ async function envoyerMessageAssurance(leaseId) {
   const lease = _allLeases.find(l => l.id === leaseId);
   const f = lease?.data?.formData || {};
   if (f.tenantEmail) {
-    const sigRes = await db.from('settings').select('value').eq('key','resend_api_key').maybeSingle();
-    const resendKey = sigRes?.data?.value || '';
-    if (resendKey) {
       const html = '<div style="font-family:sans-serif;max-width:560px">' +
         '<div style="background:#1a1208;padding:16px 20px;border-radius:8px 8px 0 0"><span style="color:#e8793a;font-weight:700">🏠 Bailo Gestion</span></div>' +
         '<div style="background:#fff;padding:20px;border:1px solid #e0d5c8;border-radius:0 0 8px 8px">' +
@@ -2706,9 +2703,8 @@ async function envoyerMessageAssurance(leaseId) {
     await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
-      body: JSON.stringify({ to: [f.tenantEmail], subject: 'Renouvellement de votre attestation assurance habitation', html, resend_key: resendKey })
+      body: JSON.stringify({ to: [f.tenantEmail], subject: 'Renouvellement de votre attestation assurance habitation', html })
     });
-    }
   }
 
   document.getElementById('modal-assurance')?.remove();
@@ -4460,14 +4456,9 @@ async function envoyerLienLocataire(leaseId, tenantName, tenantEmail) {
   }
   if (!confirm('Envoyer le lien espace locataire à ' + tenantName + ' (' + tenantEmail + ') ?')) return;
 
-  // Récupérer resend key + profil
-  const [keyRes, profRes] = await Promise.all([
-    db.from('settings').select('value').eq('key','resend_api_key').maybeSingle(),
-    db.from('settings').select('value').eq('key','landlord_profile').maybeSingle()
-  ]);
-  const resendKey = keyRes?.data?.value || '';
+  // Récupérer le profil bailleur (la clé Resend est gérée côté serveur désormais)
+  const profRes = await db.from('settings').select('value').eq('key','landlord_profile').maybeSingle();
   const profile = profRes?.data?.value ? JSON.parse(profRes.data.value) : {};
-  if (!resendKey) { showToast('Clé Resend non configurée.', 'error'); return; }
 
   const lien = 'https://v2.gestion.bailo.pro/.netlify/functions/locataire-page?id=' + leaseId;
   const html = '<div style="font-family:sans-serif;max-width:560px;color:#1a1208">' +
@@ -4486,7 +4477,7 @@ async function envoyerLienLocataire(leaseId, tenantName, tenantEmail) {
   await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
-      body: JSON.stringify({ to: [tenantEmail], subject: 'Votre espace locataire Bailo', html, resend_key: resendKey })
+      body: JSON.stringify({ to: [tenantEmail], subject: 'Votre espace locataire Bailo', html })
     });
 
   // Sauvegarder date d'envoi
@@ -5753,9 +5744,6 @@ async function sendReply(messageId) {
   const lease = _allLeases.find(l => l.id === msg.lease_id);
   const f = (lease?.data?.formData) || {};
   if (f.tenantEmail) {
-    const sigRes = await db.from('settings').select('value').eq('key','resend_api_key').maybeSingle();
-    const resendKey = sigRes.data ? sigRes.data.value : '';
-    if (resendKey) {
       const emailHtml = '<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">' +
         '<div style="background:#1a2e1a;color:white;padding:16px 20px;border-radius:10px 10px 0 0">' +
         '<h2 style="margin:0;font-size:1rem">🏠 Message de votre bailleur</h2></div>' +
@@ -5768,9 +5756,8 @@ async function sendReply(messageId) {
     await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
-      body: JSON.stringify({ to: [f.tenantEmail], subject: 'Message de votre bailleur : ' + (msg.subject||''), html: emailHtml, resend_key: resendKey })
+      body: JSON.stringify({ to: [f.tenantEmail], subject: 'Message de votre bailleur : ' + (msg.subject||''), html: emailHtml })
     });
-    }
   }
 
   if (error) {
@@ -6083,10 +6070,6 @@ async function _doQSend(lease, month, rent, charges, isResend) {
   // Priorité : sig_bailleur dans le bail > dans le profil settings
   var sigBailleur = f.sig_bailleur || profile.sig_bailleur || '';
 
-  // Récupérer clé Resend
-  var keyRes = await db.from('settings').select('value').eq('key','resend_api_key').maybeSingle();
-  var resendKey = keyRes.data ? keyRes.data.value : '';
-
   var moisLabel = month;
   // Si format YYYY-MM, convertir en "janvier 2025"
   if (/^\d{4}-\d{2}$/.test(month)) {
@@ -6116,7 +6099,7 @@ async function _doQSend(lease, month, rent, charges, isResend) {
   }
 
   // Envoyer via Edge Function
-  if (f.tenantEmail && resendKey) {
+  if (f.tenantEmail) {
   const __sess = (await db.auth.getSession()).data.session;
   var sendRes = await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
@@ -6124,8 +6107,7 @@ async function _doQSend(lease, month, rent, charges, isResend) {
       body: JSON.stringify({
         to: [f.tenantEmail],
         subject: subject,
-        html: body,
-        resend_key: resendKey
+        html: body
       })
     });
     if (!sendRes.error) {
@@ -6545,8 +6527,6 @@ async function genererEtEnvoyerQuittance(leaseId, month) {
   // Récupérer profil bailleur + signature
   var sigRes = await db.from('settings').select('value').eq('key','landlord_profile').maybeSingle();
   var profile = sigRes.data ? JSON.parse(sigRes.data.value) : {};
-  var keyRes = await db.from('settings').select('value').eq('key','resend_api_key').maybeSingle();
-  var resendKey = keyRes.data ? keyRes.data.value : '';
 
   var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
   var sigBailleur = f.sig_bailleur || profile.sig_bailleur || '';
@@ -6581,12 +6561,12 @@ async function genererEtEnvoyerQuittance(leaseId, month) {
   }).catch(() => {});
 
   // Envoyer par email
-  if (f.tenantEmail && resendKey) {
+  if (f.tenantEmail) {
   const __sess = (await db.auth.getSession()).data.session;
   await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
-      body: JSON.stringify({ to: [f.tenantEmail], subject: subject, html: body, resend_key: resendKey })
+      body: JSON.stringify({ to: [f.tenantEmail], subject: subject, html: body })
     });
     if (sendRes.ok) {
       showToast('Quittance envoyée à ' + f.tenantEmail + ' ✅', 'success');
