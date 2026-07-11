@@ -1167,22 +1167,20 @@ const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_UtH7OZskOMab-vCsoKKRsQ_rVkm5mRC
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
   window.db = db; // expose pour bailo-nav.js
 
-// Connexion en lecture seule à la base Chantier/Finance, où vit la table
-// "subscriptions" (plan Solo/Duo/Pro de l'utilisateur). Nécessaire pour
-// appliquer les limites du plan (ex: 1 bail max en Solo) côté Gestion.
-const dbBilling = supabase.createClient(
-  'https://hvkguyddmhqbvarujlyr.supabase.co',
-  'sb_publishable_BZHU49hkN70MgEypJZ7K5A_AwlIQF7W'
-);
+// La vérification du plan passe désormais par la Netlify Function
+// check-plan.js (voir plus bas), qui contourne le problème d'IDs
+// différents entre Gestion et Chantier/Finance en identifiant
+// l'utilisateur par email côté serveur, avec la clé service.
 async function checkPlan() {
   try {
-    const { data } = await dbBilling.from('subscriptions')
-      .select('modules, active, plan')
-      .eq('user_id', _currentUserId)
-      .single()
-    window.userModules = data?.modules || []
-    window.planActive = data?.active || false
-    window.userPlan = data?.plan || 'free'
+    const sess = (await db.auth.getSession()).data.session;
+    const res = await fetch('/.netlify/functions/check-plan', {
+      headers: { 'Authorization': 'Bearer ' + (sess ? sess.access_token : '') }
+    });
+    const data = await res.json();
+    window.userModules = data.modules || []
+    window.planActive = data.active || false
+    window.userPlan = data.plan || 'free'
   } catch(e) {
     window.userModules = []
     window.planActive = false
