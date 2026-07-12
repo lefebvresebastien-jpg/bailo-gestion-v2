@@ -47,14 +47,38 @@ exports.handler = async (event) => {
       return { statusCode: 403, headers: cors, body: JSON.stringify({ error: 'Abonnement Gestion requis' }) };
     }
 
-    const [properties, units] = await Promise.all([
-      fetchJson(GESTION_URL + '/rest/v1/properties?select=id,name,address&order=name', {
-        'apikey': GESTION_SERVICE, 'Authorization': 'Bearer ' + GESTION_SERVICE
-      }),
-      fetchJson(GESTION_URL + '/rest/v1/units?select=id,label,type,property_id', {
-        'apikey': GESTION_SERVICE, 'Authorization': 'Bearer ' + GESTION_SERVICE
-      })
-    ]);
+    // SÉCURITÉ (corrigé le 12/07/2026) : cette fonction renvoyait auparavant
+    // TOUS les biens de TOUS les clients Gestion, sans filtre par
+    // propriétaire — n'importe quel client avec le module Gestion actif
+    // voyait les biens de tout le monde. Gestion et Chantier ont des
+    // systèmes Auth séparés (deux bases Supabase distinctes), donc il faut
+    // d'abord retrouver le bon user_id côté Gestion via l'email (clé
+    // commune entre les deux bases), puis filtrer strictement dessus.
+    const gestionUsersResp = await fetchJson(
+      GESTION_URL + '/auth/v1/admin/users?per_page=1000',
+      { 'apikey': GESTION_SERVICE, 'Authorization': 'Bearer ' + GESTION_SERVICE }
+    );
+    const gestionUsers = gestionUsersResp.users || (Array.isArray(gestionUsersResp) ? gestionUsersResp : []);
+    const gestionUser = gestionUsers.find(u => u.email?.toLowerCase() === user.email.toLowerCase());
+    if (!gestionUser?.id) {
+      // Pas de compte Gestion pour cet email : aucun bien à renvoyer.
+      return { statusCode: 200, headers: cors, body: JSON.stringify({ properties: [], units: [] }) };
+    }
+    const gestionUserId = gestionUser.id;
+
+    const properties = await fetchJson(
+      GESTION_URL + '/rest/v1/properties?select=id,name,address&bailleur_id=eq.' + gestionUserId + '&order=name',
+      { 'apikey': GESTION_SERVICE, 'Authorization': 'Bearer ' + GESTION_SERVICE }
+    );
+    const propertyIds = (Array.isArray(properties) ? properties : []).map(p => p.id);
+    let units = [];
+    if (propertyIds.length) {
+      const idsFilter = propertyIds.map(id => '"' + id + '"').join(',');
+      units = await fetchJson(
+        GESTION_URL + '/rest/v1/units?select=id,label,type,property_id&property_id=in.(' + idsFilter + ')',
+        { 'apikey': GESTION_SERVICE, 'Authorization': 'Bearer ' + GESTION_SERVICE }
+      );
+    }
 
     return { statusCode: 200, headers: cors, body: JSON.stringify({
       properties: Array.isArray(properties) ? properties : [],
