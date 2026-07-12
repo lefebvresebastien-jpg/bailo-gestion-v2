@@ -59,12 +59,16 @@ exports.handler = async (event) => {
       return { statusCode: 401, headers: cors, body: JSON.stringify({ error: 'Session invalide' }) };
     }
 
-    // Retrouver le user_id CÔTÉ CHANTIER/FINANCE correspondant à cet email
+    // Retrouver le user_id CÔTÉ CHANTIER/FINANCE correspondant à cet email.
+    // Le filtre ?email= de l'API admin Supabase n'est pas fiable (renvoie
+    // parfois un autre utilisateur) — on récupère toute la liste et on
+    // filtre nous-mêmes par email exact (découvert et corrigé le 12/07/2026).
     const adminRes = await request('GET',
-      CHANTIER_URL + '/auth/v1/admin/users?email=' + encodeURIComponent(email),
+      CHANTIER_URL + '/auth/v1/admin/users?per_page=1000',
       { apikey: CHANTIER_SERVICE_KEY, Authorization: 'Bearer ' + CHANTIER_SERVICE_KEY }
     );
-    const chantierUser = adminRes.body?.users?.[0] || (Array.isArray(adminRes.body) ? adminRes.body[0] : null);
+    const allChantierUsers = adminRes.body?.users || (Array.isArray(adminRes.body) ? adminRes.body : []);
+    const chantierUser = allChantierUsers.find(u => u.email?.toLowerCase() === email.toLowerCase());
     if (!chantierUser?.id) {
       // Pas de compte Chantier/Finance pour cet email : on ne bloque pas la
       // génération de la quittance côté Gestion, on renonce juste à la sync.
