@@ -6548,7 +6548,7 @@ async function genererEtEnvoyerQuittance(leaseId, month) {
   // Envoyer par email
   if (f.tenantEmail) {
   const __sess = (await db.auth.getSession()).data.session;
-  await fetch('/.netlify/functions/send-email-proxy', {
+  var sendRes = await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
       body: JSON.stringify({ to: [f.tenantEmail], subject: subject, html: body })
@@ -6561,6 +6561,11 @@ async function genererEtEnvoyerQuittance(leaseId, month) {
   } else {
     showToast('Quittance enregistrée (email locataire manquant).', 'info');
   }
+
+  // Synchro Finance (même mécanisme que la génération manuelle de quittance,
+  // corrigé le 12/07/2026 : ce chemin depuis le bouton "Payé" de la page
+  // Loyers ne synchronisait jamais vers Finance auparavant).
+  syncQuittanceToFinance(leaseId, month, f.tenantName || f.locataireName || '', rent, charges);
 }
 
 // ============================================================
