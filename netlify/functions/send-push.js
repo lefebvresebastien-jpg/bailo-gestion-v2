@@ -45,11 +45,16 @@ exports.handler = async function(event) {
 
     const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY;
     const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
-    const VAPID_EMAIL = process.env.VAPID_EMAIL;
+    const VAPID_EMAIL_RAW = process.env.VAPID_EMAIL;
 
-    if (!VAPID_PUBLIC || !VAPID_PRIVATE || !VAPID_EMAIL) {
+    if (!VAPID_PUBLIC || !VAPID_PRIVATE || !VAPID_EMAIL_RAW) {
       return { statusCode: 500, headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ error: 'Configuration VAPID incomplète' }) };
     }
+    // web-push exige un "subject" au format URL (mailto: ou https:). La
+    // variable Netlify VAPID_EMAIL peut être configurée comme simple adresse
+    // (ex: "contact@bailo.pro") — on ajoute le préfixe si besoin (corrigé le
+    // 12/07/2026, erreur observée : "Vapid subject is not a valid URL").
+    const VAPID_EMAIL = /^(mailto:|https?:)/i.test(VAPID_EMAIL_RAW) ? VAPID_EMAIL_RAW : 'mailto:' + VAPID_EMAIL_RAW;
     webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC, VAPID_PRIVATE);
 
     // Construire la requête de sélection des abonnements concernés
