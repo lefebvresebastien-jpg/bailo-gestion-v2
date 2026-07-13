@@ -872,11 +872,11 @@ async function sendIncident() {
 // ============================================================
 async function loadDocuments() {
   const el = document.getElementById('docs-list');
-  const { data: docs } = await db.from('messages')
-    .select('id, subject, body, file_name, file_data, created_at, sender')
-    .eq('lease_id', _lease.id)
-    .eq('kind', 'Document')
-    .order('created_at', { ascending: false });
+  let docs = [];
+  try {
+    const resp = await fetch('https://v2.gestion.bailo.pro/.netlify/functions/tenant-storage?leaseId=' + encodeURIComponent(_lease.id));
+    if (resp.ok) docs = await resp.json();
+  } catch(e) {}
 
   if (!docs?.length) {
     el.innerHTML = '<p style="font-size:13px;color:var(--ink-3)">Aucun document.</p>';
@@ -910,35 +910,46 @@ function onDocFileSelected(input) {
   if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
 }
 
+function _fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 async function sendDoc() {
   if (!_selectedDocFile || !_lease.id) return;
   const btn = document.getElementById('btn-send-doc');
   if (btn) { btn.disabled = true; btn.textContent = 'Envoi en cours…'; }
   showToast('Envoi en cours…');
 
-  const path = _lease.id + '/docs/' + Date.now() + '_' + _selectedDocFile.name.replace(/[^a-zA-Z0-9._-]/g,'_');
-  const { error } = await db.storage.from('documents').upload(path, _selectedDocFile, {upsert:true});
-  if (error) {
-    showToast('Erreur : ' + error.message);
+  try {
+    const base64 = await _fileToBase64(_selectedDocFile);
+    const type = document.getElementById('doc-type').value;
+    const resp = await fetch('https://v2.gestion.bailo.pro/.netlify/functions/tenant-storage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        leaseId: _lease.id,
+        fileName: _selectedDocFile.name,
+        fileType: _selectedDocFile.type,
+        fileBase64: base64,
+        category: type
+      })
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      showToast('Erreur : ' + (err.error || 'échec envoi'));
+      if (btn) { btn.disabled = false; btn.textContent = 'Envoyer au bailleur'; btn.style.opacity = '1'; }
+      return;
+    }
+  } catch(e) {
+    showToast('Erreur : ' + e.message);
     if (btn) { btn.disabled = false; btn.textContent = 'Envoyer au bailleur'; btn.style.opacity = '1'; }
     return;
   }
-
-  const { data: urlData } = db.storage.from('documents').getPublicUrl(path);
-  const type = document.getElementById('doc-type').value;
-
-  await db.from('messages').insert({
-    lease_id: _lease.id,
-    sender: 'Locataire',
-    kind: 'Document',
-    subject: type,
-    body: _selectedDocFile.name,
-    file_name: _selectedDocFile.name,
-    file_type: _selectedDocFile.type,
-    file_data: urlData.publicUrl,
-    status: 'traité',
-    replies: []
-  });
 
   // Reset
   _selectedDocFile = null;
