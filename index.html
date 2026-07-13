@@ -886,7 +886,7 @@
             <div style="display:flex;flex-direction:column;gap:var(--space-md)">
               <div class="form-group">
                 <label>Nom du bailleur / SCI *</label>
-                <input type="text" id="s-landlordName" placeholder="SCI LEFAAL ou Jean Dupont" />
+                <input type="text" id="s-landlordName" placeholder="SCI Exemple ou Jean Dupont" />
               </div>
               <div class="form-group">
                 <label>Représentant légal</label>
@@ -907,7 +907,7 @@
                 </div>
                 <div class="form-group">
                   <label>Ville de signature</label>
-                  <input type="text" id="s-signatureCity" placeholder="Barlin" />
+                  <input type="text" id="s-signatureCity" placeholder="Lyon" />
                 </div>
               </div>
               <div class="form-group">
@@ -3419,7 +3419,7 @@ async function importFromLeases() {
       var addr = (f.propertyAddress || '').trim();
       if (!addr) addr = 'Adresse inconnue';
 
-      // Extraire ville si présente (ex: "12 rue X, 62620 Barlin" → ville = "Barlin")
+      // Extraire ville si présente (ex: "12 rue X, 69000 Lyon" → ville = "Lyon")
       var city = '';
       var addrParts = addr.split(',');
       if (addrParts.length > 1) {
@@ -3739,7 +3739,7 @@ function pwRender() {
         return '<option value="' + t + '"' + (d.type===t?' selected':'') + '>' + t + '</option>';
       }).join('') + '</select></div>' +
       '<div class="form-group"><label>' + (isSCI ? 'Nom de la société *' : 'Nom *') + '</label>' +
-      '<input type="text" id="pw-name" value="' + (d.name||'') + '" placeholder="' + (isSCI?'SCI LEFAAL':'Jean Dupont') + '" /></div>' +
+      '<input type="text" id="pw-name" value="' + (d.name||'') + '" placeholder="' + (isSCI?'SCI Exemple':'Jean Dupont') + '" /></div>' +
       (isSCI ? '<div class="form-group"><label>SIRET</label>' +
         '<input type="text" id="pw-siret" value="' + (d.siret||'') + '" placeholder="123 456 789 00012" /></div>' : '') +
       '<div class="form-group"><label>Représentant légal</label>' +
@@ -3747,7 +3747,7 @@ function pwRender() {
   } else if (_pwStep === 2) {
     body = '<div class="wizard-section-title">Le bien</div>' +
       '<div class="form-group"><label>Adresse *</label>' +
-      '<input type="text" id="pw-address" value="' + (d.address||'') + '" placeholder="54 BIS rue de Fresnicourt" /></div>' +
+      '<input type="text" id="pw-address" value="' + (d.address||'') + '" placeholder="54 rue des Lilas" /></div>' +
       '<div class="form-row">' +
         '<div class="form-group"><label>Code postal</label>' +
         '<input type="text" id="pw-postal" value="' + (d.postal||'') + '" placeholder="62620" /></div>' +
