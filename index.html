@@ -529,10 +529,10 @@
       <div class="sidebar-footer">
         <div style="width:100%;padding:8px 0 10px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:10px">
           <div style="font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.35);font-weight:600;margin-bottom:6px;padding:0 4px">Modules Bailo</div>
-          <a href="https://finance.bailo.pro" target="_self" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;color:rgba(255,255,255,.6);text-decoration:none;font-size:.82rem;transition:background .1s" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">💰 Finance</a>
-          <a href="https://chantier.bailo.pro" target="_self" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;color:rgba(255,255,255,.6);text-decoration:none;font-size:.82rem;transition:background .1s" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">🏗 Chantier</a>
-          <a href="https://bnb.bailo.pro" target="_self" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;color:rgba(255,255,255,.6);text-decoration:none;font-size:.82rem;transition:background .1s" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">🏖 Bnb</a>
-          <a href="https://patrimoine.bailo.pro" target="_self" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;color:rgba(255,255,255,.6);text-decoration:none;font-size:.82rem;transition:background .1s" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">📊 Patrimoine</a>
+          <a href="https://finance.bailo.pro" target="_self" class="bn-cross-link" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;color:rgba(255,255,255,.6);text-decoration:none;font-size:.82rem;transition:background .1s" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">💰 Finance</a>
+          <a href="https://chantier.bailo.pro" target="_self" class="bn-cross-link" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;color:rgba(255,255,255,.6);text-decoration:none;font-size:.82rem;transition:background .1s" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">🏗 Chantier</a>
+          <a href="https://bnb.bailo.pro" target="_self" class="bn-cross-link" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;color:rgba(255,255,255,.6);text-decoration:none;font-size:.82rem;transition:background .1s" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">🏖 Bnb</a>
+          <a href="https://patrimoine.bailo.pro" target="_self" class="bn-cross-link" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;color:rgba(255,255,255,.6);text-decoration:none;font-size:.82rem;transition:background .1s" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background='transparent'">📊 Patrimoine</a>
         </div>
         <div class="sidebar-footer-user">
           <div class="user-avatar" id="user-avatar">?</div>
@@ -1166,6 +1166,26 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_UtH7OZskOMab-vCsoKKRsQ_rVkm5mRC';
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
   window.db = db; // expose pour bailo-nav.js
+var _currentUserEmail = null;
+// Ajoute ?expect=<email> aux liens vers un autre module Bailo : le module cible
+// compare avec sa propre session en cache et force une reconnexion en cas de
+// désaccord (ex. un autre compte resté connecté sur ce navigateur), sans imposer
+// de reconnexion quand tout correspond déjà.
+var BAILO_CROSS_MODULES = ['finance.bailo.pro','chantier.bailo.pro','gestion.bailo.pro','bnb.bailo.pro','patrimoine.bailo.pro'];
+function withExpect(url) {
+  try {
+    if (!_currentUserEmail) return url;
+    var u = new URL(url);
+    if (BAILO_CROSS_MODULES.indexOf(u.hostname) === -1) return url;
+    u.searchParams.set('expect', _currentUserEmail);
+    return u.toString();
+  } catch(e) { return url; }
+}
+function patchCrossModuleLinks() {
+  document.querySelectorAll('a.bn-cross-link').forEach(function(a) {
+    a.href = withExpect(a.getAttribute('href'));
+  });
+}
 
 // La vérification du plan passe désormais par la Netlify Function
 // check-plan.js (voir plus bas), qui contourne le problème d'IDs
@@ -1267,6 +1287,8 @@ var _currentUserId = null;
 
 function onAuthSuccess(user) {
   _currentUserId = user.id;
+  _currentUserEmail = user.email;
+  patchCrossModuleLinks();
   // Update UI with user info
   const name = user.user_metadata?.full_name || user.email.split('@')[0];
   const initials = name.charAt(0).toUpperCase();
@@ -1302,20 +1324,31 @@ function onAuthSuccess(user) {
 
 // Check existing session on load
 async function checkSession() {
-  // Arrivée depuis la page de connexion centrale (bailo.pro/login.html) : cette page
-  // authentifie contre un autre projet Supabase (Chantier/Finance) et ne peut pas
-  // transmettre de vraie session ici. On ignore donc toute session déjà en cache sur
-  // ce navigateur (ex. un autre compte resté connecté) et on force une vraie
-  // reconnexion sur ce module, avec les identifiants Gestion.
+  // Arrivée depuis un lien de navigation (landing ou un autre module) : ces liens
+  // transmettent l'email attendu (?expect=) car chaque module a son propre stockage
+  // de session, isolé par sous-domaine. On compare avec la session déjà en cache ;
+  // en cas de désaccord (ex. un autre compte resté connecté sur ce navigateur) ou
+  // d'absence de correspondance, on force une vraie reconnexion. Sinon (email
+  // identique, ou aucune indication), on ne rajoute aucune friction.
   const params = new URLSearchParams(window.location.search);
-  if (params.get('forcelogin') === '1') {
-    try { await db.auth.signOut(); } catch(e) {}
-    params.delete('forcelogin');
-    const cleanUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash;
-    window.history.replaceState({}, '', cleanUrl);
-    return;
-  }
+  const expect = params.get('forcelogin') === '1' ? null : params.get('expect');
+  const forceLogin = params.get('forcelogin') === '1';
+  const cleanUrl = function() {
+    params.delete('expect'); params.delete('forcelogin');
+    const cleaned = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash;
+    window.history.replaceState({}, '', cleaned);
+  };
   const { data: { session } } = await db.auth.getSession();
+  const mismatch = forceLogin || (expect && (!session || (session.user.email || '').toLowerCase() !== decodeURIComponent(expect).toLowerCase()));
+  if (expect || forceLogin) {
+    if (mismatch) {
+      if (session) { try { await db.auth.signOut(); } catch(e) {} }
+      cleanUrl();
+      if (expect) { const el = document.getElementById('auth-email'); if (el) el.value = decodeURIComponent(expect); }
+      return;
+    }
+    cleanUrl();
+  }
   if (session) {
     onAuthSuccess(session.user);
   }
