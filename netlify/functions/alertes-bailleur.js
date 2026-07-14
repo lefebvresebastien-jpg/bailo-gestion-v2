@@ -1,12 +1,20 @@
 // Netlify Function — Alertes bailleur quotidiennes
 // Appelée par pg_cron tous les matins à 8h
+// SÉCURITÉ/FIABILITÉ (corrigé le 14/07/2026) : cette fonction utilisait
+// uniquement la clé anonyme, sans session utilisateur. Depuis l'activation
+// de RLS sur leases/settings (10/07/2026, filtrée par auth.uid()=bailleur_id),
+// un appel avec la seule clé anon ne peut plus rien lire (auth.uid() est NULL
+// côté serveur) — cette fonction tournait donc sans erreur mais ne trouvait
+// jamais aucun bail, et n'envoyait donc plus aucune alerte depuis le 10/07.
+// Remplacée par la clé service_role (contourne légitimement RLS pour cet
+// automatisme système), lue depuis une variable d'environnement.
 
 const SUPABASE_URL = 'https://nltuysmnxsomlhgvbtwz.supabase.co';
-const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0';
+const SERVICE_KEY = process.env.SUPABASE_GESTION_SERVICE_KEY;
 
 async function sbFetch(path) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}` }
+    headers: { 'apikey': SERVICE_KEY, 'Authorization': `Bearer ${SERVICE_KEY}` }
   });
   return r.json();
 }
@@ -16,6 +24,11 @@ exports.handler = async (event) => {
   const secret = event.headers['x-cron-secret'] || event.queryStringParameters?.secret;
   if (secret !== 'bailo-alertes-2026') {
     return { statusCode: 401, body: 'Unauthorized' };
+  }
+
+  if (!SERVICE_KEY) {
+    console.error('SUPABASE_GESTION_SERVICE_KEY manquante');
+    return { statusCode: 500, body: 'Configuration serveur incomplète' };
   }
 
   try {
@@ -148,7 +161,7 @@ exports.handler = async (event) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${ANON_KEY}`
+        'Authorization': `Bearer ${SERVICE_KEY}`
       },
       body: JSON.stringify({
         to: [bailleurEmail],
