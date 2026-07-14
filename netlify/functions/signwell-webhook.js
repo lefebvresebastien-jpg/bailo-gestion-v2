@@ -1,13 +1,28 @@
 // Netlify Function — SignWell Webhook
 // Reçoit les événements SignWell et met à jour Supabase
+// SÉCURITÉ/FIABILITÉ (corrigé le 14/07/2026) : utilisait uniquement la clé
+// anonyme (ANON_KEY), sans session utilisateur — la variable SUPABASE_KEY
+// présentée en commentaire comme "clé service_role" était en réalité un
+// jeton factice jamais complété (se terminait par ".placeholder"), et
+// n'était de toute façon jamais utilisée dans ce fichier. Depuis RLS sur
+// leases/settings (10/07/2026), un appel avec la seule clé anon ne peut
+// plus rien lire ni écrire (auth.uid() NULL côté serveur) — ce webhook ne
+// trouvait donc jamais le bail correspondant et n'appliquait plus aucune
+// mise à jour de statut de signature ni email depuis cette date,
+// silencieusement. Remplacé par la vraie clé service_role (env), qui
+// contourne légitimement RLS pour cet automatisme système.
 
 const SUPABASE_URL = 'https://nltuysmnxsomlhgvbtwz.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjcwMDI5NSwiZXhwIjoyMDkyMjc2Mjk1fQ.placeholder'; // service role key
-const RESEND_URL  = `${SUPABASE_URL}/functions/v1/send-email`;
-const ANON_KEY    = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0';
+const SERVICE_KEY  = process.env.SUPABASE_GESTION_SERVICE_KEY;
+const RESEND_URL   = `${SUPABASE_URL}/functions/v1/send-email`;
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
+
+  if (!SERVICE_KEY) {
+    console.error('SUPABASE_GESTION_SERVICE_KEY manquante');
+    return { statusCode: 500, body: 'Configuration serveur incomplète' };
+  }
 
   let payload;
   try {
@@ -27,7 +42,7 @@ exports.handler = async (event) => {
   // Trouver le bail correspondant dans Supabase
   const searchRes = await fetch(
     `${SUPABASE_URL}/rest/v1/leases?select=id,data&data->>signwellDocId=eq.${docId}`,
-    { headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}` } }
+    { headers: { 'apikey': SERVICE_KEY, 'Authorization': `Bearer ${SERVICE_KEY}` } }
   );
   const leases = await searchRes.json();
   if (!leases || !leases.length) {
@@ -42,7 +57,7 @@ exports.handler = async (event) => {
   // Récupérer la resend key
   const keyRes = await fetch(
     `${SUPABASE_URL}/rest/v1/settings?select=value&key=eq.resend_api_key`,
-    { headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}` } }
+    { headers: { 'apikey': SERVICE_KEY, 'Authorization': `Bearer ${SERVICE_KEY}` } }
   );
   const keyData = await keyRes.json();
   const resendKey = keyData?.[0]?.value || '';
@@ -50,7 +65,7 @@ exports.handler = async (event) => {
   // Récupérer email bailleur
   const profRes = await fetch(
     `${SUPABASE_URL}/rest/v1/settings?select=value&key=eq.landlord_profile`,
-    { headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}` } }
+    { headers: { 'apikey': SERVICE_KEY, 'Authorization': `Bearer ${SERVICE_KEY}` } }
   );
   const profData = await profRes.json();
   const profile = profData?.[0]?.value ? JSON.parse(profData[0].value) : {};
@@ -78,7 +93,7 @@ exports.handler = async (event) => {
       `${SUPABASE_URL}/rest/v1/leases?id=eq.${lease.id}`,
       {
         method: 'PATCH',
-        headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        headers: { 'apikey': SERVICE_KEY, 'Authorization': `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
         body: JSON.stringify({ data: leaseData })
       }
     );
@@ -102,7 +117,7 @@ exports.handler = async (event) => {
 
       await fetch(RESEND_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON_KEY}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
         body: JSON.stringify({
           to: [bailleurEmail],
           subject: `${nomSignataire} a signé ${qui === 'garant' ? "l'acte de caution" : 'le bail'} — ${f.propertyAddress || ''}`,
@@ -129,7 +144,7 @@ exports.handler = async (event) => {
       `${SUPABASE_URL}/rest/v1/leases?id=eq.${lease.id}`,
       {
         method: 'PATCH',
-        headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        headers: { 'apikey': SERVICE_KEY, 'Authorization': `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
         body: JSON.stringify({ data: leaseData })
       }
     );
@@ -153,7 +168,7 @@ exports.handler = async (event) => {
 
       await fetch(RESEND_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON_KEY}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
         body: JSON.stringify({
           to: [bailleurEmail],
           subject: `✅ Bail signé par toutes les parties — ${f.propertyAddress || ''}`,
