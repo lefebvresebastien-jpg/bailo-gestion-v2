@@ -5,12 +5,18 @@
 // 4. Mode ?action=valider&leaseId=X&token=Y → applique la révision
 
 const SUPABASE_URL = 'https://nltuysmnxsomlhgvbtwz.supabase.co';
-const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdHV5c21ueHNvbWxoZ3ZidHd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDAyOTUsImV4cCI6MjA5MjI3NjI5NX0.ekmk4ujs0H1UfuDopnd_RNop1obgZgRM3ilj0yzqgM0';
+// SECURITE/FIABILITE (corrige le 14/07/2026) : utilisait uniquement la cle anonyme,
+// sans session utilisateur. Depuis RLS sur leases/settings (10/07/2026), un appel
+// anon seul ne peut plus rien lire (auth.uid() NULL cote serveur) -- la revision IRL
+// ne se declenchait donc plus pour aucun bail depuis cette date, silencieusement.
+// Remplacee par la cle service_role (env), qui contourne legitimement RLS pour cet
+// automatisme systeme.
+const SERVICE_KEY = process.env.SUPABASE_GESTION_SERVICE_KEY;
 const BASE_URL = 'https://v2.gestion.bailo.pro';
 
 async function sbFetch(path) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}` }
+    headers: { 'apikey': SERVICE_KEY, 'Authorization': `Bearer ${SERVICE_KEY}` }
   });
   return r.json();
 }
@@ -18,7 +24,7 @@ async function sbFetch(path) {
 async function sbPatch(path, body) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     method: 'PATCH',
-    headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+    headers: { 'apikey': SERVICE_KEY, 'Authorization': `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
     body: JSON.stringify(body)
   });
   return r.ok;
@@ -55,6 +61,10 @@ function formatPeriode(p) {
 }
 
 exports.handler = async (event) => {
+  if (!SERVICE_KEY) {
+    console.error('SUPABASE_GESTION_SERVICE_KEY manquante');
+    return { statusCode: 500, body: 'Configuration serveur incomplète' };
+  }
   const params = event.queryStringParameters || {};
 
   // ── MODE VALIDATION (bailleur clique le bouton dans l'email) ──
@@ -169,7 +179,7 @@ exports.handler = async (event) => {
 
       await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON_KEY}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
         body: JSON.stringify({
           to: [bailleurEmail],
           subject: `${urgence}Révision IRL à valider — ${f.tenantName} (${anniv.toLocaleDateString('fr-FR')})`,
@@ -234,7 +244,7 @@ async function handleValidation(leaseId, token, nouveauLoyerStr) {
 
     await fetch(`${SUPABASE_URL}/rest/v1/messages`, {
       method: 'POST',
-      headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      headers: { 'apikey': SERVICE_KEY, 'Authorization': `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
       body: JSON.stringify({
         lease_id: leaseId,
         sender: 'Bailleur',
@@ -258,7 +268,7 @@ async function handleValidation(leaseId, token, nouveauLoyerStr) {
 
       await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON_KEY}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}` },
         body: JSON.stringify({
           to: [f.tenantEmail],
           subject: 'Révision annuelle de votre loyer — ' + (f.propertyAddress || ''),
