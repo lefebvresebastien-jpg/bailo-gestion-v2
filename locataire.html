@@ -455,11 +455,13 @@ function renderBail() {
 // ============================================================
 async function loadQuittances() {
   const el = document.getElementById('quittances-list');
-  const { data: msgs } = await db.from('messages')
-    .select('id, subject, created_at, body')
-    .eq('lease_id', _lease.id)
-    .eq('kind', 'Quittance')
-    .order('created_at', { ascending: false });
+  let msgs = [];
+  try {
+    const resp = await fetch('https://v2.gestion.bailo.pro/.netlify/functions/tenant-messages?leaseId=' + encodeURIComponent(_lease.id) + '&kind=Quittance');
+    msgs = await resp.json();
+    if (!Array.isArray(msgs)) msgs = [];
+    msgs = msgs.reverse(); // le plus récent en premier
+  } catch(e) { msgs = []; }
 
   if (!msgs || !msgs.length) {
     el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--ink-3)">Aucune quittance reçue.</div>';
@@ -478,10 +480,14 @@ async function loadQuittances() {
 }
 
 async function viewQuittance(id) {
-  const { data: msgs } = await db.from('messages').select('body').eq('id', id).single();
-  if (!msgs?.body) return;
+  let msg = null;
+  try {
+    const resp = await fetch('https://v2.gestion.bailo.pro/.netlify/functions/tenant-messages?leaseId=' + encodeURIComponent(_lease.id) + '&id=' + encodeURIComponent(id));
+    msg = await resp.json();
+  } catch(e) {}
+  if (!msg?.body) return;
   const w = window.open('', '_blank');
-  w.document.write(msgs.body);
+  w.document.write(msg.body);
   w.document.close();
 }
 
@@ -736,11 +742,12 @@ function renderCompteurs() {
 // ============================================================
 async function loadMessages() {
   const el = document.getElementById('msg-list');
-  const { data: msgs } = await db.from('messages')
-    .select('id, sender, subject, body, kind, created_at, replies, status, incident_status')
-    .eq('lease_id', _lease.id)
-    .in('kind', ['Renseignement', 'Incident', 'Information'])
-    .order('created_at', { ascending: true });
+  let msgs = [];
+  try {
+    const resp = await fetch('https://v2.gestion.bailo.pro/.netlify/functions/tenant-messages?leaseId=' + encodeURIComponent(_lease.id) + '&kinds=Renseignement,Incident,Information');
+    msgs = await resp.json();
+    if (!Array.isArray(msgs)) msgs = [];
+  } catch(e) { msgs = []; }
 
   if (!msgs?.length) {
     el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--ink-3);font-size:13px">Aucun message. Envoyez un message à votre bailleur.</div>';
@@ -792,7 +799,11 @@ async function loadMessages() {
   // Marquer comme lus
   const unreadIds = unread.map(m => m.id);
   if (unreadIds.length) {
-    await db.from('messages').update({ status: 'lu-locataire' }).in('id', unreadIds);
+    fetch('https://v2.gestion.bailo.pro/.netlify/functions/tenant-messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leaseId: _lease.id, action: 'mark-read', ids: unreadIds })
+    }).catch(() => {});
   }
 }
 
@@ -801,17 +812,24 @@ async function sendMsg() {
   const body = input.value.trim();
   if (!body) return;
 
-  const { error } = await db.from('messages').insert({
-    lease_id: _lease.id,
-    sender: 'Locataire',
-    kind: 'Renseignement',
-    subject: 'Message du locataire',
-    body: body,
-    status: 'en-attente',
-    replies: []
-  });
+  let ok = false;
+  try {
+    const resp = await fetch('https://v2.gestion.bailo.pro/.netlify/functions/tenant-messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        leaseId: _lease.id,
+        action: 'send',
+        kind: 'Renseignement',
+        subject: 'Message du locataire',
+        body: body
+      })
+    });
+    const data = await resp.json();
+    ok = resp.ok && data.ok;
+  } catch(e) {}
 
-  if (error) { showToast('Erreur envoi.'); return; }
+  if (!ok) { showToast('Erreur envoi.'); return; }
   input.value = '';
   loadMessages();
   showToast('Message envoyé ✅');
@@ -838,16 +856,19 @@ async function sendIncident() {
   const desc = document.getElementById('incident-desc').value.trim();
   if (!desc) { showToast('Décrivez l\'incident.'); return; }
 
-  await db.from('messages').insert({
-    lease_id: _lease.id,
-    sender: 'Locataire',
-    kind: 'Incident',
-    subject: type,
-    body: desc,
-    status: 'en-attente',
-    incident_status: 'en-attente',
-    replies: []
-  });
+  try {
+    await fetch('https://v2.gestion.bailo.pro/.netlify/functions/tenant-messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        leaseId: _lease.id,
+        action: 'send',
+        kind: 'Incident',
+        subject: type,
+        body: desc
+      })
+    });
+  } catch(e) {}
 
   document.getElementById('incident-modal').style.display = 'none';
   document.getElementById('incident-desc').value = '';
