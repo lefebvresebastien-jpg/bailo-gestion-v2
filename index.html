@@ -1302,6 +1302,19 @@ function onAuthSuccess(user) {
 
 // Check existing session on load
 async function checkSession() {
+  // Arrivée depuis la page de connexion centrale (bailo.pro/login.html) : cette page
+  // authentifie contre un autre projet Supabase (Chantier/Finance) et ne peut pas
+  // transmettre de vraie session ici. On ignore donc toute session déjà en cache sur
+  // ce navigateur (ex. un autre compte resté connecté) et on force une vraie
+  // reconnexion sur ce module, avec les identifiants Gestion.
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('forcelogin') === '1') {
+    try { await db.auth.signOut(); } catch(e) {}
+    params.delete('forcelogin');
+    const cleanUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash;
+    window.history.replaceState({}, '', cleanUrl);
+    return;
+  }
   const { data: { session } } = await db.auth.getSession();
   if (session) {
     onAuthSuccess(session.user);
