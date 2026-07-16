@@ -118,6 +118,25 @@ exports.handler = async (event) => {
           lien: `https://v2.gestion.bailo.pro/#leases`
         });
       }
+
+      // 4bis. DPE expiré ou proche de l'expiration (validité 10 ans)
+      if (f.dpeDate) {
+        const dpeDate = new Date(f.dpeDate);
+        const expirationDpe = new Date(dpeDate);
+        expirationDpe.setFullYear(expirationDpe.getFullYear() + 10);
+        const joursAvantExpirationDpe = Math.round((expirationDpe - today) / 86400000);
+        if (joursAvantExpirationDpe < 0 || (joursAvantExpirationDpe <= 90 && today.getDay() === 1)) {
+          alertes.push({
+            urgence: joursAvantExpirationDpe < 0 ? 'URGENT' : 'ATTENTION',
+            icon: '📋',
+            titre: `${joursAvantExpirationDpe < 0 ? 'DPE expiré' : 'DPE bientôt expiré'} — ${adresse}`,
+            detail: joursAvantExpirationDpe < 0
+              ? `Le DPE a expiré le ${expirationDpe.toLocaleDateString('fr-FR')} (validité 10 ans). Un nouveau diagnostic est obligatoire avant toute nouvelle location.`
+              : `Le DPE expire le ${expirationDpe.toLocaleDateString('fr-FR')} (dans ${joursAvantExpirationDpe} jour(s)). Pensez à planifier un nouveau diagnostic.`,
+            lien: `https://v2.gestion.bailo.pro/#leases`
+          });
+        }
+      }
     });
 
     if (!alertes.length) {
