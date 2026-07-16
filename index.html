@@ -2551,6 +2551,26 @@ async function loadAlertes() {
       });
     }
 
+    // ── 5bis. DPE expiré ou proche de l'expiration (validité 10 ans)
+    if (f.dpeDate) {
+      const dpeDate = new Date(f.dpeDate);
+      const expirationDpe = new Date(dpeDate);
+      expirationDpe.setFullYear(expirationDpe.getFullYear() + 10);
+      const joursAvantExpirationDpe = Math.round((expirationDpe - today) / 86400000);
+      if (joursAvantExpirationDpe <= 90) {
+        alertes.push({
+          type: joursAvantExpirationDpe < 0 ? 'danger' : 'warning',
+          icon: '📋',
+          titre: (joursAvantExpirationDpe < 0 ? 'DPE expiré' : 'DPE bientôt expiré') + ' — ' + adresse,
+          detail: joursAvantExpirationDpe < 0
+            ? 'Le DPE a expiré le ' + expirationDpe.toLocaleDateString('fr-FR') + ' (validité 10 ans). Un nouveau diagnostic est obligatoire avant toute nouvelle location.'
+            : 'Le DPE expire le ' + expirationDpe.toLocaleDateString('fr-FR') + ' (dans ' + joursAvantExpirationDpe + ' jour(s)). Pensez à planifier un nouveau diagnostic.',
+          action: function() { openLeaseDetail(lease.id); },
+          leaseId: lease.id
+        });
+      }
+    }
+
     // ── 6. Loyer impayé (statut loyers)
     const now = new Date();
     const monthKey = lease.id + '_' + now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
@@ -3162,6 +3182,7 @@ function renderLeaseDetail(lease) {
     field('Surface', f.surface) +
     field('Étage', f.propertyFloor) +
     field('DPE', f.dpeClass) +
+    field('Date du DPE', f.dpeDate ? formatDate(f.dpeDate) : '') +
     field('Chauffage', f.heatingType) +
     field('Eau chaude', f.hotWaterType) +
     field('Nombre de pièces', f.rooms) +
@@ -4595,6 +4616,10 @@ const WIZARD_STEPS_CONTENT = {
       '<div class="form-row">' +
         '<div class="form-group"><label>Classe DPE</label>' +
         '<select id="w-dpeClass">' + dpeOptions + '</select></div>' +
+        '<div class="form-group"><label>Date du DPE</label>' +
+        '<input type="date" id="w-dpeDate" value="' + (d.dpeDate||'') + '" /></div>' +
+      '</div>' +
+      '<div class="form-row">' +
         '<div class="form-group"><label>Nombre de cles</label>' +
         '<input type="number" id="w-keysCount" value="' + (d.keysCount||'2') + '" min="1" /></div>' +
       '</div>' +
@@ -5066,6 +5091,7 @@ function collectStepData() {
       _wizardData.propertyFloor = g('w-propertyFloor');
       _wizardData.rooms = g('w-rooms');
       _wizardData.dpeClass = g('w-dpeClass');
+      _wizardData.dpeDate = g('w-dpeDate');
       _wizardData.keysCount = g('w-keysCount');
       _wizardData.heatingType = g('w-heatingType');
       _wizardData.hotWaterType = g('w-hotWaterType');
