@@ -752,7 +752,10 @@
       alert('Votre acte de caution a ete signe et enregistre.');
     }
 
-    var SIGNWELL_API_KEY = 'YWNjZXNzOmQyN2I5YzVhZjljZTdlYzU1MWViYWUyMGQ2MTQwYmNl';
+    // SÉCURITÉ (corrigé le 15/07/2026) : la clé API SignWell était codée en
+    // dur ici, visible côté client. L'envoi passe désormais par la fonction
+    // serveur send-signwell.js (vérifie que l'appelant est bien le bailleur
+    // du bail avant d'utiliser la clé, gardée uniquement côté serveur).
     var _currentLeaseId = null;
     var _currentLeaseData = null;
 
@@ -781,29 +784,23 @@
         ];
         if (f.guarantorEmail) signers.push({id:'garant', name:f.guarantorName||'Garant', email:f.guarantorEmail, order:3});
         var docName = 'Bail - '+(f.tenantName||'Locataire')+' - '+(f.propertyAddress||'')+' - '+new Date().toLocaleDateString('fr-FR');
-        var payload = {
-          name: docName,
-          subject: 'Signature du bail - '+(f.propertyAddress||'votre logement'),
-          message: 'Bonjour,\n\nVeuillez trouver ci-joint votre bail de location a signer.\n\nCordialement,\nBailo Pro',
-          test_mode: false, with_signature_page: true, apply_signing_order: true, reminders: true, language: 'fr',
-          recipients: signers.map(function(s){ return {id:'signer'+s.order, name:s.name, email:s.email, order:s.order}; }),
-          files: [{name:docName+'.html', file_base64:btoa(unescape(encodeURIComponent(bailEl.outerHTML)))}],
-          redirect_url: 'https://v2.gestion.bailo.pro'
-        };
         showStatus('Envoi a SignWell...', 'info');
-        var resp = await fetch('https://www.signwell.com/api/v1/documents/', {
-          method:'POST', headers:{'X-Api-Key':SIGNWELL_API_KEY,'Content-Type':'application/json'},
-          body:JSON.stringify(payload)
+        var { data: { session } } = await db.auth.getSession();
+        if (!session) { showStatus('Session expiree, reconnectez-vous.', 'error'); btn.disabled=false; return; }
+        var resp = await fetch('https://v2.gestion.bailo.pro/.netlify/functions/send-signwell', {
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},
+          body:JSON.stringify({
+            leaseId: _currentLeaseId,
+            docName: docName,
+            subject: 'Signature du bail - '+(f.propertyAddress||'votre logement'),
+            message: 'Bonjour,\n\nVeuillez trouver ci-joint votre bail de location a signer.\n\nCordialement,\nBailo Pro',
+            signers: signers,
+            fileHtml: bailEl.outerHTML
+          })
         });
         var data = await resp.json();
-        if (!resp.ok) { showStatus('Erreur SignWell : '+(data.message||data.error||JSON.stringify(data)), 'error'); btn.disabled=false; btn.textContent='Reessayer'; return; }
-        if (_currentLeaseId) {
-          var ld = _currentLeaseData || {};
-          ld.signwellDocId = data.id;
-          ld.signwellSentAt = new Date().toISOString();
-          ld.signwellSigners = signers;
-          await db.from('leases').update({data:ld}).eq('id', _currentLeaseId);
-        }
+        if (!resp.ok) { showStatus('Erreur SignWell : '+(data.error||JSON.stringify(data)), 'error'); btn.disabled=false; btn.textContent='Reessayer'; return; }
         showStatus('Bail envoye ! Chaque signataire a recu un email SignWell.', 'success');
         btn.textContent='Renvoyer'; btn.disabled=false;
         var signersEl = document.getElementById('signwell-signers');
