@@ -121,9 +121,26 @@ exports.handler = async (event) => {
       if (!forceTest && joursAvant !== 30 && joursAvant !== 7) continue;
 
       // IRL ancien (référence du bail)
+      // CORRIGÉ (25/07/2026) — l'ancienne regex /[\d,]+/g captait N'IMPORTE
+      // QUEL chiffre du texte, y compris ceux du trimestre ("T4" -> "4") si
+      // le vrai indice n'avait jamais été renseigné correctement sur le
+      // bail. Résultat concret observé : un bail avec irlReference="T4"
+      // (sans indice) donnait irlAncien=4 au lieu d'un ~140-150 réaliste,
+      // donc un "nouveau loyer" à 19607€ au lieu de ~550€ (loyer × 36 !).
+      // Nouvelle regex : n'accepte qu'un nombre plausible d'indice IRL
+      // (2-3 chiffres, virgule ou point, 1-2 décimales — ex. "145,73").
+      // Garde-fou supplémentaire : si le résultat est hors d'une plage
+      // réaliste d'indices IRL récents, on ignore ce bail plutôt que
+      // d'envoyer une révision absurde (mieux vaut une révision manquante,
+      // visible et à corriger, qu'une fausse révision à +3500%).
       const irlAncienStr = f.irlReference || 'T4 2024 — indice 143,51';
-      const irlAncienMatch = irlAncienStr.match(/[\d,]+/g);
-      const irlAncien = irlAncienMatch ? parseFloat(irlAncienMatch[irlAncienMatch.length - 1].replace(',', '.')) : 143.51;
+      const irlAncienMatch = irlAncienStr.match(/\d{2,3}[,.]\d{1,2}\b/);
+      const irlAncien = irlAncienMatch ? parseFloat(irlAncienMatch[0].replace(',', '.')) : null;
+
+      if (!irlAncien || irlAncien < 100 || irlAncien > 250) {
+        console.warn(`Bail ${lease.id} (${f.tenantName}) : irlReference invalide ou manquant ("${irlAncienStr}") — révision ignorée, à corriger manuellement.`);
+        continue;
+      }
 
       const irlNouveau = irlData.indice;
       const irlNouveauLabel = (irlData.fallback ? '' : '') + formatPeriode(irlData.periode) + ' — indice ' + irlNouveau.toFixed(2).replace('.', ',');
