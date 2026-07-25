@@ -41,7 +41,7 @@ exports.handler = async (event) => {
 
   // Trouver le bail correspondant dans Supabase
   const searchRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/leases?select=id,data&data->>signwellDocId=eq.${docId}`,
+    `${SUPABASE_URL}/rest/v1/leases?select=id,bailleur_id,data&data->>signwellDocId=eq.${docId}`,
     { headers: { 'apikey': SERVICE_KEY, 'Authorization': `Bearer ${SERVICE_KEY}` } }
   );
   const leases = await searchRes.json();
@@ -62,9 +62,13 @@ exports.handler = async (event) => {
   const keyData = await keyRes.json();
   const resendKey = keyData?.[0]?.value || '';
 
-  // Récupérer email bailleur
+  // CORRIGÉ (25/07/2026) — FUITE MULTI-CLIENTS : le profil bailleur était
+  // récupéré sans filtrer par bailleur_id, renvoyant potentiellement le
+  // profil (et donc l'email de notification "bail signé") d'un AUTRE
+  // client que celui propriétaire de ce bail précis. Filtré maintenant par
+  // le bailleur_id réel du bail concerné.
   const profRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/settings?select=value&key=eq.landlord_profile`,
+    `${SUPABASE_URL}/rest/v1/settings?select=value&key=eq.landlord_profile&bailleur_id=eq.${lease.bailleur_id}`,
     { headers: { 'apikey': SERVICE_KEY, 'Authorization': `Bearer ${SERVICE_KEY}` } }
   );
   const profData = await profRes.json();
