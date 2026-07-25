@@ -79,17 +79,27 @@ exports.handler = async (event) => {
   }
 
   try {
-    const [leases, profData, keyData, irlData] = await Promise.all([
-      sbFetch('leases?select=id,data'),
-      sbFetch('settings?select=value&key=eq.landlord_profile'),
+    const [leases, allProfiles, keyData, irlData] = await Promise.all([
+      sbFetch('leases?select=id,bailleur_id,data'),
+      sbFetch('settings?select=bailleur_id,value&key=eq.landlord_profile'),
       sbFetch('settings?select=value&key=eq.resend_api_key'),
       fetchIRLCourant()
     ]);
 
-    const profile = profData?.[0]?.value ? JSON.parse(profData[0].value) : {};
     const resendKey = keyData?.[0]?.value || '';
-    const bailleurEmail = profile.landlordEmail;
-    if (!bailleurEmail || !resendKey) return { statusCode: 200, body: 'No config' };
+    if (!resendKey) return { statusCode: 200, body: 'No config' };
+
+    // CORRIGÉ (25/07/2026) — FUITE MULTI-CLIENTS : cette fonction envoyait
+    // TOUTES les révisions IRL de TOUS les bailleurs à une seule adresse
+    // email (le premier profil bailleur trouvé en base), exactement comme
+    // le même bug corrigé dans alertes-bailleur.js. Un bailleur recevait les
+    // révisions de loyer des locataires d'autres clients. Corrigé : chaque
+    // bail est maintenant associé à SON bailleur via bailleur_id, et l'email
+    // n'est envoyé qu'à l'adresse du bailleur propriétaire de ce bail précis.
+    const profilParBailleur = {};
+    (allProfiles || []).forEach(p => {
+      try { profilParBailleur[p.bailleur_id] = JSON.parse(p.value); } catch(e) {}
+    });
 
     const today = new Date();
     let envois = 0;
@@ -97,6 +107,9 @@ exports.handler = async (event) => {
     for (const lease of (leases || [])) {
       const f = lease.data?.formData || {};
       if (!f.effectiveDate || !f.tenantName || !f.rent) continue;
+
+      const bailleurEmail = profilParBailleur[lease.bailleur_id]?.landlordEmail;
+      if (!bailleurEmail) continue;
 
       const effet = new Date(f.effectiveDate);
       const anniv = new Date(today.getFullYear(), effet.getMonth(), effet.getDate());
