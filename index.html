@@ -3215,6 +3215,7 @@ function renderLeaseDetail(lease) {
     field('Étage', f.propertyFloor) +
     field('DPE', f.dpeClass) +
     field('Date du DPE', f.dpeDate ? formatDate(f.dpeDate) : '') +
+    field('Fichier DPE', f.dpeFileUrl ? '<a href="' + f.dpeFileUrl + '" target="_blank" rel="noopener">📄 Voir le DPE</a>' : '') +
     field('Chauffage', f.heatingType) +
     field('Eau chaude', f.hotWaterType) +
     field('Nombre de pièces', f.rooms) +
@@ -4973,7 +4974,7 @@ function buildDpeField(d) {
   var html = '<div class="form-group">';
   html += '<label>Fichier DPE (PDF ou image)</label>';
   html += '<div class="file-upload-zone" id="w-dpe-zone" style="' + zoneStyle + '">';
-  html += '<input type="file" id="w-dpe-input" style="display:none" accept=".pdf,.jpg,.jpeg,.png" />';
+  html += '<input type="file" id="w-dpe-input" style="display:none" accept=".pdf,.jpg,.jpeg,.png" onchange="handleDpeFile(this)" />';
   html += '<div id="w-dpe-preview">';
   html += '<span style="font-size:24px">' + icon + '</span>';
   html += '<span style="font-size:13px">' + label + '</span>';
@@ -4981,14 +4982,27 @@ function buildDpeField(d) {
   return html;
 }
 
-function handleDpeFile(input) {
-  var file = input.files[0];
+async function handleDpeFile(input) {
+  var file = input.files && input.files[0];
   if (!file) return;
-  _wizardDpeFile = file;
   var zone = document.getElementById('w-dpe-zone');
   var preview = document.getElementById('w-dpe-preview');
-  if (zone) { zone.style.borderColor = 'var(--color-success)'; zone.style.background = 'var(--color-success-light)'; }
-  if (preview) preview.innerHTML = '<span style="font-size:20px">📄</span><span style="font-size:13px;font-weight:600">' + file.name + '</span><span style="font-size:11px;color:var(--color-text-secondary)">' + (file.size/1024).toFixed(0) + ' Ko</span>';
+  if (file.size > 20 * 1024 * 1024) { showToast('Fichier trop lourd (20 Mo max).', 'error'); input.value = ''; return; }
+  _wizardDpeFile = file;
+  if (preview) preview.innerHTML = '<span style="font-size:20px">⏳</span><span style="font-size:13px">Envoi de ' + file.name + '…</span>';
+  try {
+    var up = await uploadFileToSupabase(file, 'dpe/' + (_currentUserId || 'inconnu'));
+    _wizardData.dpeFileUrl = up.url;
+    if (zone) { zone.style.borderColor = 'var(--color-success)'; zone.style.background = 'var(--color-success-light)'; }
+    if (preview) preview.innerHTML = '<span style="font-size:20px">📄</span><span style="font-size:13px;font-weight:600">' + file.name + '</span><span style="font-size:11px;color:var(--color-text-secondary)">' + (file.size/1024).toFixed(0) + ' Ko · enregistré ✓</span>';
+    showToast('DPE joint au bail.', 'success');
+  } catch (e) {
+    console.error('Upload DPE', e);
+    _wizardDpeFile = null;
+    if (preview) preview.innerHTML = '<span style="font-size:20px">⚠️</span><span style="font-size:13px">Échec de l\'envoi — cliquez pour réessayer</span>';
+    showToast('Erreur envoi DPE : ' + (e && e.message ? e.message : e), 'error', 6000);
+  }
+  input.value = '';
 }
 
 
@@ -5057,7 +5071,11 @@ function renderWizardStep() {
   // DPE zone click handler
   setTimeout(function() {
     var dpeZone = document.getElementById('w-dpe-zone');
-    if (dpeZone) dpeZone.onclick = function() { document.getElementById('w-dpe-input').click(); };
+    if (dpeZone) dpeZone.onclick = function(e) {
+      var inp = document.getElementById('w-dpe-input');
+      if (!inp || e.target === inp) return;
+      inp.click();
+    };
 
     // Auto-remplir IRL/ILC depuis date de prise d'effet (step 3)
     if (_wizardStep === 3) {
