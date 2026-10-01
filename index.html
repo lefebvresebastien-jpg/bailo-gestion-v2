@@ -4991,7 +4991,7 @@ async function handleDpeFile(input) {
   _wizardDpeFile = file;
   if (preview) preview.innerHTML = '<span style="font-size:20px">⏳</span><span style="font-size:13px">Envoi de ' + file.name + '…</span>';
   try {
-    var up = await uploadFileToSupabase(file, 'dpe/' + (_currentUserId || 'inconnu'));
+    var up = await uploadFileToSupabase(file, 'dpe');
     _wizardData.dpeFileUrl = up.url;
     if (zone) { zone.style.borderColor = 'var(--color-success)'; zone.style.background = 'var(--color-success-light)'; }
     if (preview) preview.innerHTML = '<span style="font-size:20px">📄</span><span style="font-size:13px;font-weight:600">' + file.name + '</span><span style="font-size:11px;color:var(--color-text-secondary)">' + (file.size/1024).toFixed(0) + ' Ko · enregistré ✓</span>';
@@ -6065,19 +6065,35 @@ function handleFileSelect(input) {
 }
 
 async function uploadFileToSupabase(file, leaseId) {
-  // Upload vers Supabase Storage bucket 'documents'
+  // 1) Upload direct (si la policy Storage l'autorise)
   const fileName = Date.now() + '_' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const path = leaseId + '/' + fileName;
-
-  const { data, error } = await db.storage
+  const { error } = await db.storage
     .from('documents')
     .upload(path, file, { cacheControl: '3600', upsert: false });
+  if (!error) {
+    const { data: urlData } = db.storage.from('documents').getPublicUrl(path);
+    return { path, url: urlData.publicUrl, name: file.name, size: file.size, type: file.type };
+  }
+  console.warn('Upload direct refusé, passage par bailleur-upload :', error.message);
 
-  if (error) throw new Error(error.message);
-
-  // Récupérer l'URL publique
-  const { data: urlData } = db.storage.from('documents').getPublicUrl(path);
-  return { path, url: urlData.publicUrl, name: file.name, size: file.size, type: file.type };
+  // 2) Repli : Netlify Function authentifiée (clé service, dossier du bailleur)
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) throw new Error('Session expirée, reconnectez-vous.');
+  const base64 = await new Promise(function(res, rej) {
+    const r = new FileReader();
+    r.onload = function() { res(String(r.result).split(',')[1]); };
+    r.onerror = function() { rej(new Error('Lecture du fichier impossible')); };
+    r.readAsDataURL(file);
+  });
+  const resp = await fetch('/.netlify/functions/bailleur-upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+    body: JSON.stringify({ folder: String(leaseId).replace(/\//g, '_'), fileName: file.name, fileType: file.type, fileBase64: base64 })
+  });
+  const out = await resp.json().catch(function() { return {}; });
+  if (!resp.ok || !out.url) throw new Error(out.error || ('HTTP ' + resp.status));
+  return { path: out.path, url: out.url, name: file.name, size: file.size, type: file.type };
 }
 
 // ============================================================
