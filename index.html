@@ -2792,7 +2792,7 @@ async function envoyerMessageAssurance(leaseId) {
         '<div style="background:#fff;padding:20px;border:1px solid #e0d5c8;border-radius:0 0 8px 8px">' +
         '<h3 style="margin-bottom:12px">Message de votre bailleur</h3>' +
         '<p style="white-space:pre-line;font-size:13px;line-height:1.7">' + texte.replace(/&#39;/g,"'") + '</p>' +
-        '<div style="margin-top:16px"><a href="https://v2.gestion.bailo.pro/locataire.html?id=' + leaseId + '" style="background:#2563eb;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Répondre depuis mon espace</a></div>' +
+        '<div style="margin-top:16px"><a href="https://gestion.bailo.pro/locataire.html?id=' + leaseId + '" style="background:#2563eb;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Répondre depuis mon espace</a></div>' +
         '</div></div>';
     const __sess = (await db.auth.getSession()).data.session;
     await fetch('/.netlify/functions/send-email-proxy', {
@@ -2949,6 +2949,7 @@ function modifierBail(leaseId) {
     guarantorName: f.guarantorName || '',
     guarantorType: f.guarantorType || '',
     guarantorAddress: f.guarantorAddress || '',
+    guarantorEmail: f.guarantorEmail || '',
     guarantorIncome: f.guarantorIncome || '',
     rent: f.rent || '',
     charges: f.charges || '',
@@ -3014,7 +3015,7 @@ async function envoyerLienSignature(leaseId) {
   const resendKey = keyRes.data?.value || '';
   const profile = profRes.data ? JSON.parse(profRes.data.value) : {};
 
-  const lienLocataire = 'https://v2.gestion.bailo.pro/.netlify/functions/locataire-page?id=' + leaseId;
+  const lienLocataire = 'https://gestion.bailo.pro/.netlify/functions/locataire-page?id=' + leaseId;
 
   // Email locataire — un seul lien universel vers l'espace
   const htmlLocataire = '<div style="font-family:sans-serif;max-width:560px;color:#1a1208">' +
@@ -3040,15 +3041,19 @@ async function envoyerLienSignature(leaseId) {
     '</div></div>';
 
   const __sess = (await db.auth.getSession()).data.session;
-  await fetch('/.netlify/functions/send-email-proxy', {
+  const __respL = await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
       body: JSON.stringify({ to: [f.tenantEmail], subject: 'Votre bail est prêt à signer — ' + (f.propertyAddress||''), html: htmlLocataire, resend_key: resendKey })
-    });
+    }).catch(function(e) { return { ok: false, status: e.message }; });
+  if (!__respL.ok) {
+    showToast('Email non envoyé au locataire (erreur ' + __respL.status + '). Vérifiez votre connexion.', 'error', 6000);
+    return;
+  }
 
   // Email garant si présent
   if (f.guarantorEmail) {
-    const lienGarant = 'https://v2.gestion.bailo.pro/contrat.html?lease=' + leaseId + '&mode=garant';
+    const lienGarant = 'https://gestion.bailo.pro/contrat.html?lease=' + leaseId + '&mode=garant';
     const htmlGarant = '<div style="font-family:sans-serif;max-width:560px;color:#1a1208">' +
       '<div style="background:#1a1208;padding:16px 20px;border-radius:8px 8px 0 0"><span style="color:#e8793a;font-weight:700;font-size:16px">Bailo Gestion</span></div>' +
       '<div style="background:#fff;padding:24px;border:1px solid #e0d5c8;border-radius:0 0 8px 8px">' +
@@ -3061,12 +3066,12 @@ async function envoyerLienSignature(leaseId) {
       '</div></div>';
 
   const __sess = (await db.auth.getSession()).data.session;
-  await fetch('/.netlify/functions/send-email-proxy', {
+  const __respG = await fetch('/.netlify/functions/send-email-proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sess ? __sess.access_token : '') },
       body: JSON.stringify({ to: [f.guarantorEmail], subject: 'Acte de caution à signer — ' + (f.tenantName||''), html: htmlGarant, resend_key: resendKey })
-    });
-    showToast('Lien envoyé au locataire et au garant ✅');
+    }).catch(function(e) { return { ok: false, status: e.message }; });
+    showToast(__respG.ok ? 'Lien envoyé au locataire et au garant ✅' : 'Lien envoyé au locataire ✅ — échec pour le garant (' + __respG.status + ')', __respG.ok ? '' : 'error', 5000);
   } else {
     showToast('Lien envoyé à ' + f.tenantEmail + ' ✅');
   }
@@ -3235,6 +3240,7 @@ function renderLeaseDetail(lease) {
     field('Nom', f.guarantorName) +
     field('Type', f.guarantorType) +
     field('Adresse', f.guarantorAddress) +
+    field('Email', f.guarantorEmail) +
     field('Revenus', f.guarantorIncome ? formatCurrency(f.guarantorIncome) : '') || '<div class="list-empty">Aucun garant</div>';
 
   // Finances
@@ -3304,7 +3310,7 @@ async function alerterBailleurSignature(lease, f, qui) {
     '<p style="margin-bottom:12px"><strong>' + (qui==='garant' ? (f.guarantorName||'Le garant') : (f.tenantName||'Votre locataire')) + '</strong> vient de signer ' + (qui==='garant' ? 'l&#39;acte de caution' : 'électroniquement le bail') + ' pour le logement :</p>' +
     '<p style="font-weight:700;margin-bottom:16px">' + (f.propertyAddress||'') + '</p>' +
     '<p style="margin-bottom:16px">Connectez-vous à votre espace Bailo Gestion pour consulter le bail signé.</p>' +
-    '<a href="https://v2.gestion.bailo.pro" style="display:inline-block;background:#2563eb;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Voir le bail signé</a>' +
+    '<a href="https://gestion.bailo.pro" style="display:inline-block;background:#2563eb;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Voir le bail signé</a>' +
     '</div></div>';
 
   const __sess = (await db.auth.getSession()).data.session;
@@ -4567,7 +4573,7 @@ async function envoyerLienLocataire(leaseId, tenantName, tenantEmail) {
   const profRes = await db.from('settings').select('value').eq('key','landlord_profile').maybeSingle();
   const profile = profRes?.data?.value ? JSON.parse(profRes.data.value) : {};
 
-  const lien = 'https://v2.gestion.bailo.pro/.netlify/functions/locataire-page?id=' + leaseId;
+  const lien = 'https://gestion.bailo.pro/.netlify/functions/locataire-page?id=' + leaseId;
   const html = '<div style="font-family:sans-serif;max-width:560px;color:#1a1208">' +
     '<div style="background:#1a1208;padding:16px 20px;border-radius:8px 8px 0 0"><span style="color:#e8793a;font-weight:700;font-size:16px">🏠 Bailo Gestion</span></div>' +
     '<div style="background:#fff;padding:24px;border:1px solid #e0d5c8;border-radius:0 0 8px 8px">' +
@@ -4798,6 +4804,8 @@ const WIZARD_STEPS_CONTENT = {
       '<div class="form-row">' +
         '<div class="form-group"><label>Adresse garant</label>' +
         '<input type="text" id="w-guarantorAddress" value="' + (d.guarantorAddress||'') + '" /></div>' +
+        '<div class="form-group"><label>Email garant <span style="font-weight:400;color:var(--color-text-secondary)">(pour signer l\'acte de caution)</span></label>' +
+        '<input type="email" id="w-guarantorEmail" value="' + (d.guarantorEmail||'') + '" placeholder="garant@email.fr" /></div>' +
         '<div class="form-group"><label>Revenus garant (€)</label>' +
         '<input type="number" id="w-guarantorIncome" value="' + (d.guarantorIncome||'') + '" placeholder="3000" /></div>' +
       '</div>';
@@ -5180,6 +5188,7 @@ function collectStepData() {
         _wizardData.guarantorName = g('w-guarantorName');
         _wizardData.guarantorType = g('w-guarantorType');
         _wizardData.guarantorAddress = g('w-guarantorAddress');
+        _wizardData.guarantorEmail = g('w-guarantorEmail');
         _wizardData.guarantorIncome = g('w-guarantorIncome');
       }
       _wizardData.tenantLegalForm = g('w-tenantLegalForm');
@@ -5361,6 +5370,7 @@ async function createLease() {
         guarantorName: _wizardData.guarantorName || '',
         guarantorType: _wizardData.guarantorType || '',
         guarantorAddress: _wizardData.guarantorAddress || '',
+        guarantorEmail: _wizardData.guarantorEmail || '',
         guarantorIncome: _wizardData.guarantorIncome || '',
         rent: _wizardData.rent || '0',
         charges: _wizardData.charges || '0',
@@ -5787,6 +5797,7 @@ async function nouveauBailMemeLocataire(leaseId) {
     guarantorName: f.guarantorName || '',
     guarantorType: f.guarantorType || '',
     guarantorAddress: f.guarantorAddress || '',
+    guarantorEmail: f.guarantorEmail || '',
     guarantorIncome: f.guarantorIncome || '',
     rentDueDay: f.rentDueDay || 'Le 1 de chaque mois',
     paymentTerms: f.paymentTerms || '',
