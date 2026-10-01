@@ -3764,9 +3764,13 @@ function openLeaseWizardForUnit(unitId) {
     _wizardEditUnitId = unitId;
   }
   var _pref = _wizardData;
+  // Reprendre les infos du logement (DPE, chauffage...) depuis le dernier bail de ce lot
+  var _last = dernierBailDuLot(unitId);
+  var _bien = _last ? infosBienDepuisBail(_last) : {};
   openLeaseWizard();
   if (unit) {
-    Object.assign(_wizardData, _pref, { unitId: unitId });
+    Object.assign(_wizardData, _bien, _pref, { unitId: unitId });
+    if (_bien.propertyAddress) _wizardData.propertyAddress = _bien.propertyAddress;
     renderWizardStep();
   }
 }
@@ -5582,6 +5586,7 @@ function renderFinDeBailBlock(lease) {
       (dest
         ? '<button class="btn-primary" style="font-size:12px;padding:6px 12px" onclick="openLeaseDetail(\'' + dest.id + '\')">➡️ Voir le nouveau bail (' + _escH(leaseAddress(dest)) + ')</button>'
         : '<button class="btn-primary" style="font-size:12px;padding:6px 12px" onclick="nouveauBailMemeLocataire(\'' + lease.id + '\')">➕ Nouveau bail pour ce locataire</button>') +
+      '<button class="btn-secondary" style="font-size:12px;padding:6px 12px;color:#166534;border-color:#86efac" onclick="relouerLogement(\'' + lease.id + '\')">🔑 Relouer ce logement</button>' +
       (amiable ? '<button class="btn-secondary" style="font-size:12px;padding:6px 12px" onclick="imprimerResiliationAmiable(\'' + lease.id + '\')">📄 Protocole de résiliation amiable</button>' : '') +
       '<button class="btn-secondary" style="font-size:12px;padding:6px 12px" onclick="ouvrirFinDeBail(\'' + lease.id + '\')">✏️ Modifier la sortie</button>' +
       '<button class="btn-ghost" style="font-size:12px;padding:6px 12px" onclick="reactiverBail(\'' + lease.id + '\')">↩️ Réactiver le bail</button>' +
@@ -5796,6 +5801,51 @@ async function nouveauBailMemeLocataire(leaseId) {
   var h = document.querySelector('#lease-wizard-overlay .wizard-header h2');
   if (h) h.textContent = 'Nouveau bail — ' + (f.tenantName || 'locataire');
   document.getElementById('lease-wizard-overlay').classList.remove('hidden');
+}
+
+// ── Relouer un logement : nouveau bail avec les infos du bien, sans locataire
+function infosBienDepuisBail(lease) {
+  var f = fd(lease);
+  var keys = ['propertyAddress', 'propertyFloor', 'propertyCadastral', 'surface', 'rooms', 'dpeClass', 'dpeDate',
+    'dpeFileUrl', 'keysCount', 'heatingType', 'hotWaterType', 'leaseType', 'rent', 'charges', 'deposit',
+    'rentDueDay', 'paymentTerms', 'chargesRegime', 'commercialDestination', 'localDescription', 'cadastralRef', 'authorizedActivity'];
+  var o = {};
+  keys.forEach(function(k) { if (f[k]) o[k] = f[k]; });
+  ['clauseRentReview', 'clauseResolutory', 'clauseInsurance', 'clauseMaintenance', 'clauseVisits', 'clauseNoSubletting',
+   'clausePrimaryResidence', 'clauseNoTransformation', 'clauseSolidarity', 'clauseLatePenalty'].forEach(function(k) {
+    o[k] = f[k] === 'on' || f[k] === true;
+  });
+  return o;
+}
+
+function dernierBailDuLot(unitId) {
+  var ls = (_allLeases || []).filter(function(l) { return l.unit_id === unitId; });
+  ls.sort(function(a, b) {
+    var da = fd(a).effectiveDate || '', db_ = fd(b).effectiveDate || '';
+    return da < db_ ? 1 : da > db_ ? -1 : 0;
+  });
+  return ls[0] || null;
+}
+
+async function relouerLogement(leaseId) {
+  var lease = _allLeases.find(function(l) { return l.id === leaseId; });
+  if (!lease) { showToast('Bail introuvable.', 'error'); return; }
+  if (!_allUnits.length || !_allProperties.length) {
+    var _r = await Promise.all([db.from('properties').select('*'), db.from('units').select('*')]);
+    _allProperties = _r[0].data || [];
+    _allUnits = _r[1].data || [];
+  }
+  if (lease.unit_id) {
+    var occ = findUnitLease(lease.unit_id);
+    if (occ && occ.id !== lease.id && !confirm('Ce lot a déjà un bail en cours (' + leaseTenantName(occ) + '). Continuer quand même ?')) return;
+  }
+  var bien = infosBienDepuisBail(lease);
+  openLeaseWizard();
+  Object.assign(_wizardData, bien);
+  if (lease.unit_id) _wizardData.unitId = lease.unit_id;
+  renderWizardStep();
+  var h = document.querySelector('#lease-wizard-overlay .wizard-header h2');
+  if (h) h.textContent = 'Nouveau locataire — ' + ((fd(lease).propertyAddress || '').split(',')[0] || 'logement');
 }
 
 // ── Protocole de résiliation amiable (imprimable)
