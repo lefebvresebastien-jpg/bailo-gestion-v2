@@ -60,6 +60,12 @@ function formatPeriode(p) {
   return (q || '').replace('Q','T') + ' ' + year;
 }
 
+// Bail terminé (fin de bail enregistrée dans Bailo) : plus d'alerte ni de révision
+function estTermine(lease) {
+  const s = String(lease?.data?.formData?.leaseStatus || '').toLowerCase();
+  return s === 'terminé' || s === 'termine' || s === 'ended';
+}
+
 exports.handler = async (event) => {
   if (!SERVICE_KEY) {
     console.error('SUPABASE_GESTION_SERVICE_KEY manquante');
@@ -107,6 +113,7 @@ exports.handler = async (event) => {
     for (const lease of (leases || [])) {
       const f = lease.data?.formData || {};
       if (!f.effectiveDate || !f.tenantName || !f.rent) continue;
+      if (estTermine(lease)) continue;
 
       const bailleurEmail = profilParBailleur[lease.bailleur_id]?.landlordEmail;
       if (!bailleurEmail) continue;
