@@ -5088,7 +5088,8 @@ function renderWizardStep() {
   const backBtn = document.getElementById('wizard-back');
   const nextBtn = document.getElementById('wizard-next');
   backBtn.style.display = _wizardStep > 1 ? '' : 'none';
-  nextBtn.textContent = _wizardStep === WIZARD_TOTAL_STEPS ? 'Créer le bail' : 'Suivant →';
+  nextBtn.disabled = false; // le bouton pouvait rester bloqué après une création précédente
+  nextBtn.textContent = _wizardStep === WIZARD_TOTAL_STEPS ? (_wizardEditId ? 'Enregistrer' : 'Créer le bail') : 'Suivant →';
 }
 
 function collectStepData() {
@@ -5229,6 +5230,17 @@ function validateStep() {
 }
 
 async function wizardNext() {
+  try {
+    await _wizardNextInner();
+  } catch (e) {
+    console.error('wizardNext', e);
+    showToast('Erreur : ' + (e && e.message ? e.message : e), 'error', 6000);
+    var nb = document.getElementById('wizard-next');
+    if (nb) nb.disabled = false;
+  }
+}
+
+async function _wizardNextInner() {
   if (!validateStep()) return;
   collectStepData();
 
@@ -5271,6 +5283,8 @@ async function createLease() {
   const { data: { session } } = await db.auth.getSession();
   if (!session) {
     showToast('Session expirée. Reconnectez-vous.', 'error');
+    nextBtn.disabled = false;
+    nextBtn.textContent = _wizardEditId ? 'Enregistrer' : 'Créer le bail';
     return;
   }
 
@@ -5422,6 +5436,7 @@ async function createLease() {
   }
 
   document.getElementById('lease-wizard-overlay').classList.add('hidden');
+  nextBtn.disabled = false;
   showToast(_wizardEditId ? 'Bail mis a jour !' : 'Bail cree avec succes !', 'success');
   _wizardData = {};
   _wizardEditId = null;
