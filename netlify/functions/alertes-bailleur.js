@@ -52,7 +52,7 @@ function calculerAlertesPourBailleur(leases, today) {
           icon: '📊',
           titre: `Révision IRL dans ${j} jour(s) — ${nom}`,
           detail: `Le bail du logement ${adresse} arrive à sa date anniversaire le ${anniv.toLocaleDateString('fr-FR')}. Pensez à calculer et notifier la révision de loyer (IRL ref : ${f.irlReference || 'à vérifier'}).`,
-          lien: `https://v2.gestion.bailo.pro/#leases`
+          lien: `https://gestion.bailo.pro/#leases`
         });
       }
     }
@@ -70,7 +70,7 @@ function calculerAlertesPourBailleur(leases, today) {
           icon: '📅',
           titre: `Fin de bail dans ${j} jour(s) — ${nom}`,
           detail: `Le bail du logement ${adresse} se termine le ${fin.toLocaleDateString('fr-FR')}. Préavis bailleur : ${f.noticePeriodLandlord || '6 mois'}. Préavis locataire : ${f.noticePeriodTenant || '3 mois'}.`,
-          lien: `https://v2.gestion.bailo.pro/#leases`
+          lien: `https://gestion.bailo.pro/#leases`
         });
       }
     }
@@ -87,7 +87,7 @@ function calculerAlertesPourBailleur(leases, today) {
           icon: '🛡',
           titre: `Attestation assurance à demander — ${nom}`,
           detail: `Le renouvellement annuel de l'attestation assurance habitation est dans ${j} jour(s). Envoyez un rappel à ${f.tenantEmail || 'votre locataire'}.`,
-          lien: `https://v2.gestion.bailo.pro/#messages`
+          lien: `https://gestion.bailo.pro/#messages`
         });
       }
     }
@@ -99,7 +99,7 @@ function calculerAlertesPourBailleur(leases, today) {
         icon: '⚡',
         titre: `DPE ${f.dpeClass} — ${adresse}`,
         detail: `Ce logement est classé ${f.dpeClass}. La loi Climat impose des travaux de rénovation. Le loyer ne peut pas être révisé à la hausse.`,
-        lien: `https://v2.gestion.bailo.pro/#leases`
+        lien: `https://gestion.bailo.pro/#leases`
       });
     }
 
@@ -117,7 +117,7 @@ function calculerAlertesPourBailleur(leases, today) {
           detail: joursAvantExpirationDpe < 0
             ? `Le DPE a expiré le ${expirationDpe.toLocaleDateString('fr-FR')} (validité 10 ans). Un nouveau diagnostic est obligatoire avant toute nouvelle location.`
             : `Le DPE expire le ${expirationDpe.toLocaleDateString('fr-FR')} (dans ${joursAvantExpirationDpe} jour(s)). Pensez à planifier un nouveau diagnostic.`,
-          lien: `https://v2.gestion.bailo.pro/#leases`
+          lien: `https://gestion.bailo.pro/#leases`
         });
       }
     }
@@ -153,7 +153,7 @@ function construireHtml(alertes, today) {
       ${urgentes.length ? `<div style="font-size:12px;font-weight:700;text-transform:uppercase;color:#dc2626;margin-bottom:8px">🚨 Urgentes</div>${urgentes.map(alerteHtml).join('')}` : ''}
       ${autres.length ? `<div style="font-size:12px;font-weight:700;text-transform:uppercase;color:#6a5a40;margin-bottom:8px;margin-top:${urgentes.length?'16px':'0'}">📋 À traiter</div>${autres.map(alerteHtml).join('')}` : ''}
       <div style="margin-top:20px;text-align:center">
-        <a href="https://v2.gestion.bailo.pro" style="display:inline-block;background:#1a1208;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Ouvrir Bailo Gestion</a>
+        <a href="https://gestion.bailo.pro" style="display:inline-block;background:#1a1208;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Ouvrir Bailo Gestion</a>
       </div>
     </div>
   </div>`;
