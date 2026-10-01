@@ -219,7 +219,8 @@
     </div>
   </div>
 
-  <script>
+  <script src="/assets/js/lease-access.js"></script>
+<script>
     const SUPABASE_URL = 'https://nltuysmnxsomlhgvbtwz.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_UtH7OZskOMab-vCsoKKRsQ_rVkm5mRC';
     const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -714,7 +715,7 @@
       var blank = document.createElement('canvas'); blank.width=canvas.width; blank.height=canvas.height;
       if (canvas.toDataURL() === blank.toDataURL()) { alert('Veuillez signer dans la zone de signature avant de valider.'); return; }
       var sig = canvas.toDataURL('image/png');
-      var resp = await db.from('leases').select('data').eq('id', leaseId).single();
+      var resp = await bailoGetLease(leaseId);
       if (!resp.data) { alert('Erreur : bail introuvable.'); return; }
       var leaseData = resp.data.data || {};
       var fd = leaseData.formData || {};
@@ -726,7 +727,7 @@
       fd.annexChecks = annexChecks;
       fd.annexesValidatedAt = new Date().toISOString();
       leaseData.formData = fd;
-      var res = await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
+      var res = await bailoSaveLeaseData(leaseId, leaseData);
       if (res.error) { alert('Erreur sauvegarde : ' + res.error.message); return; }
       var btn = document.getElementById('btn-signer-bail');
       if (btn) { btn.textContent = '✅ Bail signé !'; btn.style.background = '#6b7280'; btn.disabled = true; btn.style.pointerEvents = 'none'; }
@@ -739,14 +740,14 @@
       var blank = document.createElement('canvas'); blank.width=canvas.width; blank.height=canvas.height;
       if (canvas.toDataURL() === blank.toDataURL()) { alert('Veuillez signer avant de valider.'); return; }
       var sig = canvas.toDataURL('image/png');
-      var resp = await db.from('leases').select('data').eq('id', leaseId).single();
+      var resp = await bailoGetLease(leaseId);
       if (!resp.data) { alert('Erreur : bail introuvable.'); return; }
       var leaseData = resp.data.data || {};
       var fd = leaseData.formData || {};
       fd.sig_garant = sig;
       fd.sig_garant_at = new Date().toISOString();
       leaseData.formData = fd;
-      await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
+      var _sv = await bailoSaveLeaseData(leaseId, leaseData); if (_sv.error) { alert('Erreur : la signature n\'a pas été enregistrée (' + _sv.error.message + ')'); return; }
       var btn = document.querySelector('[onclick*="saveGarantSig"]');
       if (btn) { btn.textContent = 'Signe'; btn.style.opacity = '0.6'; btn.disabled = true; }
       alert('Votre acte de caution a ete signe et enregistre.');
@@ -787,7 +788,7 @@
         showStatus('Envoi a SignWell...', 'info');
         var { data: { session } } = await db.auth.getSession();
         if (!session) { showStatus('Session expiree, reconnectez-vous.', 'error'); btn.disabled=false; return; }
-        var resp = await fetch('https://v2.gestion.bailo.pro/.netlify/functions/send-signwell', {
+        var resp = await fetch('https://gestion.bailo.pro/.netlify/functions/send-signwell', {
           method:'POST',
           headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},
           body:JSON.stringify({
@@ -827,7 +828,7 @@
       }
 
       // Charger le bail depuis Supabase
-      var resp = await db.from('leases').select('id, data').eq('id', leaseId).single();
+      var resp = await bailoGetLease(leaseId);
       var lease = resp.data;
 
       if (!lease) {
@@ -1073,14 +1074,14 @@
       var blank = document.createElement('canvas'); blank.width=canvas.width; blank.height=canvas.height;
       if (canvas.toDataURL() === blank.toDataURL()) { alert('Veuillez signer dans la zone de signature avant de valider.'); return; }
       var sig = canvas.toDataURL('image/png');
-      var resp = await db.from('leases').select('data').eq('id', leaseId).single();
+      var resp = await bailoGetLease(leaseId);
       if (!resp.data) { alert('Erreur : bail introuvable.'); return; }
       var leaseData = resp.data.data || {};
       var fd = leaseData.formData || {};
       fd.sig_bailleur = sig;
       fd.sig_bailleur_at = new Date().toISOString();
       leaseData.formData = fd;
-      var res = await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
+      var res = await bailoSaveLeaseData(leaseId, leaseData);
       if (res.error) { alert('Erreur sauvegarde : ' + res.error.message); return; }
       var btn = document.querySelector('[onclick*="saveBailleurSig"]');
       if (btn) { btn.textContent = '✅ Signature enregistrée !'; btn.style.background = '#6b7280'; btn.disabled = true; btn.style.pointerEvents = 'none'; }
@@ -1092,7 +1093,7 @@
     // Polling toutes les 30s pour détecter nouvelles signatures (locataire ou garant)
     setInterval(async function() {
       if (!_currentLeaseId) return;
-      var resp = await db.from('leases').select('data').eq('id', _currentLeaseId).single();
+      var resp = await bailoGetLease(_currentLeaseId);
       if (!resp.data) return;
       var newF = resp.data.data?.formData || {};
       var prevF = _currentLeaseData?.formData || {};
