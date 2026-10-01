@@ -1,11 +1,14 @@
+// FICHIER GÉNÉRÉ — ne pas modifier à la main.
+// Source : locataire.html — régénérer avec : node tools/build-locataire-page.js
 exports.handler = async (event) => {
   const leaseId = (event.queryStringParameters && event.queryStringParameters.id) || '';
-  if (!leaseId) {
-    return { statusCode: 400, headers: {'Content-Type': 'text/plain'}, body: 'ID manquant' };
+  if (!/^[0-9a-f-]{36}$/i.test(leaseId)) {
+    return { statusCode: 400, headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: 'Lien invalide' };
   }
 
-  const manifestUrl = 'https://v2.gestion.bailo.pro/.netlify/functions/manifest-locataire-dynamic?id=' + leaseId;
-  
+  // Manifest sur le MÊME domaine que la page (sinon iOS l'ignore)
+  const manifestUrl = '/.netlify/functions/manifest-locataire-dynamic?id=' + leaseId;
+
   const html = `<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -317,6 +320,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
   </div>
 </div>
 
+<script src="/assets/js/lease-access.js"></script>
 <script>
 const SUPABASE_URL = 'https://nltuysmnxsomlhgvbtwz.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_UtH7OZskOMab-vCsoKKRsQ_rVkm5mRC';
@@ -357,7 +361,7 @@ async function init() {
 
   try {
     // Lecture via Netlify Function (bypass RLS, compatible PWA iOS)
-    const resp = await fetch('https://v2.gestion.bailo.pro/.netlify/functions/get-lease?id=' + encodeURIComponent(leaseId));
+    const resp = await fetch('/.netlify/functions/get-lease?id=' + encodeURIComponent(leaseId));
     if (!resp.ok) { showError('Etape 2: fetch KO status=' + resp.status + ' url=' + resp.url); return; }
     const payload = await resp.json();
     if (!payload.lease) { showError('Etape 3: payload sans lease. payload=' + JSON.stringify(payload).substring(0,100)); return; }
@@ -417,7 +421,14 @@ function showError(msg) {
 // ============================================================
 function voirContrat() {
   if (!_lease?.id) return;
-  window.open('contrat.html?lease=' + _lease.id + '&mode=locataire', '_blank');
+  // Liens racine (/…) : la page peut être servie par /.netlify/functions/locataire-page,
+  // un lien relatif « contrat.html » pointerait alors vers une fonction inexistante (404).
+  var lt = ((_fd && _fd.leaseType) || '').toLowerCase();
+  var page = '/contrat.html';
+  if (lt.includes('commercial') || lt.includes('professionnel')) page = '/contrat-commercial.html';
+  else if (lt.includes('mobilit')) page = '/contrat-mobilite.html';
+  else if (lt.includes('meubl')) page = '/contrat-meuble.html';
+  window.open(page + '?lease=' + _lease.id + '&mode=locataire', '_blank');
 }
 
 function renderBail() {
@@ -463,11 +474,13 @@ function renderBail() {
 // ============================================================
 async function loadQuittances() {
   const el = document.getElementById('quittances-list');
-  const { data: msgs } = await db.from('messages')
-    .select('id, subject, created_at, body')
-    .eq('lease_id', _lease.id)
-    .eq('kind', 'Quittance')
-    .order('created_at', { ascending: false });
+  let msgs = [];
+  try {
+    const resp = await fetch('/.netlify/functions/tenant-messages?leaseId=' + encodeURIComponent(_lease.id) + '&kind=Quittance');
+    msgs = await resp.json();
+    if (!Array.isArray(msgs)) msgs = [];
+    msgs = msgs.reverse(); // le plus récent en premier
+  } catch(e) { msgs = []; }
 
   if (!msgs || !msgs.length) {
     el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--ink-3)">Aucune quittance reçue.</div>';
@@ -486,10 +499,14 @@ async function loadQuittances() {
 }
 
 async function viewQuittance(id) {
-  const { data: msgs } = await db.from('messages').select('body').eq('id', id).single();
-  if (!msgs?.body) return;
+  let msg = null;
+  try {
+    const resp = await fetch('/.netlify/functions/tenant-messages?leaseId=' + encodeURIComponent(_lease.id) + '&id=' + encodeURIComponent(id));
+    msg = await resp.json();
+  } catch(e) {}
+  if (!msg?.body) return;
   const w = window.open('', '_blank');
-  w.document.write(msgs.body);
+  w.document.write(msg.body);
   w.document.close();
 }
 
@@ -645,13 +662,13 @@ async function saveSig(type) {
   if (canvas.toDataURL() === blank.toDataURL()) { showToast('Veuillez signer avant de valider.'); return; }
 
   const sigKey = type === 'exit' ? 'locataireExit' : 'locataire';
-  const leaseData = _lease.data || {};
-  leaseData.edlSign = { ...leaseData.edlSign, [sigKey]: canvas.toDataURL(), [\`\${sigKey}At\`]: new Date().toISOString() };
+  const leaseData = Object.assign({}, _lease.data || {});
+  leaseData.edlSign = { ...(leaseData.edlSign || {}), [sigKey]: canvas.toDataURL(), [\`\${sigKey}At\`]: new Date().toISOString() };
 
-  const { error } = await db.from('leases').update({ data: leaseData }).eq('id', _lease.id);
-  if (error) { showToast('Erreur lors de la sauvegarde.'); return; }
+  const res = await bailoSaveLeaseData(_lease.id, leaseData);
+  if (res.error) { showToast('Signature non enregistrée : ' + res.error.message); return; }
 
-  _lease.data = leaseData;
+  _lease.data = res.data || leaseData;
   showToast('Signature enregistrée ✅');
   renderEDL();
 }
@@ -744,11 +761,12 @@ function renderCompteurs() {
 // ============================================================
 async function loadMessages() {
   const el = document.getElementById('msg-list');
-  const { data: msgs } = await db.from('messages')
-    .select('id, sender, subject, body, kind, created_at, replies, status, incident_status')
-    .eq('lease_id', _lease.id)
-    .in('kind', ['Renseignement', 'Incident', 'Information'])
-    .order('created_at', { ascending: true });
+  let msgs = [];
+  try {
+    const resp = await fetch('/.netlify/functions/tenant-messages?leaseId=' + encodeURIComponent(_lease.id) + '&kinds=Renseignement,Incident,Information');
+    msgs = await resp.json();
+    if (!Array.isArray(msgs)) msgs = [];
+  } catch(e) { msgs = []; }
 
   if (!msgs?.length) {
     el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--ink-3);font-size:13px">Aucun message. Envoyez un message à votre bailleur.</div>';
@@ -800,7 +818,11 @@ async function loadMessages() {
   // Marquer comme lus
   const unreadIds = unread.map(m => m.id);
   if (unreadIds.length) {
-    await db.from('messages').update({ status: 'lu-locataire' }).in('id', unreadIds);
+    fetch('/.netlify/functions/tenant-messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leaseId: _lease.id, action: 'mark-read', ids: unreadIds })
+    }).catch(() => {});
   }
 }
 
@@ -809,17 +831,24 @@ async function sendMsg() {
   const body = input.value.trim();
   if (!body) return;
 
-  const { error } = await db.from('messages').insert({
-    lease_id: _lease.id,
-    sender: 'Locataire',
-    kind: 'Renseignement',
-    subject: 'Message du locataire',
-    body: body,
-    status: 'en-attente',
-    replies: []
-  });
+  let ok = false;
+  try {
+    const resp = await fetch('/.netlify/functions/tenant-messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        leaseId: _lease.id,
+        action: 'send',
+        kind: 'Renseignement',
+        subject: 'Message du locataire',
+        body: body
+      })
+    });
+    const data = await resp.json();
+    ok = resp.ok && data.ok;
+  } catch(e) {}
 
-  if (error) { showToast('Erreur envoi.'); return; }
+  if (!ok) { showToast('Erreur envoi.'); return; }
   input.value = '';
   loadMessages();
   showToast('Message envoyé ✅');
@@ -846,16 +875,19 @@ async function sendIncident() {
   const desc = document.getElementById('incident-desc').value.trim();
   if (!desc) { showToast('Décrivez l\\'incident.'); return; }
 
-  await db.from('messages').insert({
-    lease_id: _lease.id,
-    sender: 'Locataire',
-    kind: 'Incident',
-    subject: type,
-    body: desc,
-    status: 'en-attente',
-    incident_status: 'en-attente',
-    replies: []
-  });
+  try {
+    await fetch('/.netlify/functions/tenant-messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        leaseId: _lease.id,
+        action: 'send',
+        kind: 'Incident',
+        subject: type,
+        body: desc
+      })
+    });
+  } catch(e) {}
 
   document.getElementById('incident-modal').style.display = 'none';
   document.getElementById('incident-desc').value = '';
@@ -882,7 +914,7 @@ async function loadDocuments() {
   const el = document.getElementById('docs-list');
   let docs = [];
   try {
-    const resp = await fetch('https://v2.gestion.bailo.pro/.netlify/functions/tenant-storage?leaseId=' + encodeURIComponent(_lease.id));
+    const resp = await fetch('/.netlify/functions/tenant-storage?leaseId=' + encodeURIComponent(_lease.id));
     if (resp.ok) docs = await resp.json();
   } catch(e) {}
 
@@ -936,7 +968,7 @@ async function sendDoc() {
   try {
     const base64 = await _fileToBase64(_selectedDocFile);
     const type = document.getElementById('doc-type').value;
-    const resp = await fetch('https://v2.gestion.bailo.pro/.netlify/functions/tenant-storage', {
+    const resp = await fetch('/.netlify/functions/tenant-storage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1149,7 +1181,7 @@ async function togglePushNotifications() {
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
-    navigator.serviceWorker.register('sw.js')
+    navigator.serviceWorker.register('/sw.js')
       .then(function() { updatePushButtonUI(); })
       .catch(function(e) { console.log('[Bailo] SW err', e); });
   });
