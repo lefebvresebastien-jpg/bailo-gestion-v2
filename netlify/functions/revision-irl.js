@@ -12,7 +12,7 @@ const SUPABASE_URL = 'https://nltuysmnxsomlhgvbtwz.supabase.co';
 // Remplacee par la cle service_role (env), qui contourne legitimement RLS pour cet
 // automatisme systeme.
 const SERVICE_KEY = process.env.SUPABASE_GESTION_SERVICE_KEY;
-const BASE_URL = 'https://v2.gestion.bailo.pro';
+const BASE_URL = 'https://gestion.bailo.pro';
 
 async function sbFetch(path) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -299,7 +299,7 @@ async function handleValidation(leaseId, token, nouveauLoyerStr) {
         <div style="background:#fff;padding:24px;border:1px solid #e0d5c8;border-radius:0 0 8px 8px">
           <h2 style="font-size:16px">Révision annuelle de votre loyer</h2>
           <p style="white-space:pre-line;font-size:13px;line-height:1.7;margin:16px 0">${msgLocataire.replace(/\n/g,'<br>')}</p>
-          <a href="https://v2.gestion.bailo.pro/locataire.html?id=${leaseId}" style="display:inline-block;background:#2563eb;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Voir dans mon espace</a>
+          <a href="https://gestion.bailo.pro/locataire.html?id=${leaseId}" style="display:inline-block;background:#2563eb;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Voir dans mon espace</a>
         </div>
       </div>`;
 
@@ -337,7 +337,7 @@ function pageSucces(tenant, ancienLoyer, nouveauLoyer, dateApplication, leaseId)
         </div>
         <div style="font-size:12px;color:#6a5a40;margin-top:8px">Applicable à partir du ${dateApplication}</div>
       </div>
-      <a href="https://v2.gestion.bailo.pro" style="display:inline-block;background:#1a1208;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Ouvrir Bailo Gestion</a>
+      <a href="https://gestion.bailo.pro" style="display:inline-block;background:#1a1208;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Ouvrir Bailo Gestion</a>
     </div>
   </body></html>`;
   return { statusCode: 200, headers: { 'Content-Type': 'text/html' }, body: html };
@@ -345,5 +345,5 @@ function pageSucces(tenant, ancienLoyer, nouveauLoyer, dateApplication, leaseId)
 
 function pageErreur(msg) {
   return { statusCode: 400, headers: { 'Content-Type': 'text/html' },
-    body: `<div style="font-family:sans-serif;padding:32px;text-align:center"><h2>❌ Erreur</h2><p>${msg}</p><a href="https://v2.gestion.bailo.pro">Retour à Bailo</a></div>` };
+    body: `<div style="font-family:sans-serif;padding:32px;text-align:center"><h2>❌ Erreur</h2><p>${msg}</p><a href="https://gestion.bailo.pro">Retour à Bailo</a></div>` };
 }
