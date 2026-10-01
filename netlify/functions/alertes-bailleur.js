@@ -159,6 +159,12 @@ function construireHtml(alertes, today) {
   </div>`;
 }
 
+// Bail terminé (fin de bail enregistrée dans Bailo) : plus d'alerte ni de révision
+function estTermine(lease) {
+  const s = String(lease?.data?.formData?.leaseStatus || '').toLowerCase();
+  return s === 'terminé' || s === 'termine' || s === 'ended';
+}
+
 exports.handler = async (event) => {
   // Sécurité : vérifier le secret
   const secret = event.headers['x-cron-secret'] || event.queryStringParameters?.secret;
@@ -196,6 +202,7 @@ exports.handler = async (event) => {
     (leases || []).forEach(lease => {
       const bid = lease.bailleur_id;
       if (!bid) return;
+      if (estTermine(lease)) return;
       if (!leasesParBailleur[bid]) leasesParBailleur[bid] = [];
       leasesParBailleur[bid].push(lease);
     });
