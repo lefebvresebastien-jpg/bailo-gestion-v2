@@ -97,6 +97,7 @@
   <div class="contract-preview" id="print-area"></div>
 </div>
 
+<script src="/assets/js/lease-access.js"></script>
 <script>
   const SUPABASE_URL = 'https://nltuysmnxsomlhgvbtwz.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_UtH7OZskOMab-vCsoKKRsQ_rVkm5mRC';
@@ -487,12 +488,12 @@
     var blank = document.createElement('canvas'); blank.width = canvas.width; blank.height = canvas.height;
     if (canvas.toDataURL() === blank.toDataURL()) { alert('Veuillez signer avant de valider.'); return; }
     var sig = canvas.toDataURL('image/png');
-    var resp = await db.from('leases').select('data').eq('id', leaseId).single();
+    var resp = await bailoGetLease(leaseId);
     if (!resp.data) { alert('Bail introuvable.'); return; }
     var ld = resp.data.data || {}; var fd = ld.formData || {};
     fd.sig_locataire = sig; fd.sig_locataire_at = new Date().toISOString();
     ld.formData = fd;
-    var res = await db.from('leases').update({ data: ld }).eq('id', leaseId);
+    var res = await bailoSaveLeaseData(leaseId, ld);
     if (res.error) { alert('Erreur : ' + res.error.message); return; }
     var btn = document.getElementById('btn-signer-comm');
     if (btn) { btn.textContent = 'Bail signe !'; btn.style.background = '#16a34a'; btn.disabled = true; btn.style.pointerEvents = 'none'; }
@@ -513,14 +514,14 @@
     var sig = canvas.toDataURL('image/png');
     var params = new URLSearchParams(window.location.search);
     var leaseId = params.get('lease');
-    var resp = await db.from('leases').select('data').eq('id', leaseId).single();
+    var resp = await bailoGetLease(leaseId);
     if (!resp.data) { alert('Bail introuvable.'); return; }
     var leaseData = resp.data.data || {};
     var fd = leaseData.formData || {};
     fd.sig_bailleur = sig;
     fd.sig_bailleur_at = new Date().toISOString();
     leaseData.formData = fd;
-    var res = await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
+    var res = await bailoSaveLeaseData(leaseId, leaseData);
     if (res.error) { alert('Erreur : ' + res.error.message); return; }
     var box = canvas.closest('.sig-box');
     if (box) box.innerHTML = '<span class="sig-label">Le Bailleur</span>' +
@@ -538,14 +539,14 @@
     var sig = canvas.toDataURL('image/png');
     var params = new URLSearchParams(window.location.search);
     var leaseId = params.get('lease');
-    var resp = await db.from('leases').select('data').eq('id', leaseId).single();
+    var resp = await bailoGetLease(leaseId);
     if (!resp.data) { alert('Bail introuvable.'); return; }
     var leaseData = resp.data.data || {};
     var fd = leaseData.formData || {};
     fd.sig_locataire = sig;
     fd.sig_locataire_at = new Date().toISOString();
     leaseData.formData = fd;
-    var res = await db.from('leases').update({ data: leaseData }).eq('id', leaseId);
+    var res = await bailoSaveLeaseData(leaseId, leaseData);
     if (res.error) { alert('Erreur : ' + res.error.message); return; }
     var box = canvas.closest('.sig-box');
     if (box) box.innerHTML = '<span class="sig-label">Le Preneur</span>' +
@@ -565,7 +566,7 @@
       document.getElementById('loading').innerHTML = '<p style="color:#c0392b;font-family:Inter,sans-serif">Parametre lease manquant.</p>';
       return;
     }
-    var res = await db.from('leases').select('*').eq('id', leaseId).single();
+    var res = await bailoGetLease(leaseId);
     if (res.error || !res.data) {
       document.getElementById('loading').innerHTML = '<p style="color:#c0392b;font-family:Inter,sans-serif">Bail introuvable.</p>';
       return;
