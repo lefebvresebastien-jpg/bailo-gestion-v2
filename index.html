@@ -686,6 +686,9 @@
             <button class="btn-secondary" onclick="ouvrirRegularisation(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
               📊 Régularisation
             </button>
+            <button class="btn-secondary" id="btn-fin-bail" onclick="ouvrirFinDeBail(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px;color:#92400e;border-color:#f59e0b">
+              🚪 Mettre fin au bail
+            </button>
             <button class="btn-primary" id="btn-voir-contrat" onclick="ouvrirContratV1(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
               📄 Voir le contrat
             </button>
@@ -699,6 +702,8 @@
         </div>
 
         <!-- Bandeau avertissement bail commercial -->
+        <div id="detail-fin-bail" style="display:none;margin-bottom:16px"></div>
+
         <div id="commercial-lease-warn" style="display:none;margin-bottom:16px">
           <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:10px;padding:14px 18px;font-size:13px;color:#92400e">
             <strong>⚠️ Bail commercial (Code de Commerce)</strong> — Ce contrat est indicatif uniquement.
@@ -1748,6 +1753,7 @@ function checkRelances() {
   _allLeases.forEach(function(lease) {
     var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
     if (!f.rent || !f.tenantName) return;
+    if (!leaseBillableInMonth(lease, yearMonth)) return;
     var key = lease.id + '_' + yearMonth;
     var paye = _loyersStatus && _loyersStatus[key] === 'paye';
     if (paye) return;
@@ -2462,6 +2468,29 @@ async function loadAlertes() {
     const nom = f.tenantName;
     const adresse = (f.propertyAddress || '').split(',')[0];
 
+    // Bail terminé : plus d'alerte IRL / fin de bail / assurance / DPE.
+    // Seule reste l'alerte de restitution du dépôt (sauf si reporté sur un nouveau bail).
+    if (leaseStatus(lease) === 'ended') {
+      var _dEnd = lease.data || {};
+      if (_dEnd.exitDate && _dEnd.depositHandling !== 'report') {
+        var _sortie = _parseDay(_dEnd.exitDate);
+        var _limite = new Date(_sortie);
+        _limite.setMonth(_limite.getMonth() + (_dEnd.edlExit ? 2 : 1));
+        var _jr = Math.round((_limite - today) / 86400000);
+        if (_jr >= 0 && _jr <= 30) {
+          alertes.push({
+            type: _jr <= 7 ? 'danger' : 'warning',
+            icon: '💰',
+            titre: 'Dépôt de garantie — ' + nom,
+            detail: 'Délai de restitution du dépôt de garantie (' + (f.deposit ? formatCurrency(f.deposit) : '—') + ') : ' + _jr + ' jour(s) restant(s).',
+            action: function() { openLeaseDetail(lease.id); },
+            leaseId: lease.id
+          });
+        }
+      }
+      return;
+    }
+
     // ── 1. Révision IRL (date anniversaire du bail)
     if (f.effectiveDate) {
       const effet = new Date(f.effectiveDate);
@@ -2617,7 +2646,9 @@ async function loadKPIs() {
     db.from('properties').select('id')
   ]);
   const all = leasesRes.data || [];
-  const active = all.filter(l => leaseStatus(l) === 'active');
+  const _kpiNow = new Date();
+  const _kpiMonth = _kpiNow.getFullYear() + '-' + String(_kpiNow.getMonth()+1).padStart(2,'0');
+  const active = all.filter(l => leaseBillableInMonth(l, _kpiMonth));
   const totalLoyer = active.reduce((sum, l) => sum + leaseRent(l), 0);
   const nbProperties = (propsRes.data || []).length;
 
@@ -2661,7 +2692,7 @@ async function loadRecentLeases() {
       </div>
       <div class="list-item-right">
         <div class="list-item-amount">${formatCurrency(leaseRent(l))}</div>
-        <div class="list-item-date">${leaseStatusBadge(leaseStatus(l))}</div>
+        <div class="list-item-date">${leaseBadgeFor(l)}</div>
       </div>
     </div>`).join('');
 }
@@ -2785,7 +2816,7 @@ async function loadLeases() {
   const el = document.getElementById('leases-list');
   if (!el) return;
   el.innerHTML = '<div class="list-loading">Chargement…</div>';
-  const { data, error } = await db.from('leases').select('id, data, updated_at').order('updated_at', { ascending: false });
+  const { data, error } = await db.from('leases').select('id, data, unit_id, updated_at').order('updated_at', { ascending: false });
   if (error) { el.innerHTML = '<div class="list-loading">Erreur de chargement.</div>'; return; }
   _allLeases = data || [];
   renderLeases(_allLeases);
@@ -2949,7 +2980,7 @@ function modifierBail(leaseId) {
   renderWizardStep();
 
   // Changer le titre du wizard
-  document.querySelector('.wizard-header h2').textContent = 'Modifier le bail';
+  document.querySelector('#lease-wizard-overlay .wizard-header h2').textContent = 'Modifier le bail';
   document.getElementById('wizard-next').textContent = _wizardStep === 6 ? 'Enregistrer' : 'Suivant →';
 
   document.getElementById('lease-wizard-overlay').classList.remove('hidden');
@@ -3149,7 +3180,8 @@ function renderLeaseDetail(lease) {
   // Header
   document.getElementById('detail-title').textContent = f.tenantName || 'Bail sans nom';
   document.getElementById('detail-sub').textContent = f.propertyAddress || '';
-  document.getElementById('detail-status-badge').innerHTML = leaseStatusBadge(leaseStatus(lease));
+  document.getElementById('detail-status-badge').innerHTML = leaseBadgeFor(lease);
+  renderFinDeBailBlock(lease);
 
   // Alerte bail commercial
   const isCommercialLease = (f.leaseType||'').toLowerCase().includes('commercial') || (f.leaseType||'').toLowerCase().includes('professionnel');
@@ -3595,7 +3627,7 @@ function renderPropertyCard(p) {
 
   // Pour chaque lot, chercher si un bail actif existe
   const lotChips = units.map(u => {
-    const lease = _allLeases.find(l => l.unit_id === u.id);
+    const lease = findUnitLease(u.id);
     const occupied = !!lease;
     const tenant = occupied ? leaseTenantName(lease) : 'Vacant';
     return `<span class="lot-chip ${occupied ? 'occupied' : 'vacant'}">
@@ -3604,11 +3636,11 @@ function renderPropertyCard(p) {
   }).join('');
 
   const totalLoyer = units.reduce((sum, u) => {
-    const lease = _allLeases.find(l => l.unit_id === u.id);
+    const lease = findUnitLease(u.id);
     return sum + (lease ? leaseRent(lease) : 0);
   }, 0);
 
-  const occupiedCount = units.filter(u => _allLeases.find(l => l.unit_id === u.id)).length;
+  const occupiedCount = units.filter(u => findUnitLease(u.id)).length;
 
   return `<div class="property-card-v2" onclick="openPropertyDetail('${p.id}')">
     <div class="property-card-header">
@@ -3640,9 +3672,9 @@ async function openPropertyDetail(propertyId) {
 
   // Stats
   const units = _allUnits.filter(u => u.property_id === propertyId);
-  const occupiedUnits = units.filter(u => _allLeases.find(l => l.unit_id === u.id));
+  const occupiedUnits = units.filter(u => findUnitLease(u.id));
   const totalLoyer = units.reduce((sum, u) => {
-    const lease = _allLeases.find(l => l.unit_id === u.id);
+    const lease = findUnitLease(u.id);
     return sum + (lease ? leaseRent(lease) : 0);
   }, 0);
 
@@ -3667,7 +3699,7 @@ function renderUnitsGrid(units) {
   }
 
   el.innerHTML = units.map(u => {
-    const lease = _allLeases.find(l => l.unit_id === u.id);
+    const lease = findUnitLease(u.id);
     const occupied = !!lease;
     const tenant = occupied ? leaseTenantName(lease) : null;
     const loyer = occupied ? leaseRent(lease) : 0;
@@ -3693,7 +3725,7 @@ function renderUnitsGrid(units) {
         <span>${occupied ? 'Actif' : 'Sans locataire'}</span>
         <div style="display:flex;gap:6px">
           ${occupied
-            ? `<button class="btn-ghost" style="font-size:11px" onclick="event.stopPropagation();openLeaseDetail('${(_allLeases.find(l=>l.unit_id===u.id)||{}).id}')">Voir le bail →</button>`
+            ? `<button class="btn-ghost" style="font-size:11px" onclick="event.stopPropagation();openLeaseDetail('${(findUnitLease(u.id)||{}).id}')">Voir le bail →</button>`
             : `<button class="btn-ghost" style="font-size:11px" onclick="event.stopPropagation();openLeaseWizardForUnit('${u.id}')">+ Nouveau bail</button>
                <button class="btn-ghost" style="font-size:11px;color:var(--color-primary)" onclick="event.stopPropagation();openLierBail('${u.id}')">🔗 Lier bail</button>`
           }
@@ -3712,7 +3744,7 @@ function showPropertiesList() {
 function openUnitDetail(unitId) {
   const unit = _allUnits.find(u => u.id === unitId);
   if (!unit) return;
-  const lease = _allLeases.find(l => l.unit_id === unitId);
+  const lease = findUnitLease(unitId);
   if (lease) openLeaseDetail(lease.id);
   else showToast('Lot vacant — créez un bail pour ce lot.', '', 3000);
 }
@@ -3731,7 +3763,12 @@ function openLeaseWizardForUnit(unitId) {
     };
     _wizardEditUnitId = unitId;
   }
+  var _pref = _wizardData;
   openLeaseWizard();
+  if (unit) {
+    Object.assign(_wizardData, _pref, { unitId: unitId });
+    renderWizardStep();
+  }
 }
 
 var _wizardEditUnitId = null;
@@ -4495,7 +4532,7 @@ async function loadTenants() {
           </div>
           <div class="tenant-email">${f.tenantEmail || '—'}</div>
           <div class="tenant-lease">${f.propertyAddress || '—'}</div>
-          <div>${leaseStatusBadge(leaseStatus(l))}</div>
+          <div>${leaseBadgeFor(l)}</div>
           <div style="display:flex;gap:6px">
             <button onclick="quickEditTenantContact('${l.id}')"
               style="padding:5px 10px;background:var(--color-bg);color:var(--color-text);border:1px solid var(--color-border);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">
@@ -4593,6 +4630,7 @@ const WIZARD_STEPS_CONTENT = {
       return '<option value="' + c + '"' + (d.dpeClass===c?' selected':'') + '>' + c + '</option>';
     }).join('');
     return '<div class="wizard-section-title">Le bien</div>' +
+      buildWizardUnitSelect(d) +
       '<div class="form-group"><label>Adresse du bien *</label>' +
       '<input type="text" id="w-propertyAddress" value="' + (d.propertyAddress||'') + '" placeholder="12 rue de la Paix, 75001 Paris" /></div>' +
       '<div class="form-row">' +
@@ -4986,6 +5024,8 @@ function openLeaseWizard() {
   _wizardData = {};
   _wizardDpeFile = null;
   _wizardEditId = null;
+  var _wh = document.querySelector('#lease-wizard-overlay .wizard-header h2');
+  if (_wh) _wh.textContent = 'Nouveau bail';
   // Pré-remplir profil bailleur depuis les Paramètres
   applyLandlordProfile(_wizardData);
   renderWizardStep();
@@ -5078,6 +5118,7 @@ function collectStepData() {
       }
       break;
     case 2:
+      if (document.getElementById('w-unitId')) _wizardData.unitId = g('w-unitId');
       _wizardData.propertyAddress = g('w-propertyAddress');
       _wizardData.leaseType = g('w-leaseType');
       var isComm2 = (_wizardData.leaseType||'').includes('commercial') || (_wizardData.leaseType||'').includes('professionnel');
@@ -5341,6 +5382,15 @@ async function createLease() {
       if (existingFD.sig_garant) payload.data.formData.sig_garant = existingFD.sig_garant;
       if (existingFD.sig_garant_at) payload.data.formData.sig_garant_at = existingFD.sig_garant_at;
     }
+    // Fusion avec l'existant : on conserve tout ce que le wizard ne gère pas
+    // (statut Terminé, date de sortie, SignWell, dpeDate, transferts...)
+    if (existingRes.data && existingRes.data.data) {
+      var existingData = existingRes.data.data;
+      var oldFD = existingData.formData || {};
+      var mergedFD = Object.assign({}, oldFD, payload.data.formData);
+      if (oldFD.leaseStatus) mergedFD.leaseStatus = oldFD.leaseStatus;
+      payload.data = Object.assign({}, existingData, { formData: mergedFD });
+    }
     dbOp = await db.from('leases').update(payload).eq('id', _wizardEditId);
     // Mettre à jour unit_id si présent
     if (payload.unit_id) {
@@ -5348,7 +5398,19 @@ async function createLease() {
     }
   } else {
     // Création
+    if (_wizardData.dpeDate) payload.data.formData.dpeDate = _wizardData.dpeDate;
+    var _srcLeaseId = _wizardData._sourceLeaseId || null;
+    if (_srcLeaseId) payload.data.transferredFrom = _srcLeaseId;
     dbOp = await db.from('leases').insert(payload);
+    // Transfert : lier l'ancien bail au nouveau
+    if (!dbOp.error && _srcLeaseId) {
+      var srcRes = await db.from('leases').select('data').eq('id', _srcLeaseId).single();
+      if (srcRes.data) {
+        var srcData = srcRes.data.data || {};
+        srcData.transferredTo = uuid;
+        await db.from('leases').update({ data: srcData, updated_at: new Date().toISOString() }).eq('id', _srcLeaseId);
+      }
+    }
   }
 
   if (dbOp.error) {
@@ -5372,6 +5434,401 @@ async function createLease() {
 
 /* v3 */
 
+
+
+// ============================================================
+// FIN DE BAIL & TRANSFERT DU LOCATAIRE VERS UN NOUVEAU BAIL
+// ============================================================
+
+function _parseDay(s) {
+  if (!s) return null;
+  var str = String(s);
+  var d = new Date(str.length === 10 ? str + 'T12:00:00' : str);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function _escH(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+// Le bail occupe-t-il encore le logement à cette date ? (préavis en cours = oui)
+function leaseOccupiesOn(l, date) {
+  if (leaseStatus(l) !== 'ended') return true;
+  var x = l.data && l.data.exitDate;
+  if (!x) return false;
+  var ref = new Date(date || new Date());
+  ref.setHours(0, 0, 0, 0);
+  return _parseDay(x) >= ref;
+}
+
+// Un loyer est-il dû pour le mois ym (AAAA-MM) ?
+function leaseBillableInMonth(l, ym) {
+  var f = fd(l);
+  if (f.effectiveDate && String(f.effectiveDate).substring(0, 7) > ym) return false;
+  if (leaseStatus(l) !== 'ended') return true;
+  var x = l.data && l.data.exitDate;
+  if (!x) return false;
+  return String(x).substring(0, 7) >= ym;
+}
+
+// Bail qui occupe actuellement un lot (le bail actif est prioritaire)
+function findUnitLease(unitId) {
+  var ls = (_allLeases || []).filter(function(l) { return l.unit_id === unitId; });
+  var today = new Date();
+  return ls.find(function(l) { return leaseStatus(l) === 'active'; })
+      || ls.find(function(l) { return leaseOccupiesOn(l, today); })
+      || null;
+}
+
+function leaseBadgeFor(l) {
+  if (leaseStatus(l) === 'ended' && l.data && l.data.exitDate && leaseOccupiesOn(l, new Date())) {
+    return '<span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d">Sortie le ' + formatDate(_parseDay(l.data.exitDate)) + '</span>';
+  }
+  return leaseStatusBadge(leaseStatus(l));
+}
+
+var FIN_BAIL_MOTIFS = {
+  mutation: 'Changement de logement (même bailleur)',
+  amiable: 'Résiliation amiable',
+  conge_locataire: 'Congé donné par le locataire',
+  conge_bailleur: 'Congé donné par le bailleur',
+  autre: 'Autre'
+};
+
+// ── Sélecteur de lot dans le wizard (étape 2)
+function buildWizardUnitSelect(d) {
+  if (!_allUnits || !_allUnits.length) return '';
+  var free = _allUnits.filter(function(u) {
+    if (u.id === d.unitId) return true;
+    var occ = findUnitLease(u.id);
+    return !occ || occ.id === _wizardEditId;
+  });
+  if (!free.length) return '';
+  var opts = '<option value="">— Aucun lot (saisie libre) —</option>' + free.map(function(u) {
+    var prop = (_allProperties || []).find(function(p) { return p.id === u.property_id; });
+    var lbl = (prop ? (prop.address || prop.name || '') + ' · ' : '') + (u.label || '');
+    return '<option value="' + u.id + '"' + (d.unitId === u.id ? ' selected' : '') + '>' + _escH(lbl) + '</option>';
+  }).join('');
+  return '<div class="form-group"><label>Lot concerné (lots vacants)</label>' +
+    '<select id="w-unitId" onchange="appliquerLotWizard(this.value)">' + opts + '</select>' +
+    '<div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px">Choisir le lot remplit l\'adresse, la surface et l\'étage, et le marque comme occupé.</div></div>';
+}
+
+function appliquerLotWizard(unitId) {
+  // Sauvegarder ce qui est déjà saisi à l'étape 2 avant re-rendu
+  collectStepData();
+  _wizardData.unitId = unitId || '';
+  var u = (_allUnits || []).find(function(x) { return x.id === unitId; });
+  if (u) {
+    var prop = (_allProperties || []).find(function(p) { return p.id === u.property_id; });
+    if (prop) _wizardData.propertyAddress = (prop.address || '') + (prop.city ? ', ' + prop.city : '');
+    if (u.surface) _wizardData.surface = u.surface;
+    if (u.floor) _wizardData.propertyFloor = u.floor;
+    if (!_wizardEditId) _wizardData.leaseType = u.furnished ? 'Location meublee' : 'Location vide';
+  }
+  renderWizardStep();
+}
+
+// ── Bloc d'information dans le détail du bail
+function renderFinDeBailBlock(lease) {
+  var zone = document.getElementById('detail-fin-bail');
+  var btnFin = document.getElementById('btn-fin-bail');
+  var ended = leaseStatus(lease) === 'ended';
+  if (btnFin) btnFin.style.display = ended ? 'none' : '';
+  if (!zone) return;
+  var d = lease.data || {};
+  var f = fd(lease);
+  var html = '';
+
+  if (d.transferredFrom) {
+    var src = _allLeases.find(function(l) { return l.id === d.transferredFrom; });
+    html += '<div style="background:#dbeafe;border:1px solid #93c5fd;border-radius:10px;padding:12px 16px;font-size:13px;color:#1e40af;margin-bottom:10px">' +
+      '🔁 Ce bail fait suite au bail ' + (src ? '<strong>' + _escH(leaseAddress(src)) + '</strong>' : 'précédent') +
+      ' <button class="btn-ghost" style="font-size:12px" onclick="openLeaseDetail(\'' + d.transferredFrom + '\')">Voir l\'ancien bail →</button></div>';
+  }
+
+  if (ended) {
+    var motif = FIN_BAIL_MOTIFS[d.endReason] || '—';
+    var depot = d.depositHandling === 'report'
+      ? 'Reporté sur le nouveau bail' + (d.depositNewAddress ? ' (' + _escH(d.depositNewAddress) + ')' : '')
+      : 'À restituer';
+    var dest = d.transferredTo ? _allLeases.find(function(l) { return l.id === d.transferredTo; }) : null;
+    var amiable = d.endReason === 'amiable' || d.endReason === 'mutation';
+    html += '<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:14px 18px;font-size:13px;color:#7c2d12">' +
+      '<div style="font-weight:700;margin-bottom:6px">🚪 Bail terminé</div>' +
+      '<div>Sortie : <strong>' + (d.exitDate ? formatDate(_parseDay(d.exitDate)) : '—') + '</strong>' +
+      (d.noticeDate ? ' · Congé / accord du ' + formatDate(_parseDay(d.noticeDate)) : '') + '</div>' +
+      '<div>Motif : ' + motif + ' · Dépôt de garantie' + (f.deposit ? ' (' + formatCurrency(f.deposit) + ')' : '') + ' : ' + depot + '</div>' +
+      (d.endNote ? '<div style="margin-top:4px;font-style:italic">' + _escH(d.endNote) + '</div>' : '') +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' +
+      (dest
+        ? '<button class="btn-primary" style="font-size:12px;padding:6px 12px" onclick="openLeaseDetail(\'' + dest.id + '\')">➡️ Voir le nouveau bail (' + _escH(leaseAddress(dest)) + ')</button>'
+        : '<button class="btn-primary" style="font-size:12px;padding:6px 12px" onclick="nouveauBailMemeLocataire(\'' + lease.id + '\')">➕ Nouveau bail pour ce locataire</button>') +
+      (amiable ? '<button class="btn-secondary" style="font-size:12px;padding:6px 12px" onclick="imprimerResiliationAmiable(\'' + lease.id + '\')">📄 Protocole de résiliation amiable</button>' : '') +
+      '<button class="btn-secondary" style="font-size:12px;padding:6px 12px" onclick="ouvrirFinDeBail(\'' + lease.id + '\')">✏️ Modifier la sortie</button>' +
+      '<button class="btn-ghost" style="font-size:12px;padding:6px 12px" onclick="reactiverBail(\'' + lease.id + '\')">↩️ Réactiver le bail</button>' +
+      '</div></div>';
+  }
+
+  zone.innerHTML = html;
+  zone.style.display = html ? 'block' : 'none';
+}
+
+// ── Modale "Mettre fin au bail"
+function ouvrirFinDeBail(leaseId) {
+  var lease = _allLeases.find(function(l) { return l.id === leaseId; });
+  if (!lease) { showToast('Bail introuvable.', 'error'); return; }
+  var f = fd(lease);
+  var d = lease.data || {};
+  var today = new Date().toISOString().substring(0, 10);
+  var reason = d.endReason || 'mutation';
+  var depot = d.depositHandling || (reason === 'mutation' ? 'report' : 'restitution');
+
+  var motifOpts = Object.keys(FIN_BAIL_MOTIFS).map(function(k) {
+    return '<option value="' + k + '"' + (k === reason ? ' selected' : '') + '>' + FIN_BAIL_MOTIFS[k] + '</option>';
+  }).join('');
+
+  var old = document.getElementById('fin-bail-overlay');
+  if (old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'fin-bail-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.onclick = function(e) { if (e.target === ov) ov.remove(); };
+  ov.innerHTML =
+    '<div style="background:var(--color-surface,#fff);border-radius:14px;max-width:520px;width:100%;max-height:92vh;overflow:auto;padding:22px 24px;box-shadow:0 20px 50px rgba(0,0,0,.25)">' +
+      '<h2 style="margin:0 0 4px;font-size:18px">🚪 Mettre fin au bail</h2>' +
+      '<div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:16px">' + _escH(f.tenantName || '') + ' — ' + _escH(f.propertyAddress || '') + '</div>' +
+      '<div class="form-group"><label>Motif</label><select id="fb-reason" onchange="_fbMaj()">' + motifOpts + '</select></div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Date du congé / de l\'accord</label><input type="date" id="fb-notice" value="' + (d.noticeDate || today) + '" /></div>' +
+        '<div class="form-group"><label>Date de sortie (remise des clés) *</label><input type="date" id="fb-exit" value="' + (d.exitDate || '') + '" /></div>' +
+      '</div>' +
+      '<div id="fb-hint" style="font-size:12px;background:#f1f5f9;border-radius:8px;padding:8px 10px;margin-bottom:12px;color:#334155"></div>' +
+      '<div class="form-group"><label>Dépôt de garantie' + (f.deposit ? ' (' + formatCurrency(f.deposit) + ')' : '') + '</label>' +
+        '<label style="display:flex;gap:8px;align-items:center;font-weight:400;margin:4px 0"><input type="radio" name="fb-depot" value="report"' + (depot === 'report' ? ' checked' : '') + ' onchange="_fbMaj()" /> Reporter sur le nouveau bail (même bailleur)</label>' +
+        '<label style="display:flex;gap:8px;align-items:center;font-weight:400;margin:4px 0"><input type="radio" name="fb-depot" value="restitution"' + (depot !== 'report' ? ' checked' : '') + ' onchange="_fbMaj()" /> Restituer après l\'état des lieux de sortie</label>' +
+      '</div>' +
+      '<div class="form-group" id="fb-newaddr-wrap"><label>Nouveau logement</label><input type="text" id="fb-newaddr" value="' + _escH(d.depositNewAddress || '') + '" placeholder="Adresse du nouveau logement" /></div>' +
+      '<div class="form-group"><label>Note (facultatif)</label><textarea id="fb-note" rows="2" style="width:100%;padding:9px 12px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);font-size:13px">' + _escH(d.endNote || '') + '</textarea></div>' +
+      '<div style="font-size:11px;color:var(--color-text-tertiary);margin:6px 0 14px">Le bail n\'est pas supprimé : quittances, messages et documents restent consultables. Les alertes, relances et révisions IRL s\'arrêtent après la date de sortie.</div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end">' +
+        '<button class="btn-secondary" onclick="document.getElementById(\'fin-bail-overlay\').remove()">Annuler</button>' +
+        '<button class="btn-primary" id="fb-save" onclick="validerFinDeBail(\'' + leaseId + '\')">Valider la fin du bail</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(ov);
+  _fbMaj();
+}
+
+function _fbMaj() {
+  var lease = _allLeases.find(function(l) { return l.id === currentDetailLeaseId; });
+  var f = lease ? fd(lease) : {};
+  var reason = document.getElementById('fb-reason').value;
+  var depot = (document.querySelector('input[name="fb-depot"]:checked') || {}).value;
+  document.getElementById('fb-newaddr-wrap').style.display = depot === 'report' ? '' : 'none';
+  var meuble = (f.leaseType || '').toLowerCase().includes('meubl');
+  var hint = '';
+  if (reason === 'mutation' || reason === 'amiable') {
+    hint = '🤝 Résiliation d\'un commun accord : la date de sortie est libre, pas de préavis à respecter. Un écrit signé des deux parties est nécessaire (protocole généré après validation).';
+  } else if (reason === 'conge_locataire') {
+    hint = '📬 Préavis du locataire : ' + (meuble ? '1 mois (meublé)' : '3 mois en location vide, réduit à 1 mois en zone tendue ou dans certains cas (mutation, perte d\'emploi, santé, RSA/AAH…)') + ', à compter de la réception du congé.';
+  } else if (reason === 'conge_bailleur') {
+    hint = '⚖️ Congé du bailleur : uniquement à l\'échéance du bail, avec un préavis de ' + (meuble ? '3 mois (meublé)' : '6 mois (location vide)') + ' et un motif légal (reprise, vente, motif légitime et sérieux).';
+  }
+  if (depot === 'report') hint += '<br>💰 Report du dépôt : une clause est ajoutée automatiquement au nouveau bail.';
+  document.getElementById('fb-hint').innerHTML = hint;
+  document.getElementById('fb-hint').style.display = hint ? '' : 'none';
+}
+
+async function validerFinDeBail(leaseId) {
+  var exitDate = document.getElementById('fb-exit').value;
+  if (!exitDate) { showToast('Indiquez la date de sortie.', 'error'); return; }
+  var reason = document.getElementById('fb-reason').value;
+  var depot = (document.querySelector('input[name="fb-depot"]:checked') || {}).value || 'restitution';
+  var btn = document.getElementById('fb-save');
+  btn.disabled = true; btn.textContent = 'Enregistrement…';
+
+  var res = await db.from('leases').select('data').eq('id', leaseId).single();
+  if (res.error || !res.data) {
+    showToast('Erreur : ' + (res.error ? res.error.message : 'bail introuvable'), 'error');
+    btn.disabled = false; btn.textContent = 'Valider la fin du bail';
+    return;
+  }
+  var data = res.data.data || {};
+  data.formData = data.formData || {};
+  data.formData.leaseStatus = 'Terminé';
+  data.formData.exitDate = exitDate;
+  data.exitDate = exitDate;
+  data.noticeDate = document.getElementById('fb-notice').value || '';
+  data.endReason = reason;
+  data.depositHandling = depot;
+  data.depositNewAddress = depot === 'report' ? (document.getElementById('fb-newaddr').value || '').trim() : '';
+  data.endNote = (document.getElementById('fb-note').value || '').trim();
+  data.endedAt = new Date().toISOString();
+
+  var up = await db.from('leases').update({ data: data, updated_at: new Date().toISOString() }).eq('id', leaseId);
+  if (up.error) {
+    showToast('Erreur : ' + up.error.message, 'error');
+    btn.disabled = false; btn.textContent = 'Valider la fin du bail';
+    return;
+  }
+
+  var lease = _allLeases.find(function(l) { return l.id === leaseId; });
+  if (lease) lease.data = data;
+  document.getElementById('fin-bail-overlay').remove();
+  showToast('Fin de bail enregistrée.', 'success');
+  if (lease) renderLeaseDetail(lease);
+  if (typeof loadDashboard === 'function') loadDashboard();
+
+  if (lease && !data.transferredTo && (reason === 'mutation' || depot === 'report')) {
+    if (confirm('Créer maintenant le nouveau bail pour ' + (data.formData.tenantName || 'ce locataire') + ' ?')) {
+      nouveauBailMemeLocataire(leaseId);
+    }
+  }
+}
+
+async function reactiverBail(leaseId) {
+  var lease = _allLeases.find(function(l) { return l.id === leaseId; });
+  if (!lease) return;
+  var msg = 'Réactiver ce bail (annuler la fin de bail) ?';
+  if (lease.data && lease.data.transferredTo) msg += '\n\nAttention : un nouveau bail a déjà été créé pour ce locataire. Il ne sera pas supprimé.';
+  if (!confirm(msg)) return;
+  var res = await db.from('leases').select('data').eq('id', leaseId).single();
+  if (res.error || !res.data) { showToast('Erreur de lecture du bail.', 'error'); return; }
+  var data = res.data.data || {};
+  data.formData = data.formData || {};
+  data.formData.leaseStatus = 'Actif';
+  delete data.formData.exitDate;
+  ['exitDate', 'noticeDate', 'endReason', 'depositHandling', 'depositNewAddress', 'endNote', 'endedAt'].forEach(function(k) { delete data[k]; });
+  var up = await db.from('leases').update({ data: data, updated_at: new Date().toISOString() }).eq('id', leaseId);
+  if (up.error) { showToast('Erreur : ' + up.error.message, 'error'); return; }
+  lease.data = data;
+  showToast('Bail réactivé.', 'success');
+  renderLeaseDetail(lease);
+  if (typeof loadDashboard === 'function') loadDashboard();
+}
+
+// ── Nouveau bail pré-rempli avec le même locataire
+async function nouveauBailMemeLocataire(leaseId) {
+  // Lots + baux avec unit_id nécessaires pour proposer les lots vacants
+  if (!_allUnits.length || !_allProperties.length) {
+    var _r = await Promise.all([db.from('properties').select('*'), db.from('units').select('*')]);
+    _allProperties = _r[0].data || [];
+    _allUnits = _r[1].data || [];
+  }
+  if (_allLeases.length && _allLeases[0].unit_id === undefined) {
+    var _lr = await db.from('leases').select('id, data, unit_id, updated_at');
+    if (_lr.data) _allLeases = _lr.data;
+  }
+  var lease = _allLeases.find(function(l) { return l.id === leaseId; });
+  if (!lease) { showToast('Bail introuvable.', 'error'); return; }
+  var f = fd(lease);
+  var d = lease.data || {};
+  var on = function(v) { return v === 'on' || v === true; };
+
+  _wizardStep = 1;
+  _wizardDpeFile = null;
+  _wizardEditId = null;
+  _wizardData = {
+    _sourceLeaseId: leaseId,
+    landlordName: f.landlordName || '',
+    landlordRepresentative: f.landlordRepresentative || '',
+    landlordAddress: f.landlordAddress || '',
+    landlordEmail: f.landlordEmail || '',
+    signatureCity: f.signatureCity || '',
+    leaseType: f.leaseType || 'Location vide',
+    tenantName: f.tenantName || '',
+    tenantDOB: f.tenantDOB || '',
+    tenantEmail: f.tenantEmail || '',
+    tenantPhone: f.tenantPhone || '',
+    tenantAddress: f.propertyAddress || f.tenantAddress || '',
+    tenantIdDoc: f.tenantIdDoc || '',
+    guarantorName: f.guarantorName || '',
+    guarantorType: f.guarantorType || '',
+    guarantorAddress: f.guarantorAddress || '',
+    guarantorIncome: f.guarantorIncome || '',
+    rentDueDay: f.rentDueDay || 'Le 1 de chaque mois',
+    paymentTerms: f.paymentTerms || '',
+    chargesRegime: f.chargesRegime || '',
+    clauseRentReview: on(f.clauseRentReview),
+    clauseResolutory: on(f.clauseResolutory),
+    clauseInsurance: on(f.clauseInsurance),
+    clauseMaintenance: on(f.clauseMaintenance),
+    clauseVisits: on(f.clauseVisits),
+    clauseNoSubletting: on(f.clauseNoSubletting),
+    clausePrimaryResidence: on(f.clausePrimaryResidence),
+    clauseNoTransformation: on(f.clauseNoTransformation),
+    clauseSolidarity: on(f.clauseSolidarity),
+    clauseLatePenalty: on(f.clauseLatePenalty)
+  };
+  applyLandlordProfile(_wizardData);
+
+  if (d.depositHandling === 'report' && f.deposit) {
+    _wizardData.deposit = f.deposit;
+    _wizardData.specialClauses =
+      'Report du dépôt de garantie : le dépôt de garantie d\'un montant de ' + formatCurrency(f.deposit) +
+      ', versé par le Locataire au titre du bail' + (f.effectiveDate ? ' ayant pris effet le ' + formatDate(_parseDay(f.effectiveDate)) : '') +
+      ' portant sur le logement situé ' + (f.propertyAddress || '…') +
+      ', n\'a pas été restitué à l\'issue de ce bail et est, avec l\'accord exprès des parties, affecté en totalité au présent bail. ' +
+      'Si le dépôt de garantie prévu au présent bail est d\'un montant supérieur, le Locataire verse le complément à la signature ; s\'il est inférieur, le Bailleur restitue la différence à la signature. ' +
+      'Il sera restitué à l\'issue du présent bail dans les conditions de l\'article 22 de la loi n° 89-462 du 6 juillet 1989.';
+  }
+
+  renderWizardStep();
+  var h = document.querySelector('#lease-wizard-overlay .wizard-header h2');
+  if (h) h.textContent = 'Nouveau bail — ' + (f.tenantName || 'locataire');
+  document.getElementById('lease-wizard-overlay').classList.remove('hidden');
+}
+
+// ── Protocole de résiliation amiable (imprimable)
+function imprimerResiliationAmiable(leaseId) {
+  var lease = _allLeases.find(function(l) { return l.id === leaseId; });
+  if (!lease) return;
+  var f = fd(lease);
+  var d = lease.data || {};
+  var dt = function(s) { return s ? formatDate(_parseDay(s)) : '……………'; };
+  var bailleur = _escH(f.landlordName || '……………') + (f.landlordRepresentative ? ', représenté(e) par ' + _escH(f.landlordRepresentative) : '') +
+    (f.landlordAddress ? ', dont le siège / domicile est situé ' + _escH(f.landlordAddress) : '');
+  var depotTxt = d.depositHandling === 'report'
+    ? 'Le dépôt de garantie d\'un montant de ' + (f.deposit ? formatCurrency(f.deposit) : '……………') +
+      ' n\'est pas restitué au Locataire. D\'un commun accord, il est affecté en totalité au nouveau bail conclu entre les mêmes parties' +
+      (d.depositNewAddress ? ' pour le logement situé ' + _escH(d.depositNewAddress) : '') +
+      ', qui le mentionne expressément. Il sera restitué à l\'issue de ce nouveau bail dans les conditions de l\'article 22 de la loi n° 89-462 du 6 juillet 1989, déduction faite le cas échéant des sommes restant dues au titre du présent bail.'
+    : 'Le dépôt de garantie d\'un montant de ' + (f.deposit ? formatCurrency(f.deposit) : '……………') +
+      ' sera restitué au Locataire dans un délai d\'un mois à compter de la remise des clés si l\'état des lieux de sortie est conforme à l\'état des lieux d\'entrée, et de deux mois dans le cas contraire, déduction faite des sommes restant dues et dûment justifiées.';
+
+  var html = '<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Protocole de résiliation amiable — ' + _escH(f.tenantName || '') + '</title>' +
+    '<style>body{font-family:Georgia,serif;max-width:720px;margin:40px auto;padding:0 24px;color:#111;line-height:1.55;font-size:14px}' +
+    'h1{font-size:19px;text-align:center;text-transform:uppercase;letter-spacing:.04em;margin-bottom:28px}h2{font-size:14px;margin:22px 0 6px}' +
+    '.sig{display:flex;justify-content:space-between;gap:40px;margin-top:40px}.sig div{flex:1;border-top:1px solid #999;padding-top:6px;font-size:13px;min-height:90px}' +
+    '.no-print{text-align:center;margin:20px 0}@media print{.no-print{display:none}}</style></head><body>' +
+    '<div class="no-print"><button onclick="window.print()" style="padding:8px 18px;font-size:14px;cursor:pointer">🖨️ Imprimer / PDF</button></div>' +
+    '<h1>Protocole de résiliation amiable<br>d\'un bail d\'habitation</h1>' +
+    '<p><strong>ENTRE :</strong> ' + bailleur + ', ci-après « le Bailleur »,</p>' +
+    '<p><strong>ET :</strong> ' + _escH(f.tenantName || '……………') + (f.tenantDOB ? ', né(e) le ' + dt(f.tenantDOB) : '') + ', ci-après « le Locataire ».</p>' +
+    '<h2>Article 1 — Objet</h2><p>Les parties sont liées par un bail d\'habitation (' + _escH(f.leaseType || 'location vide') + ')' +
+    (f.signatureDate ? ' signé le ' + dt(f.signatureDate) : '') + ', ayant pris effet le ' + dt(f.effectiveDate) +
+    ', portant sur le logement situé ' + _escH(f.propertyAddress || '……………') + '.</p>' +
+    '<p>D\'un commun accord, les parties décident de résilier ce bail à la date du <strong>' + dt(d.exitDate) + '</strong>. ' +
+    'Elles renoncent expressément à l\'application du délai de préavis prévu au bail.</p>' +
+    '<h2>Article 2 — Libération des lieux</h2><p>Le Locataire libère les lieux et remet l\'ensemble des clés au Bailleur le ' + dt(d.exitDate) +
+    '. Un état des lieux de sortie est établi contradictoirement à cette date. Le loyer et les charges restent dus jusqu\'à la date de résiliation, au prorata du nombre de jours d\'occupation pour le mois en cours.</p>' +
+    '<h2>Article 3 — Dépôt de garantie</h2><p>' + depotTxt + '</p>' +
+    '<h2>Article 4 — Charges</h2><p>La régularisation des charges récupérables sera établie au prorata du temps d\'occupation, lors de la régularisation annuelle.</p>' +
+    '<h2>Article 5 — Effets</h2><p>Sous réserve de l\'exécution des articles 2 à 4, les parties se déclarent mutuellement libérées de toute obligation au titre du bail résilié à compter de la date de résiliation.</p>' +
+    '<p style="margin-top:28px">Fait à ' + _escH(f.signatureCity || '……………') + ', le ……………, en deux exemplaires originaux.</p>' +
+    '<div class="sig"><div>Le Bailleur<br><small>« Lu et approuvé », signature</small></div><div>Le Locataire<br><small>« Lu et approuvé », signature</small></div></div>' +
+    '</body></html>';
+
+  var w = window.open('', '_blank');
+  if (!w) { showToast('Autorisez les fenêtres pop-up pour afficher le document.', 'error'); return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
 
 
 function openNewMessage() {
@@ -6498,7 +6955,7 @@ async function loadLoyers() {
 
   var leases = _allLeases.filter(function(l) {
     var f = (l.data && l.data.formData) ? l.data.formData : {};
-    return f.tenantName && (parseFloat(f.rent||0) + parseFloat(f.charges||0)) > 0;
+    return f.tenantName && (parseFloat(f.rent||0) + parseFloat(f.charges||0)) > 0 && leaseBillableInMonth(l, month);
   });
 
   if (!leases.length) {
