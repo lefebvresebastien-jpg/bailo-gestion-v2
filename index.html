@@ -2649,7 +2649,7 @@ async function loadKPIs() {
   const _kpiNow = new Date();
   const _kpiMonth = _kpiNow.getFullYear() + '-' + String(_kpiNow.getMonth()+1).padStart(2,'0');
   const active = all.filter(l => leaseBillableInMonth(l, _kpiMonth));
-  const totalLoyer = active.reduce((sum, l) => sum + leaseRent(l), 0);
+  const totalLoyer = active.reduce((sum, l) => sum + leaseAmountsForMonth(l, _kpiMonth).total, 0);
   const nbProperties = (propsRes.data || []).length;
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
@@ -2662,7 +2662,7 @@ async function loadKPIs() {
   const loyersStatus = statusRes.data ? JSON.parse(statusRes.data.value) : {};
   const totalPaye = active.reduce((sum, l) => {
     const key = l.id + '_' + currentMonth;
-    return loyersStatus[key] === 'paye' ? sum + leaseRent(l) : sum;
+    return loyersStatus[key] === 'paye' ? sum + leaseAmountsForMonth(l, currentMonth).total : sum;
   }, 0);
   const elPaye = document.getElementById('kpi-loyers-paye');
   const elTotal = document.getElementById('kpi-loyers-total');
@@ -5620,6 +5620,35 @@ function leaseBillableInMonth(l, ym) {
   return String(x).substring(0, 7) >= ym;
 }
 
+// Montant dû pour un mois donné, au prorata des jours d'occupation le mois
+// d'entrée (date d'effet) et le mois de sortie (date de sortie) — 17/10/2026.
+// Retourne { rent, charges, total, partial, days, dim, from, to }.
+function leaseAmountsForMonth(l, ym) {
+  var f = fd(l);
+  var rent = parseFloat(f.rent) || 0, charges = parseFloat(f.charges) || 0;
+  var full = { rent: rent, charges: charges, total: rent + charges, partial: false };
+  if (!/^\d{4}-\d{2}$/.test(ym || '')) return full;
+  var y = parseInt(ym.substring(0, 4), 10), m = parseInt(ym.substring(5, 7), 10);
+  var dim = new Date(y, m, 0).getDate();
+  var from = 1, to = dim;
+  var eff = f.effectiveDate ? String(f.effectiveDate).substring(0, 10) : '';
+  if (eff.substring(0, 7) === ym) from = parseInt(eff.substring(8, 10), 10) || 1;
+  var ex = (l.data && l.data.exitDate) || (leaseStatus(l) === 'ended' ? f.exitDate : '') || '';
+  ex = ex ? String(ex).substring(0, 10) : '';
+  if (ex.substring(0, 7) === ym) to = parseInt(ex.substring(8, 10), 10) || dim;
+  if (from === 1 && to === dim) return full;
+  var days = Math.max(0, to - from + 1);
+  var r2 = function(x) { return Math.round(x * 100) / 100; };
+  var total = r2((rent + charges) * days / dim);
+  var rentP = r2(rent * days / dim);
+  return { rent: rentP, charges: r2(total - rentP), total: total, partial: true, days: days, dim: dim, from: from, to: to };
+}
+function prorataLabel(a, ym) {
+  if (!a || !a.partial) return '';
+  var mois = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(new Date(ym + '-01T12:00:00'));
+  return 'du ' + (a.from === 1 ? '1er' : a.from) + ' au ' + a.to + ' ' + mois + ' (' + a.days + ' jour' + (a.days > 1 ? 's' : '') + ' sur ' + a.dim + ', au prorata)';
+}
+
 // Bail qui occupe actuellement un lot (le bail actif est prioritaire)
 function findUnitLease(unitId) {
   var ls = (_allLeases || []).filter(function(l) { return l.unit_id === unitId; });
@@ -6689,8 +6718,23 @@ function qmFillFromLease(leaseId) {
   var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
   var rentEl = document.getElementById('qm-rent');
   var chargesEl = document.getElementById('qm-charges');
-  if (rentEl && f.rent) rentEl.value = f.rent;
-  if (chargesEl) chargesEl.value = f.charges || '0';
+  var monthEl = document.getElementById('qm-month');
+  var a = leaseAmountsForMonth(lease, monthEl ? monthEl.value : '');
+  if (rentEl && f.rent) rentEl.value = a.rent;
+  if (chargesEl) chargesEl.value = a.charges || '0';
+  var hint = document.getElementById('qm-prorata-hint');
+  if (!hint && chargesEl && chargesEl.parentElement) {
+    hint = document.createElement('div'); hint.id = 'qm-prorata-hint';
+    hint.style.cssText = 'font-size:12px;color:#92400e;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:6px 10px;margin-top:6px';
+    chargesEl.parentElement.appendChild(hint);
+  }
+  if (hint) { hint.style.display = a.partial ? '' : 'none'; hint.textContent = a.partial ? 'Montants calculés au prorata : ' + prorataLabel(a, monthEl.value) + '.' : ''; }
+}
+
+// Mention de prorata sur la quittance si les montants saisis sont ceux du prorata
+function _qmProrata(lease, month, rent, charges) {
+  var a = leaseAmountsForMonth(lease, month);
+  return (a.partial && Math.abs(a.rent - rent) < 0.01 && Math.abs(a.charges - charges) < 0.01) ? prorataLabel(a, month) : '';
 }
 
 function closeQModal(event) {
@@ -6732,7 +6776,7 @@ async function qmNextStep() {
     moisLabel = new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric'}).format(new Date(parts[0], parseInt(parts[1])-1, 1));
   }
   var total = rent + charges;
-  var html = genQuittanceHTML(f, moisLabel, rent, charges, total, sigBailleur, profile);
+  var html = genQuittanceHTML(f, moisLabel, rent, charges, total, sigBailleur, profile, _qmProrata(lease, month, rent, charges));
 
   // Afficher dans l'iframe
   var iframe = document.getElementById('qm-preview');
@@ -6807,7 +6851,7 @@ async function _doQSend(lease, month, rent, charges, isResend) {
   }
 
   var subject = 'Quittance de loyer — ' + moisLabel;
-  var body = genQuittanceHTML(f, moisLabel, rent, charges, total, sigBailleur, profile);
+  var body = genQuittanceHTML(f, moisLabel, rent, charges, total, sigBailleur, profile, _qmProrata(lease, month, rent, charges));
 
   // Enregistrer dans messages
   if (!isResend) {
@@ -6849,7 +6893,7 @@ async function _doQSend(lease, month, rent, charges, isResend) {
   }
 }
 
-function genQuittanceHTML(f, mois, rent, charges, total, sigBailleur, profile) {
+function genQuittanceHTML(f, mois, rent, charges, total, sigBailleur, profile, prorata) {
   var bailleur = profile.landlordName || f.landlordName || '';
   var adresseBailleur = profile.landlordAddress || f.landlordAddress || '';
   var representative = profile.landlordRepresentative || f.landlordRepresentative || '';
@@ -6916,12 +6960,14 @@ function genQuittanceHTML(f, mois, rent, charges, total, sigBailleur, profile) {
   h += '</p></div>';
   h += '<div class="qdoc-text">Je soussign\u00e9(e) <strong>' + v(bailleur) + '</strong>, bailleur du logement susvis\u00e9, donne <strong>quittance</strong> \u00e0 ';
   h += '<strong>' + v(f.tenantName) + '</strong> de la somme de <strong>' + fmtC(total) + '</strong>, ';
-  h += 'correspondant au loyer et aux charges du mois de <strong>' + v(mois) + '</strong>.</div>';
+  h += prorata
+    ? 'correspondant au loyer et aux charges de la p\u00e9riode <strong>' + v(prorata) + '</strong>.</div>'
+    : 'correspondant au loyer et aux charges du mois de <strong>' + v(mois) + '</strong>.</div>';
   h += '<div class="qdoc-table-wrap"><table class="qdoc-table"><thead><tr><th>D\u00e9signation</th><th>Base contractuelle</th><th>Montant du mois</th></tr></thead><tbody>';
   h += '<tr><td>Loyer principal hors charges<br><span style="font-size:.74rem;color:#8a7060">' + v(f.leaseType||'Location vide') + (f.effectiveDate ? ' \u2014 bail du ' + new Intl.DateTimeFormat('fr-FR',{dateStyle:'short'}).format(new Date(f.effectiveDate+'T12:00:00')) : '') + '</span></td>';
-  h += '<td>' + fmtC(rent) + '&nbsp;/&nbsp;mois</td><td>' + fmtC(rent) + '</td></tr>';
+  h += '<td>' + fmtC(prorata ? (parseFloat(f.rent) || rent) : rent) + '&nbsp;/&nbsp;mois</td><td>' + fmtC(rent) + '</td></tr>';
   h += '<tr><td>Charges r\u00e9cup\u00e9rables<br><span style="font-size:.74rem;color:#8a7060">' + v(f.chargesRegime||'Provisions sur charges') + '</span></td>';
-  h += '<td>' + fmtC(charges) + '&nbsp;/&nbsp;mois</td><td>' + fmtC(charges) + '</td></tr>';
+  h += '<td>' + fmtC(prorata ? (parseFloat(f.charges) || charges) : charges) + '&nbsp;/&nbsp;mois</td><td>' + fmtC(charges) + '</td></tr>';
   h += '<tr class="qdoc-tr-total"><td colspan="2"><strong>TOTAL R\u00c9GL\u00c9 \u2014 Charges comprises</strong></td><td>' + fmtC(total) + '</td></tr>';
   h += '</tbody></table></div>';
   h += '<div class="qdoc-note">\u2696\ufe0f Cette quittance annule tous les re\u00e7us ant\u00e9rieurs pour la m\u00eame p\u00e9riode. ';
@@ -7181,8 +7227,7 @@ async function loadLoyers() {
   // Calculer total payé
   var totalAttendu = 0, totalPaye = 0;
   leases.forEach(function(l) {
-    var f = l.data.formData;
-    var montant = parseFloat(f.rent||0) + parseFloat(f.charges||0);
+    var montant = leaseAmountsForMonth(l, month).total;
     totalAttendu += montant;
     var key = l.id + '_' + month;
     if (_loyersStatus[key] === 'paye') totalPaye += montant;
@@ -7194,7 +7239,8 @@ async function loadLoyers() {
 
   el.innerHTML = leases.map(function(l) {
     var f = l.data.formData;
-    var montant = parseFloat(f.rent||0) + parseFloat(f.charges||0);
+    var _amt = leaseAmountsForMonth(l, month);
+    var montant = _amt.total;
     var key = l.id + '_' + month;
     var paye = _loyersStatus[key] === 'paye';
     var address = (f.propertyAddress || '').replace(/,.*$/,'').trim();
@@ -7206,7 +7252,7 @@ async function loadLoyers() {
       '</div>' +
       '<div style="text-align:right;margin-right:16px">' +
         '<div style="font-size:16px;font-weight:800">' + montant.toLocaleString('fr-FR',{style:'currency',currency:'EUR'}) + '</div>' +
-        '<div style="font-size:11px;color:var(--color-text-secondary)">Loyer + charges</div>' +
+        '<div style="font-size:11px;color:var(--color-text-secondary)">' + (_amt.partial ? 'Prorata ' + _amt.days + '/' + _amt.dim + ' jours (du ' + _amt.from + ' au ' + _amt.to + ')' : 'Loyer + charges') + '</div>' +
       '</div>' +
       '<button onclick="toggleLoyer(&#39;' + l.id + '&#39;,&#39;' + month + '&#39;)" style="' +
         'padding:8px 18px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;min-width:110px;' +
@@ -7259,14 +7305,15 @@ async function genererEtEnvoyerQuittance(leaseId, month) {
 
   var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
   var sigBailleur = f.sig_bailleur || profile.sig_bailleur || '';
-  var rent = parseFloat(f.rent||0);
-  var charges = parseFloat(f.charges||0);
-  var total = rent + charges;
+  var _amt = leaseAmountsForMonth(lease, month);
+  var rent = _amt.rent;
+  var charges = _amt.charges;
+  var total = _amt.total;
 
   // Label mois
   var moisLabel = new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric'}).format(new Date(month+'-01T12:00:00'));
   var subject = 'Quittance de loyer — ' + moisLabel;
-  var body = genQuittanceHTML(f, moisLabel, rent, charges, total, sigBailleur, profile);
+  var body = genQuittanceHTML(f, moisLabel, rent, charges, total, sigBailleur, profile, prorataLabel(_amt, month));
 
   // Enregistrer dans messages
   await db.from('messages').insert({
@@ -7487,7 +7534,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
         <div class="form-group">
           <label>Mois concerné *</label>
-          <input type="month" id="qm-month" />
+          <input type="month" id="qm-month" onchange="var s=document.getElementById('qm-lease-select'); if (s && s.value) qmFillFromLease(s.value);" />
         </div>
         <div class="form-row">
           <div class="form-group">
