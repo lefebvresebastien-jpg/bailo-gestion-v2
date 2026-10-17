@@ -296,6 +296,21 @@
         html = html.replace(re, 'data-bind="' + key + '">' + values[key]);
       });
 
+      // Co-titulaire (couple, colocation) — 17/10/2026
+      if (f.cotenantName) {
+        var t2 = ', et <strong>' + f.cotenantName + '</strong>' +
+          (f.cotenantDOB ? ', né(e) le ' + formatDate(f.cotenantDOB) : '') +
+          (f.cotenantIdDoc ? ', pièce d\'identité ' + f.cotenantIdDoc : '') +
+          ((f.cotenantPhone || f.cotenantEmail) ? ', joignable au ' + (f.cotenantPhone || '—') + ' et à ' + (f.cotenantEmail || '—') : '') +
+          ', tous deux co-titulaires du présent bail et tenus solidairement';
+        html = html.replace('<span id="tenant2-bail-text"></span>', '<span id="tenant2-bail-text">' + t2 + '</span>');
+        var rel = (f.cotenantRelation || '').toLowerCase();
+        if (rel.indexOf('mari') === -1 && rel.indexOf('pacs') === -1) {
+          var p81 = '<p style="margin-top:6px"><strong>Départ de l\'un des Locataires :</strong> conformément à l\'article 8-1 de la loi du 6 juillet 1989, le Locataire qui donne congé reste tenu solidairement des sommes dues jusqu\'à la date à laquelle un nouveau locataire, agréé par le Bailleur, figure au bail à sa place, et au plus tard jusqu\'à l\'expiration d\'un délai de six mois après la fin de son préavis. Le bail se poursuit avec le Locataire restant.</p>';
+          html = html.replace('</section>\n\n        <!-- Art 12 -->', p81 + '</section>\n\n        <!-- Art 12 -->');
+        }
+      }
+
       return html;
     }
 
@@ -325,6 +340,7 @@
         '<div class="signature-grid">' +
           sigBlock('Le Bailleur', f.landlordName || '', 'sig-bailleur', f.sig_bailleur, true) +
           sigBlock('Le Locataire', f.tenantName || '', 'sig-locataire', f.sig_locataire, true) +
+          (f.cotenantName ? sigBlock('Le Locataire (co-titulaire)', f.cotenantName, 'sig-cotitulaire', f.sig_cotitulaire, false) : '') +
         '</div>';
 
       // Garant si présent
@@ -719,8 +735,8 @@
       if (!resp.data) { alert('Erreur : bail introuvable.'); return; }
       var leaseData = resp.data.data || {};
       var fd = leaseData.formData || {};
-      fd.sig_locataire = sig;
-      fd.sig_locataire_at = new Date().toISOString();
+      fd[_sigField] = sig;
+      fd[_sigField + '_at'] = new Date().toISOString();
       var annexes = ['chk-notice','chk-dpe','chk-erp','chk-repartition','chk-radon','chk-bail'];
       var annexChecks = {};
       annexes.forEach(function(id){ var el=document.getElementById(id); if(el) annexChecks[id]=el.checked; });
@@ -758,6 +774,7 @@
     // serveur send-signwell.js (vérifie que l'appelant est bien le bailleur
     // du bail avant d'utiliser la clé, gardée uniquement côté serveur).
     var _currentLeaseId = null;
+    var _sigField = 'sig_locataire'; // 'sig_cotitulaire' quand le co-titulaire signe
     var _currentLeaseData = null;
 
     async function envoyerSignatureSignWell() {
@@ -819,7 +836,9 @@
     async function loadAndRender() {
       var params = new URLSearchParams(window.location.search);
       var leaseId = params.get('lease');
-      var modeLocataire = params.get('mode') === 'locataire';
+      var modeCotitulaire = params.get('mode') === 'cotitulaire';
+      var modeLocataire = params.get('mode') === 'locataire' || modeCotitulaire;
+      if (modeCotitulaire) _sigField = 'sig_cotitulaire';
       var modeGarant = params.get('mode') === 'garant';
 
       if (!leaseId) {
@@ -880,6 +899,7 @@
         loadSig('sig-bailleur', f.sig_bailleur);
         loadSig('sig-locataire', f.sig_locataire);
         loadSig('sig-garant', f.sig_garant);
+        loadSig('sig-cotitulaire', f.sig_cotitulaire);
 
         // Masquer les "← Zone de signature" si signature présente
         if (f.sig_bailleur || f.sig_locataire) {
@@ -938,11 +958,11 @@
         if (eligBlock) { var s19 = eligBlock.closest('section'); if (s19) s19.style.display = 'none'; }
 
         // Déjà signé ?
-        var alreadySigned = !!f.sig_locataire;
+        var alreadySigned = !!f[_sigField];
         if (alreadySigned) {
           setTimeout(function() {
             var cl = document.getElementById('sig-locataire');
-            if (cl) { var img2=new Image(); img2.onload=function(){ cl.getContext('2d').drawImage(img2,0,0,cl.width,cl.height); }; img2.src=f.sig_locataire; }
+            if (cl && !modeCotitulaire) { var img2=new Image(); img2.onload=function(){ cl.getContext('2d').drawImage(img2,0,0,cl.width,cl.height); }; img2.src=f.sig_locataire; }
           }, 600);
         }
 
@@ -952,7 +972,7 @@
         bloc.style.cssText = 'max-width:800px;margin:24px auto;padding:0 16px 40px;font-family:Inter,sans-serif';
         bloc.innerHTML =
           '<div style="background:#fffdf8;border:2px solid #d4c8b8;border-radius:12px;padding:20px">' +
-          '<div style="font-size:15px;font-weight:700;margin-bottom:16px;color:#1a1208;border-bottom:1px solid #e0d5c8;padding-bottom:10px">✍️ Signature du bail</div>' +
+          '<div style="font-size:15px;font-weight:700;margin-bottom:16px;color:#1a1208;border-bottom:1px solid #e0d5c8;padding-bottom:10px">✍️ Signature du bail' + (modeCotitulaire ? ' — ' + (f.cotenantName || 'co-titulaire') : '') + '</div>' +
           '<p style="font-size:13px;color:#3a2a18;margin-bottom:16px">Avant de signer, confirmez avoir recu et lu les documents suivants :</p>' +
           '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-notice" onchange="checkAnnexes()"' + (alreadySigned?' checked':'') + '> Notice d&#39;information droits et obligations (Décret 2015-587)</label>' +
           '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;font-size:13px;cursor:pointer"><input type="checkbox" id="chk-dpe" onchange="checkAnnexes()"' + (alreadySigned?' checked':'') + '> Diagnostic de Performance Energétique (DPE)</label>' +
@@ -1101,6 +1121,7 @@
       // Nouvelle signature détectée ?
       if (
         (newF.sig_locataire && !prevF.sig_locataire) ||
+        (newF.sig_cotitulaire && !prevF.sig_cotitulaire) ||
         (newF.sig_garant && !prevF.sig_garant)
       ) {
         _currentLeaseData = resp.data.data;

@@ -12,7 +12,7 @@
 //   - une signature déjà présente n'est JAMAIS écrasée ;
 //   - la signature du bailleur n'est jamais modifiable par ici.
 //
-// POST { leaseId, formData: { sig_locataire, sig_locataire_at, sig_garant,
+// POST { leaseId, formData: { sig_locataire, sig_locataire_at, sig_cotitulaire, sig_cotitulaire_at, sig_garant,
 //        sig_garant_at, annexChecks, annexesValidatedAt },
 //        edlSign: { locataire, locataireAt, locataireExit, locataireExitAt } }
 const https = require('https');
@@ -20,7 +20,7 @@ const https = require('https');
 const SUPABASE_URL = 'https://nltuysmnxsomlhgvbtwz.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_GESTION_SERVICE_KEY;
 
-const FD_SIGS = { sig_locataire: 'sig_locataire_at', sig_garant: 'sig_garant_at' };
+const FD_SIGS = { sig_locataire: 'sig_locataire_at', sig_cotitulaire: 'sig_cotitulaire_at', sig_garant: 'sig_garant_at' };
 const FD_FREE = ['annexChecks', 'annexesValidatedAt']; // cases d'annexes cochées : modifiables
 const EDL_SIGS = { locataire: 'locataireAt', locataireExit: 'locataireExitAt' };
 const MAX_SIG_LEN = 600000; // ~450 Ko d'image PNG
@@ -81,6 +81,7 @@ exports.handler = async (event) => {
     Object.keys(FD_SIGS).forEach(k => {
       if (!isSig(inFd[k])) return;
       if (k === 'sig_garant' && !fd.guarantorName) return; // pas de garant prévu au bail
+      if (k === 'sig_cotitulaire' && !fd.cotenantName) return; // pas de co-titulaire prévu au bail
       if (fd[k]) return; // déjà signé : on n'écrase jamais
       fd[k] = inFd[k];
       fd[FD_SIGS[k]] = isDate(inFd[FD_SIGS[k]]) ? inFd[FD_SIGS[k]] : new Date().toISOString();

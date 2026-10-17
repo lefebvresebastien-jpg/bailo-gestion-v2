@@ -47,7 +47,7 @@
       // 0 ligne modifiée : ce compte n'est pas le bailleur de ce bail → voie locataire
     }
     var fd = (leaseData && leaseData.formData) || {};
-    var keys = ['sig_locataire', 'sig_locataire_at', 'sig_garant', 'sig_garant_at', 'annexChecks', 'annexesValidatedAt'];
+    var keys = ['sig_locataire', 'sig_locataire_at', 'sig_cotitulaire', 'sig_cotitulaire_at', 'sig_garant', 'sig_garant_at', 'annexChecks', 'annexesValidatedAt'];
     var payload = { leaseId: leaseId, formData: {}, edlSign: (leaseData && leaseData.edlSign) || null };
     keys.forEach(function (k) { if (fd[k] !== undefined) payload.formData[k] = fd[k]; });
     try {

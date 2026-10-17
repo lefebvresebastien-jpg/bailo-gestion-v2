@@ -2946,6 +2946,12 @@ function modifierBail(leaseId) {
     tenantPhone: f.tenantPhone || '',
     tenantAddress: f.tenantAddress || '',
     tenantIdDoc: f.tenantIdDoc || '',
+    cotenantName: f.cotenantName || '',
+    cotenantRelation: f.cotenantRelation || '',
+    cotenantDOB: f.cotenantDOB || '',
+    cotenantIdDoc: f.cotenantIdDoc || '',
+    cotenantEmail: f.cotenantEmail || '',
+    cotenantPhone: f.cotenantPhone || '',
     guarantorName: f.guarantorName || '',
     guarantorType: f.guarantorType || '',
     guarantorAddress: f.guarantorAddress || '',
@@ -3076,6 +3082,30 @@ async function envoyerLienSignature(leaseId) {
     showToast('Lien envoyé à ' + f.tenantEmail + ' ✅');
   }
 
+  // Email co-titulaire si présent (lien direct vers le contrat en mode co-titulaire)
+  if (f.cotenantName && f.cotenantEmail) {
+    const _lt = (f.leaseType || '').toLowerCase();
+    const _page = _lt.includes('meubl') ? 'contrat-meuble.html' : 'contrat.html';
+    const lienCot = 'https://gestion.bailo.pro/' + _page + '?lease=' + leaseId + '&mode=cotitulaire';
+    const htmlCot = '<div style="font-family:sans-serif;max-width:560px;color:#1a1208">' +
+      '<div style="background:#1a1208;padding:16px 20px;border-radius:8px 8px 0 0"><span style="color:#e8793a;font-weight:700;font-size:16px">🏠 Bailo Gestion</span></div>' +
+      '<div style="background:#fff;padding:24px;border:1px solid #e0d5c8;border-radius:0 0 8px 8px">' +
+      '<h2 style="font-size:18px;margin-bottom:12px">Votre bail est prêt à signer</h2>' +
+      '<p style="margin-bottom:12px">Bonjour <strong>' + f.cotenantName + '</strong>,</p>' +
+      '<p style="margin-bottom:12px">Vous êtes co-titulaire, avec <strong>' + (f.tenantName||'') + '</strong>, du bail du logement :</p>' +
+      '<p style="font-weight:700;font-size:15px;margin-bottom:20px;padding:12px;background:#f8f4ee;border-radius:8px">' + (f.propertyAddress||'') + '</p>' +
+      '<a href="' + lienCot + '" style="display:block;background:#1a1208;color:white;padding:14px 24px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px;text-align:center;margin-bottom:16px">✍️ Lire et signer le bail</a>' +
+      '<p style="font-size:11px;color:#9a8a70;border-top:1px solid #e0d5c8;padding-top:12px">Ce lien vous est personnel. Ne le partagez pas.</p>' +
+      '</div></div>';
+    const __sessC = (await db.auth.getSession()).data.session;
+    const __respC = await fetch('/.netlify/functions/send-email-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (__sessC ? __sessC.access_token : '') },
+        body: JSON.stringify({ to: [f.cotenantEmail], subject: 'Votre bail est prêt à signer — ' + (f.propertyAddress||''), html: htmlCot, resend_key: resendKey })
+      }).catch(function(e) { return { ok: false, status: e.message }; });
+    showToast(__respC.ok ? 'Lien de signature envoyé aussi à ' + f.cotenantName + ' ✅' : 'Échec de l\'envoi au co-titulaire (' + __respC.status + ')', __respC.ok ? '' : 'error', 5000);
+  }
+
   // Marquer comme "lien envoyé" dans Supabase — recharger data frais pour ne pas ecraser edlEntry
   const { data: freshLease1 } = await db.from('leases').select('data').eq('id', leaseId).single();
   const leaseData = Object.assign({}, freshLease1?.data || lease.data || {}, { linkSentAt: new Date().toISOString() });
@@ -3110,10 +3140,12 @@ async function renderSignatureStatus(leaseId) {
   let html = sigRow('Bailleur', sigB, f.landlordEmail, '🏠');
   const hasGarant = !!(f.guarantorName && f.guarantorName.trim() && f.guarantorName !== 'Aucun garant renseigné');
   html += sigRow('Locataire', sigL, f.tenantEmail, '👤');
+  const hasCot = !!(f.cotenantName && f.cotenantName.trim());
+  if (hasCot) html += sigRow('Co-titulaire — ' + f.cotenantName, f.sig_cotitulaire, f.cotenantEmail, '👥');
   if (hasGarant) html += sigRow('Garant — ' + (f.guarantorName||''), sigG, f.guarantorEmail, '🤝');
 
   // Statut global
-  const allSigned = sigB && sigL && (!hasGarant || sigG);
+  const allSigned = sigB && sigL && (!hasCot || f.sig_cotitulaire) && (!hasGarant || sigG);
   html += '<div style="margin-top:12px;padding:10px 14px;border-radius:8px;text-align:center;font-size:13px;font-weight:700;' +
     (allSigned ? 'background:#dcfce7;color:#166534' : 'background:#f1ede7;color:#6a5a40') + '">' +
     (allSigned ? '✅ Bail signé par toutes les parties' : '⏳ En attente de signature(s)') + '</div>';
@@ -3233,7 +3265,14 @@ function renderLeaseDetail(lease) {
     field('Téléphone', f.tenantPhone) +
     field('Date de naissance', f.tenantDOB ? formatDate(f.tenantDOB) : '') +
     field('Adresse actuelle', f.tenantAddress) +
-    field('Pièce d\'identité', f.tenantIdDoc) || '<div class="list-empty">Aucune info</div>';
+    field('Pièce d\'identité', f.tenantIdDoc) +
+    (f.cotenantName ?
+      '<div style="font-size:11px;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.05em;margin:12px 0 4px">Co-titulaire (' + (f.cotenantRelation||'') + ')</div>' +
+      field('Nom complet', f.cotenantName) +
+      field('Email', f.cotenantEmail) +
+      field('Téléphone', f.cotenantPhone) +
+      field('Date de naissance', f.cotenantDOB ? formatDate(f.cotenantDOB) : '') +
+      field('Pièce d\'identité', f.cotenantIdDoc) : '') || '<div class="list-empty">Aucune info</div>';
 
   // Garant
   document.getElementById('detail-garant').innerHTML =
@@ -4789,6 +4828,7 @@ const WIZARD_STEPS_CONTENT = {
         '<div class="form-group"><label>Immatriculation RCS</label>' +
         '<input type="text" id="w-tenantRCS" value="' + (d.tenantRCS||'') + '" placeholder="Paris B 123 456 789" /></div>'
       : '') +
+      _cotenantSection(d) +
       '<div class="wizard-section-title" style="margin-top:var(--space-lg)">Le garant (optionnel)</div>' +
       '<div class="form-row">' +
         '<div class="form-group"><label>Nom du garant</label>' +
@@ -4954,13 +4994,14 @@ const WIZARD_STEPS_CONTENT = {
       ['Surface', d.surface||'—'],
       ['Locataire', d.tenantName||'—'],
       ['Email', d.tenantEmail||'—'],
+      ].concat(d.cotenantName ? [['Co-titulaire', d.cotenantName + (d.cotenantRelation ? ' (' + d.cotenantRelation + ')' : '')]] : []).concat([
       ['Loyer HC', formatCurrency(d.rent)],
       ['Charges', formatCurrency(d.charges)],
       ['Loyer CC', '<strong>' + formatCurrency(loyer) + '</strong>'],
       ['Depot', formatCurrency(d.deposit)],
       ['Duree', d.duration||'3 ans'],
       ['Prise d\'effet', formatDate(d.effectiveDate)]
-    ];
+    ]);
     return '<div class="wizard-section-title">Confirmation</div>' +
       '<div class="confirm-summary">' +
       rows.map(function(r){ return '<div class="confirm-row"><span>' + r[0] + '</span><span>' + r[1] + '</span></div>'; }).join('') +
@@ -5039,6 +5080,56 @@ function selectExistingTenant(t) {
   } else {
     renderWizardStep();
   }
+}
+
+// ── Co-titulaire du bail (couple, colocation) — ajouté le 17/10/2026 ──
+var COTENANT_RELATIONS = ['Concubinage', 'Colocation', 'Mariés', 'Pacsés'];
+function _cotenantSection(d) {
+  var has = !!(d.cotenantName && String(d.cotenantName).trim());
+  var opts = COTENANT_RELATIONS.map(function(r){ return '<option value="' + r + '"' + ((d.cotenantRelation||'Concubinage')===r?' selected':'') + '>' + r + '</option>'; }).join('');
+  var esc = function(v){ return String(v||'').replace(/"/g,'&quot;'); };
+  return '<div class="wizard-section-title" style="margin-top:var(--space-lg)">Deuxième locataire — co-titulaire (optionnel)</div>' +
+    '<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px;cursor:pointer">' +
+      '<input type="checkbox" id="w-hasCotenant"' + (has?' checked':'') + ' onchange="document.getElementById(\'w-cotenant-fields\').style.display=this.checked?\'\':\'none\'">' +
+      ' Le bail est signé par deux personnes (couple, colocation)</label>' +
+    '<div id="w-cotenant-fields" style="' + (has?'':'display:none') + '">' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Nom complet du co-titulaire</label>' +
+        '<input type="text" id="w-cotenantName" value="' + esc(d.cotenantName) + '" placeholder="Mme Marie Martin" /></div>' +
+        '<div class="form-group"><label>Lien entre les locataires</label>' +
+        '<select id="w-cotenantRelation">' + opts + '</select></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Date de naissance</label>' +
+        '<input type="date" id="w-cotenantDOB" value="' + esc(d.cotenantDOB) + '" /></div>' +
+        '<div class="form-group"><label>Pièce d\'identité</label>' +
+        '<input type="text" id="w-cotenantIdDoc" value="' + esc(d.cotenantIdDoc) + '" placeholder="CNI n 123456789" /></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label>Email <span style="font-weight:400;color:var(--color-text-secondary)">(pour signer le bail)</span></label>' +
+        '<input type="email" id="w-cotenantEmail" value="' + esc(d.cotenantEmail) + '" placeholder="co-titulaire@mail.fr" /></div>' +
+        '<div class="form-group"><label>Téléphone</label>' +
+        '<input type="tel" id="w-cotenantPhone" value="' + esc(d.cotenantPhone) + '" placeholder="06 12 34 56 78" /></div>' +
+      '</div>' +
+      '<div style="font-size:11px;color:var(--color-text-secondary);margin:-4px 0 8px">Les deux locataires seront tenus solidairement (loyer, charges, réparations). Chacun signe le bail.</div>' +
+    '</div>';
+}
+function _cotenantFromForm(gf) {
+  var chk = document.getElementById('w-hasCotenant');
+  if (!chk) return null;
+  if (!chk.checked) return { cotenantName:'', cotenantRelation:'', cotenantDOB:'', cotenantIdDoc:'', cotenantEmail:'', cotenantPhone:'' };
+  return {
+    cotenantName: gf('w-cotenantName'), cotenantRelation: gf('w-cotenantRelation'),
+    cotenantDOB: gf('w-cotenantDOB'), cotenantIdDoc: gf('w-cotenantIdDoc'),
+    cotenantEmail: gf('w-cotenantEmail'), cotenantPhone: gf('w-cotenantPhone')
+  };
+}
+function _cotenantFields(f) {
+  return {
+    cotenantName: f.cotenantName || '', cotenantRelation: f.cotenantRelation || '',
+    cotenantDOB: f.cotenantDOB || '', cotenantIdDoc: f.cotenantIdDoc || '',
+    cotenantEmail: f.cotenantEmail || '', cotenantPhone: f.cotenantPhone || ''
+  };
 }
 
 function _selectTenant(idx) {
@@ -5191,6 +5282,8 @@ function collectStepData() {
         _wizardData.guarantorEmail = g('w-guarantorEmail');
         _wizardData.guarantorIncome = g('w-guarantorIncome');
       }
+      var _cot = _cotenantFromForm(g);
+      if (_cot) Object.assign(_wizardData, _cot);
       _wizardData.tenantLegalForm = g('w-tenantLegalForm');
       _wizardData.tenantSiret = g('w-tenantSiret');
       _wizardData.tenantRCS = g('w-tenantRCS');
@@ -5367,6 +5460,12 @@ async function createLease() {
         tenantPhone: _wizardData.tenantPhone || '',
         tenantAddress: _wizardData.tenantAddress || '',
         tenantIdDoc: _wizardData.tenantIdDoc || '',
+        cotenantName: _wizardData.cotenantName || '',
+        cotenantRelation: _wizardData.cotenantName ? (_wizardData.cotenantRelation || 'Concubinage') : '',
+        cotenantDOB: _wizardData.cotenantDOB || '',
+        cotenantIdDoc: _wizardData.cotenantIdDoc || '',
+        cotenantEmail: _wizardData.cotenantEmail || '',
+        cotenantPhone: _wizardData.cotenantPhone || '',
         guarantorName: _wizardData.guarantorName || '',
         guarantorType: _wizardData.guarantorType || '',
         guarantorAddress: _wizardData.guarantorAddress || '',
@@ -5794,6 +5893,12 @@ async function nouveauBailMemeLocataire(leaseId) {
     tenantPhone: f.tenantPhone || '',
     tenantAddress: f.propertyAddress || f.tenantAddress || '',
     tenantIdDoc: f.tenantIdDoc || '',
+    cotenantName: f.cotenantName || '',
+    cotenantRelation: f.cotenantRelation || '',
+    cotenantDOB: f.cotenantDOB || '',
+    cotenantIdDoc: f.cotenantIdDoc || '',
+    cotenantEmail: f.cotenantEmail || '',
+    cotenantPhone: f.cotenantPhone || '',
     guarantorName: f.guarantorName || '',
     guarantorType: f.guarantorType || '',
     guarantorAddress: f.guarantorAddress || '',
