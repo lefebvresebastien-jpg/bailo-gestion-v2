@@ -1518,15 +1518,28 @@ function dateToTrimestre(dateStr) {
   return 'T' + q + ' ' + year;
 }
 
+// Anniversaire concerné par la révision : le 1er a lieu un an après la date
+// d'effet, jamais avant (art. 17-1 loi 89-462). Un anniversaire passé depuis
+// moins de 60 jours reste le courant tant que le bailleur n'a pas décidé.
 function checkAnniversaireBail(effectiveDate) {
   if (!effectiveDate) return null;
   var dateEffet = new Date(effectiveDate);
-  var today = new Date();
-  // 1re révision possible au 1er anniversaire du bail, jamais avant (art. 17-1 loi 89-462)
+  var today = new Date(); today.setHours(0, 0, 0, 0);
   var anniversaire = new Date(dateEffet.getFullYear() + 1, dateEffet.getMonth(), dateEffet.getDate());
-  while (anniversaire < today) anniversaire.setFullYear(anniversaire.getFullYear() + 1);
-  var joursRestants = Math.ceil((anniversaire - today) / (1000 * 60 * 60 * 24));
-  return { date: anniversaire, joursRestants: joursRestants };
+  var limite = new Date(today.getTime() - 60 * 86400000);
+  while (anniversaire < limite) anniversaire.setFullYear(anniversaire.getFullYear() + 1);
+  var joursRestants = Math.round((anniversaire - today) / 86400000);
+  return { date: anniversaire, joursRestants: joursRestants, cle: irlCleAnniv(anniversaire) };
+}
+function irlCleAnniv(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+// Décision du bailleur pour un anniversaire : { decision: 'validee'|'refusee', date, ... } ou null
+function irlDecision(f, cle) {
+  return (f && f.irlDecisions && cle && f.irlDecisions[cle]) || null;
+}
+function irlJoursTexte(j) {
+  return j > 0 ? 'dans <strong>' + j + ' jour' + (j > 1 ? 's' : '') + '</strong>' : j === 0 ? "<strong>aujourd'hui</strong>" : 'passée depuis <strong>' + (-j) + ' jour' + (j < -1 ? 's' : '') + '</strong>';
 }
 
 function calculerRevision(loyerActuel, indiceRef, indiceNouvel) {
@@ -1558,6 +1571,7 @@ async function ouvrirPanneauIRL(leaseId) {
   }
   var latest = getLatest();
   var anniversaire = checkAnniversaireBail(f.effectiveDate);
+  var decisionIRL = anniversaire ? irlDecision(f, anniversaire.cle) : null;
   var trimestreNouvel = latest.trimestre;
   var indiceNouvel = latest.indice;
   var revision = calculerRevision(loyerActuel, indiceRef, indiceNouvel);
@@ -1566,8 +1580,11 @@ async function ouvrirPanneauIRL(leaseId) {
   var annivHtml = anniversaire ? (
     '<div style="background:#fff8ed;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#92400e">' +
     'Date anniversaire : <strong>' + anniversaire.date.toLocaleDateString('fr-FR') + '</strong>' +
-    ' &mdash; dans <strong>' + anniversaire.joursRestants + ' jours</strong>' +
-    (anniversaire.joursRestants <= 30 ? ' <span style="color:#c84b00;font-weight:700">&#9888; Revision imminente !</span>' : '') +
+    ' &mdash; ' + irlJoursTexte(anniversaire.joursRestants) +
+    (decisionIRL ? (decisionIRL.decision === 'validee'
+        ? ' <span style="color:#166534;font-weight:700">&#10003; Révision validée le ' + new Date(decisionIRL.date).toLocaleDateString('fr-FR') + '</span>'
+        : ' <span style="color:#6b7280;font-weight:700">&#10005; Révision refusée le ' + new Date(decisionIRL.date).toLocaleDateString('fr-FR') + ' (loyer inchangé)</span>')
+      : (anniversaire.joursRestants <= 30 ? ' <span style="color:#c84b00;font-weight:700">&#9888; Révision à décider</span>' : '')) +
     '</div>'
   ) : '';
 
@@ -1621,7 +1638,9 @@ async function ouvrirPanneauIRL(leaseId) {
     '<div style="display:flex;gap:10px;justify-content:flex-end">' +
     '<button onclick="document.getElementById(\'irl-overlay\').remove()" style="padding:9px 18px;border:1.5px solid var(--color-border);border-radius:8px;background:none;font-size:13px;cursor:pointer;color:var(--color-text)">Fermer</button>' +
     '<button onclick="envoyerEmailIRL(\'' + leaseId + '\')" style="padding:9px 18px;border:1.5px solid var(--color-border);border-radius:8px;background:var(--color-bg-secondary);font-size:13px;cursor:pointer;color:var(--color-text)">📧 Email bailleur</button>' +
-    '<button id="btn-appliquer-irl" onclick="appliquerRevisionIRL(\'' + leaseId + '\',' + loyerActuel + ',\'' + (refParsed ? refParsed.trimestre : trimestreNouvel) + '\')" style="padding:9px 18px;background:#e8793a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">✅ Appliquer</button>' +
+    (decisionIRL ? '' :
+      '<button onclick="refuserRevisionIRL(\'' + leaseId + '\',\'' + (anniversaire ? anniversaire.cle : '') + '\')" style="padding:9px 18px;border:1.5px solid var(--color-border);border-radius:8px;background:none;font-size:13px;font-weight:600;cursor:pointer;color:var(--color-text)">✖ Ne pas réviser cette année</button>' +
+      '<button id="btn-appliquer-irl" onclick="appliquerRevisionIRL(\'' + leaseId + '\',' + loyerActuel + ',\'' + (refParsed ? refParsed.trimestre : trimestreNouvel) + '\',\'' + (anniversaire ? anniversaire.cle : '') + '\')" style="padding:9px 18px;background:#e8793a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">✅ Valider la révision</button>') +
     '</div>' +
     '</div></div>';
 
@@ -1657,7 +1676,29 @@ function recalcIRL(loyerActuel) {
   }
 }
 
-async function appliquerRevisionIRL(leaseId, loyerActuel, trimestreRef) {
+// Le bailleur décide de ne pas augmenter le loyer pour cet anniversaire
+async function refuserRevisionIRL(leaseId, cleAnniv) {
+  if (!cleAnniv) { showToast('Date anniversaire introuvable.', 'error'); return; }
+  if (!confirm('Ne pas réviser le loyer cette année ?\n\nLe loyer reste inchangé, le locataire n\'est pas prévenu et vous ne serez plus relancé pour cet anniversaire.')) return;
+  const { data: fresh, error: e1 } = await db.from('leases').select('data').eq('id', leaseId).single();
+  if (e1) { showToast('Erreur : ' + e1.message, 'error'); return; }
+  var ld = JSON.parse(JSON.stringify(fresh?.data || {}));
+  var fd = ld.formData || {};
+  fd.irlDecisions = fd.irlDecisions || {};
+  if (fd.irlDecisions[cleAnniv]) { showToast('Une décision est déjà enregistrée pour cet anniversaire.', 'error'); return; }
+  fd.irlDecisions[cleAnniv] = { decision: 'refusee', date: new Date().toISOString(), loyer: parseFloat(fd.rent) || 0 };
+  ld.formData = fd;
+  var res = await db.from('leases').update({ data: ld }).eq('id', leaseId);
+  if (res.error) { showToast('Erreur : ' + res.error.message, 'error'); return; }
+  var idx = _allLeases.findIndex(function(l) { return l.id === leaseId; });
+  if (idx >= 0) _allLeases[idx].data = ld;
+  document.getElementById('irl-overlay')?.remove();
+  showToast('Révision non appliquée : le loyer reste inchangé cette année.');
+  if (currentDetailLeaseId === leaseId) loadLeaseDetail(leaseId);
+  if (typeof loadAlertes === 'function') loadAlertes();
+}
+
+async function appliquerRevisionIRL(leaseId, loyerActuel, trimestreRef, cleAnniv) {
   var ref = parseFloat(document.getElementById('irl-ref-input')?.value);
   var nouvel = parseFloat(document.getElementById('irl-nouvel-input')?.value);
   if (!ref || !nouvel) { showToast('Veuillez renseigner les deux indices.', 'error'); return; }
@@ -1683,6 +1724,10 @@ async function appliquerRevisionIRL(leaseId, loyerActuel, trimestreRef) {
     trimestreRef: trimestreRef,
     trimestreNouvel: latest.trimestre
   });
+  if (cleAnniv) {
+    fd.irlDecisions = fd.irlDecisions || {};
+    fd.irlDecisions[cleAnniv] = { decision: 'validee', date: new Date().toISOString(), ancienLoyer: loyerActuel, loyer: nouveauLoyer };
+  }
   ld.formData = fd;
   var res = await db.from('leases').update({ data: ld }).eq('id', leaseId);
   if (res.error) { showToast('Erreur : ' + res.error.message, 'error'); return; }
@@ -1693,6 +1738,7 @@ async function appliquerRevisionIRL(leaseId, loyerActuel, trimestreRef) {
   showToast('Loyer mis à jour : ' + nouveauLoyer.toFixed(2) + ' \u20ac \u2014 Référence IRL actualisée ✅');
   // Recharger le détail
   if (currentDetailLeaseId === leaseId) loadLeaseDetail(leaseId);
+  if (typeof loadAlertes === 'function') loadAlertes();
 }
 
 async function envoyerEmailIRL(leaseId) {
@@ -2492,18 +2538,16 @@ async function loadAlertes() {
       return;
     }
 
-    // ── 1. Révision IRL (date anniversaire du bail)
+    // ── 1. Révision IRL (date anniversaire du bail) — jusqu'à ce que le bailleur valide ou refuse
     if (f.effectiveDate) {
-      const effet = new Date(f.effectiveDate);
-      // 1er anniversaire au plus tôt : pas d'alerte de révision la 1re année du bail
-      const anniv = new Date(effet.getFullYear() + 1, effet.getMonth(), effet.getDate()); while (anniv < today) anniv.setFullYear(anniv.getFullYear() + 1);
-      const joursAvant = Math.round((anniv - today) / 86400000);
-      if (joursAvant <= 60) {
+      const annivIRL = checkAnniversaireBail(f.effectiveDate);
+      const joursAvant = annivIRL ? annivIRL.joursRestants : 999;
+      if (annivIRL && joursAvant <= 60 && !irlDecision(f, annivIRL.cle)) {
         alertes.push({
           type: joursAvant <= 14 ? 'danger' : 'warning',
           icon: '📊',
-          titre: 'Révision IRL — ' + nom,
-          detail: 'Date anniversaire du bail dans ' + joursAvant + ' jour(s) (' + anniv.toLocaleDateString('fr-FR') + '). Pensez à calculer la révision de loyer.',
+          titre: 'Révision IRL à décider — ' + nom,
+          detail: 'Date anniversaire du bail ' + irlJoursTexte(joursAvant).replace(/<\/?strong>/g, '') + ' (' + annivIRL.date.toLocaleDateString('fr-FR') + '). Ouvrez le bail, bouton « Révision IRL », pour valider ou refuser l\'augmentation.',
           action: function() { openLeaseDetail(lease.id); },
           leaseId: lease.id
         });

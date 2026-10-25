@@ -14,6 +14,29 @@ const SUPABASE_URL = 'https://nltuysmnxsomlhgvbtwz.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_GESTION_SERVICE_KEY;
 const BASE_URL = 'https://gestion.bailo.pro';
 
+
+const crypto = require('crypto');
+
+// Anniversaire « concerné » par la révision : le 1er a lieu un an après la
+// date d'effet (jamais avant). Un anniversaire passé depuis moins de 60 jours
+// reste le courant tant que le bailleur n'a pas décidé (validé ou refusé).
+function anniversaireConcerne(effet, today) {
+  const a = new Date(effet.getFullYear() + 1, effet.getMonth(), effet.getDate());
+  const limite = new Date(today.getTime() - 60 * 86400000);
+  while (a < limite) a.setFullYear(a.getFullYear() + 1);
+  return a;
+}
+function cleAnniv(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+// Lien signé (HMAC) : impossible à fabriquer sans la clé serveur
+function signer(leaseId, anniv, nouveauLoyer) {
+  return crypto.createHmac('sha256', SERVICE_KEY || '').update(leaseId + '|' + anniv + '|' + nouveauLoyer).digest('hex').slice(0, 32);
+}
+function decisionPour(fd, anniv) {
+  return (fd && fd.irlDecisions && fd.irlDecisions[anniv]) || null;
+}
+
 async function sbFetch(path) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     headers: { 'apikey': SERVICE_KEY, 'Authorization': `Bearer ${SERVICE_KEY}` }
@@ -74,8 +97,11 @@ exports.handler = async (event) => {
   const params = event.queryStringParameters || {};
 
   // ── MODE VALIDATION (bailleur clique le bouton dans l'email) ──
-  if (params.action === 'valider' && params.leaseId && params.token) {
-    return handleValidation(params.leaseId, params.token, params.nouveau_loyer);
+  // Les liens de l'email ouvrent d'abord une page de confirmation (GET) : rien
+  // n'est appliqué tant que le bailleur n'a pas cliqué sur le bouton (POST).
+  // Évite qu'un antivirus de messagerie qui « visite » les liens ne valide tout seul.
+  if ((params.action === 'valider' || params.action === 'refuser') && params.leaseId && params.token) {
+    return handleDecision(event, params);
   }
 
   // ── MODE CRON (détection et envoi emails) ──
@@ -120,7 +146,10 @@ exports.handler = async (event) => {
 
       const effet = new Date(f.effectiveDate);
       // 1re révision au 1er anniversaire du bail, jamais avant (art. 17-1 loi 89-462)
-      const anniv = new Date(effet.getFullYear() + 1, effet.getMonth(), effet.getDate()); while (anniv < today) anniv.setFullYear(anniv.getFullYear() + 1);
+      const anniv = anniversaireConcerne(effet, today);
+      const annivKey = cleAnniv(anniv);
+      // Le bailleur a déjà validé ou refusé la révision de cet anniversaire : plus de relance
+      if (decisionPour(f, annivKey)) continue;
       const joursAvant = Math.round((anniv - today) / 86400000);
 
       // Déclencher à J-30 et J-7 (ou force=1 pour test)
@@ -158,8 +187,10 @@ exports.handler = async (event) => {
       const variationPct = ((variation / loyerActuel) * 100).toFixed(2);
 
       // Token de validation sécurisé (simple hash)
-      const token = Buffer.from(lease.id + '_' + nouveauLoyer + '_' + anniv.getFullYear()).toString('base64').replace(/=/g,'');
-      const lienValider = `${BASE_URL}/.netlify/functions/revision-irl?action=valider&leaseId=${lease.id}&token=${token}&nouveau_loyer=${nouveauLoyer}`;
+      const token = signer(lease.id, annivKey, nouveauLoyer);
+      const base = `${BASE_URL}/.netlify/functions/revision-irl?leaseId=${lease.id}&anniv=${annivKey}&nouveau_loyer=${nouveauLoyer}&token=${token}`;
+      const lienValider = `${base}&action=valider`;
+      const lienRefuser = `${base}&action=refuser`;
 
       const urgence = joursAvant <= 7 ? '🚨 URGENT — ' : '';
       const html = `<div style="font-family:sans-serif;max-width:600px;color:#1a1208">
@@ -206,6 +237,12 @@ exports.handler = async (event) => {
             <div style="font-size:11px;color:#9a8a70;margin-top:8px">
               Le locataire sera informé automatiquement par email et message dans son espace
             </div>
+            <div style="margin-top:14px">
+              <a href="${lienRefuser}" style="display:inline-block;background:#fff;color:#6a5a40;border:1.5px solid #d8cbb8;padding:11px 24px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px">
+                ✖ Ne pas réviser cette année
+              </a>
+              <div style="font-size:11px;color:#9a8a70;margin-top:6px">Le loyer reste à ${loyerActuel.toFixed(2).replace('.', ',')} € et vous ne serez plus relancé pour cet anniversaire</div>
+            </div>
           </div>
 
           <div style="text-align:center">
@@ -235,24 +272,53 @@ exports.handler = async (event) => {
   }
 };
 
-// ── Validation : le bailleur a cliqué le bouton ──
-async function handleValidation(leaseId, token, nouveauLoyerStr) {
+// ── Décision du bailleur (liens de l'email) ──
+async function handleDecision(event, params) {
   try {
-    const nouveauLoyer = parseFloat(nouveauLoyerStr);
-    if (!nouveauLoyer) return pageErreur('Montant invalide.');
+    const { leaseId, token, anniv, action } = params;
+    const nouveauLoyer = parseFloat(params.nouveau_loyer);
+    if (!anniv || !/^\d{4}-\d{2}-\d{2}$/.test(anniv) || !nouveauLoyer) return pageErreur('Lien incomplet. Ouvrez la révision depuis Bailo Gestion.');
+    if (token !== signer(leaseId, anniv, params.nouveau_loyer)) return pageErreur('Lien invalide ou expiré. Ouvrez la révision depuis Bailo Gestion.');
 
-    // Charger le bail
-    const leases = await sbFetch(`leases?select=id,data&id=eq.${leaseId}`);
+    const leases = await sbFetch(`leases?select=id,data&id=eq.${encodeURIComponent(leaseId)}`);
     const lease = leases?.[0];
     if (!lease) return pageErreur('Bail introuvable.');
-
     const f = lease.data?.formData || {};
-    const loyerActuel = parseFloat(f.rent) || 0;
-    const anniv = new Date();
+    const deja = decisionPour(f, anniv);
+    const dateAnniv = new Date(anniv + 'T12:00:00').toLocaleDateString('fr-FR');
+    if (deja) {
+      return pageInfo(deja.decision === 'validee' ? '✅' : '✖', 'Décision déjà enregistrée',
+        `La révision du ${dateAnniv} pour ${f.tenantName || 'ce bail'} a déjà été ${deja.decision === 'validee' ? 'validée' : 'refusée'} le ${new Date(deja.date).toLocaleDateString('fr-FR')}. Rien n'a été modifié.`);
+    }
 
-    // Vérifier le token
-    const tokenAttendu = Buffer.from(leaseId + '_' + nouveauLoyer + '_' + anniv.getFullYear()).toString('base64').replace(/=/g,'');
-    if (token !== tokenAttendu) return pageErreur('Token invalide ou expiré.');
+    // 1er passage (GET) : page de confirmation, rien n'est encore appliqué
+    if ((event.httpMethod || 'GET').toUpperCase() !== 'POST') {
+      return pageConfirmation(action, f, nouveauLoyer, dateAnniv, event);
+    }
+
+    if (action === 'refuser') return handleRefus(lease, anniv, dateAnniv);
+    return handleValidation(lease, anniv, nouveauLoyer);
+  } catch (err) {
+    return pageErreur(err.message);
+  }
+}
+
+async function handleRefus(lease, anniv, dateAnniv) {
+  const leaseData = lease.data || {};
+  const fd = leaseData.formData || {};
+  fd.irlDecisions = fd.irlDecisions || {};
+  fd.irlDecisions[anniv] = { decision: 'refusee', date: new Date().toISOString(), loyer: parseFloat(fd.rent) || 0 };
+  leaseData.formData = fd;
+  await sbPatch(`leases?id=eq.${encodeURIComponent(lease.id)}`, { data: leaseData });
+  return pageInfo('✖', 'Révision non appliquée',
+    `Le loyer de ${fd.tenantName || 'ce bail'} reste à ${(parseFloat(fd.rent) || 0).toFixed(2).replace('.', ',')} €. Vous ne serez plus relancé pour l'anniversaire du ${dateAnniv}. La prochaine révision sera proposée l'an prochain.`);
+}
+
+// ── Validation : le bailleur a confirmé ──
+async function handleValidation(lease, anniv, nouveauLoyer) {
+  try {
+    const leaseId = lease.id;
+    const f = lease.data?.formData || {};
 
     const irlData = await fetchIRLCourant();
     const irlNouveauLabel = formatPeriode(irlData.periode) + ' — indice ' + irlData.indice.toFixed(2).replace('.', ',');
@@ -265,9 +331,11 @@ async function handleValidation(leaseId, token, nouveauLoyerStr) {
     fd.irlReference = irlNouveauLabel;
     fd.lastIRLRevision = new Date().toISOString();
     fd.lastIRLAncienLoyer = ancienLoyer;
+    fd.irlDecisions = fd.irlDecisions || {};
+    fd.irlDecisions[anniv] = { decision: 'validee', date: new Date().toISOString(), ancienLoyer: parseFloat(ancienLoyer) || 0, loyer: nouveauLoyer };
     leaseData.formData = fd;
 
-    await sbPatch(`leases?id=eq.${leaseId}`, { data: leaseData });
+    await sbPatch(`leases?id=eq.${encodeURIComponent(leaseId)}`, { data: leaseData });
 
     // Envoyer message + email au locataire
     const keyData = await sbFetch('settings?select=value&key=eq.resend_api_key');
@@ -341,6 +409,44 @@ function pageSucces(tenant, ancienLoyer, nouveauLoyer, dateApplication, leaseId)
     </div>
   </body></html>`;
   return { statusCode: 200, headers: { 'Content-Type': 'text/html' }, body: html };
+}
+
+function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function pageConfirmation(action, f, nouveauLoyer, dateAnniv, event) {
+  const qs = new URLSearchParams(event.queryStringParameters || {}).toString();
+  const loyer = (parseFloat(f.rent) || 0).toFixed(2).replace('.', ',');
+  const valider = action === 'valider';
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Révision du loyer — Bailo</title></head>
+  <body style="font-family:sans-serif;background:#f5f0ea;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:16px">
+    <div style="background:white;border-radius:12px;padding:32px;max-width:480px;width:100%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.08)">
+      <h1 style="font-size:20px;margin:0 0 8px;color:#1a1208">${valider ? 'Valider la révision ?' : 'Ne pas réviser cette année ?'}</h1>
+      <p style="color:#6a5a40;font-size:14px;margin:0 0 20px">${esc(f.tenantName)} — ${esc(f.propertyAddress)}<br>Anniversaire du bail : ${dateAnniv}</p>
+      <div style="background:#f8f4ee;border-radius:10px;padding:16px;margin-bottom:24px;font-size:15px">
+        ${valider
+          ? `Loyer actuel <b>${loyer} €</b> → nouveau loyer <b style="color:#16a34a">${nouveauLoyer.toFixed(2).replace('.', ',')} €</b><br><span style="font-size:12px;color:#6a5a40">Le locataire sera prévenu par email et dans son espace.</span>`
+          : `Le loyer reste à <b>${loyer} €</b>.<br><span style="font-size:12px;color:#6a5a40">Le locataire n'est pas prévenu. Vous ne serez plus relancé pour cet anniversaire.</span>`}
+      </div>
+      <form method="POST" action="/.netlify/functions/revision-irl?${esc(qs)}" style="margin:0 0 12px">
+        <button type="submit" style="background:${valider ? '#16a34a' : '#1a1208'};color:white;border:none;padding:14px 28px;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer">${valider ? '✅ Oui, valider et notifier' : '✖ Oui, ne pas réviser'}</button>
+      </form>
+      <a href="https://gestion.bailo.pro" style="font-size:13px;color:#6a5a40">Annuler et ouvrir Bailo Gestion</a>
+    </div>
+  </body></html>`;
+  return { statusCode: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' }, body: html };
+}
+
+function pageInfo(icone, titre, texte) {
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(titre)} — Bailo</title></head>
+  <body style="font-family:sans-serif;background:#f5f0ea;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:16px">
+    <div style="background:white;border-radius:12px;padding:32px;max-width:480px;width:100%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.08)">
+      <div style="font-size:44px;margin-bottom:12px">${icone}</div>
+      <h1 style="font-size:20px;margin:0 0 8px;color:#1a1208">${esc(titre)}</h1>
+      <p style="color:#6a5a40;font-size:14px;margin:0 0 24px">${esc(texte)}</p>
+      <a href="https://gestion.bailo.pro" style="display:inline-block;background:#1a1208;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Ouvrir Bailo Gestion</a>
+    </div>
+  </body></html>`;
+  return { statusCode: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' }, body: html };
 }
 
 function pageErreur(msg) {

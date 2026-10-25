@@ -46,7 +46,10 @@ function calculerAlertesPourBailleur(leases, today) {
       // 1er anniversaire au plus tôt : rien la 1re année du bail
       const anniv = new Date(effet.getFullYear() + 1, effet.getMonth(), effet.getDate()); while (anniv < today) anniv.setFullYear(anniv.getFullYear() + 1);
       const j = Math.round((anniv - today) / 86400000);
-      if (j === 30 || j === 7) {
+      const cle = anniv.getFullYear() + '-' + String(anniv.getMonth() + 1).padStart(2, '0') + '-' + String(anniv.getDate()).padStart(2, '0');
+      // Révision déjà validée ou refusée par le bailleur pour cet anniversaire : pas de relance
+      const decidee = !!(f.irlDecisions && f.irlDecisions[cle]);
+      if (!decidee && (j === 30 || j === 7)) {
         alertes.push({
           urgence: j <= 7 ? 'URGENT' : 'INFO',
           icon: '📊',
