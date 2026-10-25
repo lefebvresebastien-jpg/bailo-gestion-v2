@@ -1522,8 +1522,9 @@ function checkAnniversaireBail(effectiveDate) {
   if (!effectiveDate) return null;
   var dateEffet = new Date(effectiveDate);
   var today = new Date();
-  var anniversaire = new Date(today.getFullYear(), dateEffet.getMonth(), dateEffet.getDate());
-  if (anniversaire < today) anniversaire.setFullYear(today.getFullYear() + 1);
+  // 1re révision possible au 1er anniversaire du bail, jamais avant (art. 17-1 loi 89-462)
+  var anniversaire = new Date(dateEffet.getFullYear() + 1, dateEffet.getMonth(), dateEffet.getDate());
+  while (anniversaire < today) anniversaire.setFullYear(anniversaire.getFullYear() + 1);
   var joursRestants = Math.ceil((anniversaire - today) / (1000 * 60 * 60 * 24));
   return { date: anniversaire, joursRestants: joursRestants };
 }
@@ -2494,8 +2495,8 @@ async function loadAlertes() {
     // ── 1. Révision IRL (date anniversaire du bail)
     if (f.effectiveDate) {
       const effet = new Date(f.effectiveDate);
-      const anniv = new Date(today.getFullYear(), effet.getMonth(), effet.getDate());
-      if (anniv < today) anniv.setFullYear(today.getFullYear() + 1);
+      // 1er anniversaire au plus tôt : pas d'alerte de révision la 1re année du bail
+      const anniv = new Date(effet.getFullYear() + 1, effet.getMonth(), effet.getDate()); while (anniv < today) anniv.setFullYear(anniv.getFullYear() + 1);
       const joursAvant = Math.round((anniv - today) / 86400000);
       if (joursAvant <= 60) {
         alertes.push({
@@ -2532,8 +2533,7 @@ async function loadAlertes() {
     if (f.effectiveDate) {
       const effet = new Date(f.effectiveDate);
       // Date anniversaire assurance = même mois/jour que entrée
-      const annivAssur = new Date(today.getFullYear(), effet.getMonth(), effet.getDate());
-      if (annivAssur < today) annivAssur.setFullYear(today.getFullYear() + 1);
+      const annivAssur = new Date(effet.getFullYear() + 1, effet.getMonth(), effet.getDate()); while (annivAssur < today) annivAssur.setFullYear(annivAssur.getFullYear() + 1);
       const joursAssur = Math.round((annivAssur - today) / 86400000);
       if (joursAssur <= 30) {
         alertes.push({

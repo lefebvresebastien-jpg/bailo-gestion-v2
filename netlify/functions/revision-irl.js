@@ -119,8 +119,8 @@ exports.handler = async (event) => {
       if (!bailleurEmail) continue;
 
       const effet = new Date(f.effectiveDate);
-      const anniv = new Date(today.getFullYear(), effet.getMonth(), effet.getDate());
-      if (anniv < today) anniv.setFullYear(today.getFullYear() + 1);
+      // 1re révision au 1er anniversaire du bail, jamais avant (art. 17-1 loi 89-462)
+      const anniv = new Date(effet.getFullYear() + 1, effet.getMonth(), effet.getDate()); while (anniv < today) anniv.setFullYear(anniv.getFullYear() + 1);
       const joursAvant = Math.round((anniv - today) / 86400000);
 
       // Déclencher à J-30 et J-7 (ou force=1 pour test)

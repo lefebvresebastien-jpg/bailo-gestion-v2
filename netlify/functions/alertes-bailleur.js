@@ -43,8 +43,8 @@ function calculerAlertesPourBailleur(leases, today) {
     // 1. Révision IRL — 30 et 7 jours avant
     if (f.effectiveDate) {
       const effet = new Date(f.effectiveDate);
-      const anniv = new Date(today.getFullYear(), effet.getMonth(), effet.getDate());
-      if (anniv < today) anniv.setFullYear(today.getFullYear() + 1);
+      // 1er anniversaire au plus tôt : rien la 1re année du bail
+      const anniv = new Date(effet.getFullYear() + 1, effet.getMonth(), effet.getDate()); while (anniv < today) anniv.setFullYear(anniv.getFullYear() + 1);
       const j = Math.round((anniv - today) / 86400000);
       if (j === 30 || j === 7) {
         alertes.push({
@@ -78,8 +78,8 @@ function calculerAlertesPourBailleur(leases, today) {
     // 3. Assurance — 30 et 14 jours avant renouvellement
     if (f.effectiveDate) {
       const effet = new Date(f.effectiveDate);
-      const anniv = new Date(today.getFullYear(), effet.getMonth(), effet.getDate());
-      if (anniv < today) anniv.setFullYear(today.getFullYear() + 1);
+      // 1er anniversaire au plus tôt : rien la 1re année du bail
+      const anniv = new Date(effet.getFullYear() + 1, effet.getMonth(), effet.getDate()); while (anniv < today) anniv.setFullYear(anniv.getFullYear() + 1);
       const j = Math.round((anniv - today) / 86400000);
       if (j === 30 || j === 14) {
         alertes.push({
