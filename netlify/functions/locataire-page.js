@@ -178,6 +178,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
   <div class="content">
     <!-- MON BAIL -->
     <div id="section-bail" class="section active">
+      <div id="charges-revision-card"></div>
       <div class="card">
         <div class="card-title">
           🏠 Mon bail
@@ -431,7 +432,65 @@ function voirContrat() {
   window.open(page + '?lease=' + _lease.id + '&mode=locataire', '_blank');
 }
 
+// ============================================================
+// RÉVISION DE LA PROVISION POUR CHARGES (12/11/2026)
+// Le bailleur programme une nouvelle provision « au 1er du mois suivant la
+// mise en service du contrat d'électricité » : le locataire indique ici la
+// date, la révision est programmée côté serveur (revision-charges.js).
+// ============================================================
+function rcDateFrL(s) {
+  return s ? new Date(String(s).substring(0, 10) + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+}
+function renderRevisionCharges() {
+  const el = document.getElementById('charges-revision-card');
+  if (!el) return;
+  const revs = (_fd.chargesRevisions || []).filter(r => r && (r.status === 'attente' || r.status === 'programmee'));
+  if (!revs.length) { el.innerHTML = ''; return; }
+  const r = revs[revs.length - 1];
+  const rent = parseFloat(_fd.rent) || 0;
+  const box = 'background:#eff6ff;border:1px solid #93c5fd;border-radius:12px;padding:14px 16px;margin-bottom:12px;font-size:13px;color:#1e3a8a;line-height:1.5';
+  let html = '<div style="' + box + '"><div style="font-weight:700;font-size:14px;margin-bottom:6px">🧾 Vos charges évoluent</div>'
+    + 'Votre provision pour charges passe de <strong>' + fmtCur(r.oldCharges) + '</strong> à <strong>' + fmtCur(r.newCharges) + '</strong> par mois'
+    + ' (total mensuel : ' + fmtCur(rent + Number(r.newCharges)) + ').';
+  if (r.motif) html += '<div style="margin-top:6px;color:#334e8a">' + escH(r.motif) + '</div>';
+  if (r.status === 'attente' && r.rule === 'evenement') {
+    const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Paris' }).format(new Date());
+    html += '<div style="margin-top:10px">La nouvelle provision s\\'applique au <strong>1er du mois suivant la mise en service de votre contrat d\\'électricité</strong>. Dès qu\\'il est actif, indiquez-en la date :</div>'
+      + '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">'
+      + '<input type="date" id="rc-date-mes" max="' + today + '" style="flex:1;min-width:150px;padding:9px 10px;border:1.5px solid #93c5fd;border-radius:8px;font-size:14px;background:#fff;color:#1a1208">'
+      + '<button class="btn btn-primary btn-sm" id="rc-btn-mes" onclick="declarerMiseEnService(\\'' + r.id + '\\')">Envoyer</button></div>';
+  } else if (r.status === 'programmee') {
+    html += '<div style="margin-top:8px">✅ Nouvelle provision à partir du <strong>' + rcDateFrL(r.effectiveDate) + '</strong>'
+      + (r.eventDate ? ' (contrat d\\'électricité en service le ' + rcDateFrL(r.eventDate) + ')' : '') + '.</div>';
+  }
+  el.innerHTML = html + '</div>';
+}
+async function declarerMiseEnService(revisionId) {
+  const date = document.getElementById('rc-date-mes')?.value;
+  if (!date) { showToast('Choisissez la date de mise en service.'); return; }
+  const btn = document.getElementById('rc-btn-mes');
+  if (btn) { btn.disabled = true; btn.textContent = 'Envoi…'; }
+  try {
+    const resp = await fetch('/.netlify/functions/revision-charges', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leaseId: _lease.id, action: 'declarer', revisionId, date })
+    });
+    const res = await resp.json().catch(() => ({}));
+    if (!resp.ok) { showToast(res.error || 'Envoi impossible, réessayez.'); if (btn) { btn.disabled = false; btn.textContent = 'Envoyer'; } return; }
+    const rev = (_fd.chargesRevisions || []).find(x => x.id === revisionId);
+    if (rev && res.revision) Object.assign(rev, res.revision);
+    if (res.revision && res.revision.status === 'appliquee') _fd.charges = Number(res.revision.newCharges).toFixed(2);
+    renderBail();
+    showToast('Merci ! Votre bailleur est prévenu ✅');
+  } catch (e) {
+    showToast('Envoi impossible, réessayez.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Envoyer'; }
+  }
+}
+
 function renderBail() {
+  renderRevisionCharges();
   const f = _fd;
   const bail = document.getElementById('bail-info');
 

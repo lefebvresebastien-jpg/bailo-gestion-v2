@@ -23,6 +23,7 @@
 
 const SUPABASE_URL = 'https://nltuysmnxsomlhgvbtwz.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_GESTION_SERVICE_KEY;
+const { aujourdhuiParis, appliquerRevisionsEchues } = require('../lib/charges-revisions');
 
 async function sbFetch(path) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -193,6 +194,31 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: 'Pas de clé Resend configurée' };
     }
 
+    // Révisions de charges programmées : appliquer celles dont la date d'effet
+    // est atteinte (12/11/2026). Le bailleur en est informé dans son digest.
+    const revisionsAppliquees = {}; // bailleur_id -> [alertes]
+    const jourParis = aujourdhuiParis();
+    for (const lease of (leases || [])) {
+      const data = lease.data || {};
+      const f = data.formData;
+      if (!f || !Array.isArray(f.chargesRevisions)) continue;
+      const appliquees = appliquerRevisionsEchues(f, jourParis);
+      if (!appliquees.length) continue;
+      const ok = await fetch(`${SUPABASE_URL}/rest/v1/leases?id=eq.${lease.id}`, {
+        method: 'PATCH',
+        headers: { 'apikey': SERVICE_KEY, 'Authorization': `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ data })
+      }).then(r => r.ok).catch(() => false);
+      if (!ok || !lease.bailleur_id) continue;
+      (revisionsAppliquees[lease.bailleur_id] = revisionsAppliquees[lease.bailleur_id] || []).push(...appliquees.map(r => ({
+        urgence: 'INFO',
+        icon: '🧾',
+        titre: `Provision pour charges mise à jour — ${f.tenantName || 'Locataire'}`,
+        detail: `Depuis le ${new Date(r.effectiveDate + 'T12:00:00').toLocaleDateString('fr-FR')}, la provision passe de ${Number(r.oldCharges).toFixed(2)} € à ${Number(r.newCharges).toFixed(2)} € par mois. Les prochaines quittances en tiennent compte.`,
+        lien: `https://gestion.bailo.pro/#leases`
+      })));
+    }
+
     // Profil (email) par bailleur
     const profilParBailleur = {};
     (allProfiles || []).forEach(p => {
@@ -219,7 +245,8 @@ exports.handler = async (event) => {
       const bailleurEmail = profile?.landlordEmail;
       if (!bailleurEmail) { resultats.push(`${bailleurId}: pas d'email configuré`); continue; }
 
-      const alertes = calculerAlertesPourBailleur(leasesParBailleur[bailleurId], today);
+      const alertes = calculerAlertesPourBailleur(leasesParBailleur[bailleurId], today)
+        .concat(revisionsAppliquees[bailleurId] || []);
       if (!alertes.length) continue;
 
       const urgentes = alertes.filter(a => a.urgence === 'URGENT');

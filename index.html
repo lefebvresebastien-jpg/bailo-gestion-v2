@@ -686,6 +686,9 @@
             <button class="btn-secondary" onclick="ouvrirRegularisation(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
               📊 Régularisation
             </button>
+            <button class="btn-secondary" onclick="ouvrirRevisionCharges(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px">
+              🧾 Révision des charges
+            </button>
             <button class="btn-secondary" id="btn-fin-bail" onclick="ouvrirFinDeBail(currentDetailLeaseId)" style="font-size:12px;padding:6px 12px;color:#92400e;border-color:#f59e0b">
               🚪 Mettre fin au bail
             </button>
@@ -2538,6 +2541,21 @@ async function loadAlertes() {
       return;
     }
 
+    // ── 0. Révision des charges en cours (12/11/2026)
+    (f.chargesRevisions || []).forEach(function(r) {
+      if (!r || (r.status !== 'attente' && r.status !== 'programmee')) return;
+      alertes.push({
+        type: 'warning',
+        icon: '🧾',
+        titre: (r.status === 'attente' ? 'Charges : date de mise en service attendue — ' : 'Charges : nouvelle provision programmée — ') + nom,
+        detail: r.status === 'attente'
+          ? 'Provision ' + formatCurrency(r.oldCharges) + ' → ' + formatCurrency(r.newCharges) + ' au 1er du mois suivant la mise en service du contrat d\'électricité. Le locataire peut indiquer la date depuis son espace ; vous pouvez aussi la saisir (bouton « Révision des charges »).'
+          : 'Provision ' + formatCurrency(r.oldCharges) + ' → ' + formatCurrency(r.newCharges) + ' à partir du ' + rcDateFr(r.effectiveDate) + ' (appliquée automatiquement ce jour-là).',
+        action: function() { openLeaseDetail(lease.id); },
+        leaseId: lease.id
+      });
+    });
+
     // ── 1. Révision IRL (date anniversaire du bail) — jusqu'à ce que le bailleur valide ou refuse
     if (f.effectiveDate) {
       const annivIRL = checkAnniversaireBail(f.effectiveDate);
@@ -2864,6 +2882,8 @@ async function loadLeases() {
   if (error) { el.innerHTML = '<div class="list-loading">Erreur de chargement.</div>'; return; }
   _allLeases = data || [];
   renderLeases(_allLeases);
+  // Révisions de charges arrivées à échéance (si le cron du matin n'est pas passé)
+  rcAppliquerEchuesPourTous().then(function() { renderLeases(_allLeases); }).catch(function() {});
 }
 
 function filterLeases() {
@@ -5664,12 +5684,291 @@ function leaseBillableInMonth(l, ym) {
   return String(x).substring(0, 7) >= ym;
 }
 
+// ════════════════════════════════════════════════════════════════════
+// RÉVISION DES CHARGES (12/11/2026)
+// Révision programmée de la provision pour charges : date fixe, ou 1er du
+// mois suivant la mise en service du contrat d'électricité déclarée par le
+// locataire depuis son espace. Appliquée automatiquement le jour venu
+// (cron alertes-bailleur + ouverture de l'appli), avec historique pour que
+// les quittances des mois antérieurs restent justes.
+// Même logique côté serveur : netlify/lib/charges-revisions.js
+// ════════════════════════════════════════════════════════════════════
+function rcAujourdhui() {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Paris' }).format(new Date());
+}
+function rcPremierDuMoisSuivant(dateStr) {
+  var y = parseInt(dateStr.substring(0, 4), 10), m = parseInt(dateStr.substring(5, 7), 10);
+  return (m === 12 ? y + 1 : y) + '-' + String(m === 12 ? 1 : m + 1).padStart(2, '0') + '-01';
+}
+function rcDateFr(s) {
+  if (!s) return '—';
+  return new Date(String(s).substring(0, 10) + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+function rcEsc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
+}
+function rcAppliquerEchues(f, today) {
+  var revs = (f && Array.isArray(f.chargesRevisions)) ? f.chargesRevisions : [];
+  var jour = today || rcAujourdhui();
+  var dues = revs.filter(function(r) { return r && r.status === 'programmee' && r.effectiveDate && r.effectiveDate <= jour; })
+    .sort(function(a, b) { return a.effectiveDate < b.effectiveDate ? -1 : 1; });
+  dues.forEach(function(r) {
+    var previous = parseFloat(f.charges) || 0;
+    var nouveau = Number(r.newCharges) || 0;
+    f.charges = nouveau.toFixed(2);
+    f.chargesHistory = Array.isArray(f.chargesHistory) ? f.chargesHistory : [];
+    f.chargesHistory.push({ from: r.effectiveDate, charges: nouveau, previous: previous, revisionId: r.id });
+    r.status = 'appliquee';
+    r.appliedAt = new Date().toISOString();
+  });
+  return dues;
+}
+// Provision pour charges en vigueur pour un mois 'YYYY-MM' (historique +
+// révisions programmées). Sans historique : formData.charges.
+function chargesForMonth(f, ym) {
+  var current = parseFloat(f.charges) || 0;
+  if (!/^\d{4}-\d{2}$/.test(ym || '')) return current;
+  var steps = [];
+  (Array.isArray(f.chargesHistory) ? f.chargesHistory : []).forEach(function(h) {
+    if (h && h.from) steps.push({ from: String(h.from).substring(0, 7), charges: Number(h.charges) || 0, previous: Number(h.previous) || 0 });
+  });
+  (Array.isArray(f.chargesRevisions) ? f.chargesRevisions : []).forEach(function(r) {
+    if (r && r.status === 'programmee' && r.effectiveDate) steps.push({ from: r.effectiveDate.substring(0, 7), charges: Number(r.newCharges) || 0, previous: Number(r.oldCharges) || 0 });
+  });
+  if (!steps.length) return current;
+  steps.sort(function(a, b) { return a.from < b.from ? -1 : a.from > b.from ? 1 : 0; });
+  var res = null;
+  steps.forEach(function(s) { if (s.from <= ym) res = s.charges; });
+  return res === null ? steps[0].previous : res;
+}
+// "novembre 2026" -> "2026-11" (quittances enregistrées avec un libellé)
+function rcMoisLibelleVersYm(label) {
+  if (/^\d{4}-\d{2}$/.test(label || '')) return label;
+  var mois = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  var m = String(label || '').toLowerCase().match(/([a-zéû]+)\s+(\d{4})/);
+  if (!m) return '';
+  var i = mois.indexOf(m[1]);
+  return i < 0 ? '' : m[2] + '-' + String(i + 1).padStart(2, '0');
+}
+function rcStatutLabel(r) {
+  if (r.status === 'attente') return '<span style="color:#b45309;font-weight:700">En attente de la date de mise en service</span>';
+  if (r.status === 'programmee') return '<span style="color:#1a56db;font-weight:700">Programmée au ' + rcDateFr(r.effectiveDate) + '</span>';
+  if (r.status === 'appliquee') return '<span style="color:#166534;font-weight:700">Appliquée depuis le ' + rcDateFr(r.effectiveDate) + '</span>';
+  return '<span style="color:#6b7280;font-weight:700">Annulée</span>';
+}
+
+// Lit le bail frais en base, applique une modification de formData, enregistre.
+async function rcModifierBail(leaseId, mutation) {
+  var res = await db.from('leases').select('data').eq('id', leaseId).single();
+  if (res.error) { showToast('Erreur : ' + res.error.message, 'error'); return null; }
+  var ld = JSON.parse(JSON.stringify(res.data && res.data.data || {}));
+  ld.formData = ld.formData || {};
+  var r = mutation(ld.formData);
+  if (r === false) return null;
+  rcAppliquerEchues(ld.formData);
+  var up = await db.from('leases').update({ data: ld }).eq('id', leaseId);
+  if (up.error) { showToast('Erreur : ' + up.error.message, 'error'); return null; }
+  var idx = _allLeases.findIndex(function(l) { return l.id === leaseId; });
+  if (idx >= 0) _allLeases[idx].data = ld;
+  return ld;
+}
+
+// À l'ouverture de l'appli : applique les révisions échues (au cas où le
+// cron du matin n'est pas encore passé).
+async function rcAppliquerEchuesPourTous() {
+  var today = rcAujourdhui();
+  for (var i = 0; i < (_allLeases || []).length; i++) {
+    var l = _allLeases[i];
+    var f = fd(l);
+    var due = (f.chargesRevisions || []).some(function(r) { return r && r.status === 'programmee' && r.effectiveDate && r.effectiveDate <= today; });
+    if (due) await rcModifierBail(l.id, function() { return true; });
+  }
+}
+
+function ouvrirRevisionCharges(leaseId) {
+  var lease = _allLeases.find(function(l) { return l.id === leaseId; });
+  if (!lease) return;
+  var f = fd(lease);
+  var actuel = parseFloat(f.charges) || 0;
+  var revs = (f.chargesRevisions || []).slice().reverse();
+  var defDate = rcPremierDuMoisSuivant(rcAujourdhui());
+  var inp = 'width:100%;padding:8px 10px;border:1.5px solid var(--color-border);border-radius:8px;font-size:13px;margin-top:4px;background:var(--color-bg);color:var(--color-text)';
+
+  var liste = revs.length ? revs.map(function(r) {
+    var actions = '';
+    if (r.status === 'attente') actions += '<button onclick="rcSaisirDate(\'' + leaseId + '\',\'' + r.id + '\')" style="font-size:11px;padding:4px 9px;border:1px solid var(--color-border);border-radius:6px;background:none;cursor:pointer;color:var(--color-text)">📅 Saisir la date</button> ';
+    if (r.status === 'attente' || r.status === 'programmee') actions += '<button onclick="rcAnnuler(\'' + leaseId + '\',\'' + r.id + '\')" style="font-size:11px;padding:4px 9px;border:1px solid var(--color-border);border-radius:6px;background:none;cursor:pointer;color:var(--color-danger)">Annuler</button> ';
+    if (r.status !== 'annulee') actions += '<button onclick="rcCourrier(\'' + leaseId + '\',\'' + r.id + '\')" style="font-size:11px;padding:4px 9px;border:1px solid var(--color-border);border-radius:6px;background:none;cursor:pointer;color:var(--color-text)">📄 Courrier</button>';
+    return '<div style="border:1px solid var(--color-border);border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:13px">'
+      + '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><strong>' + formatCurrency(r.oldCharges) + ' → ' + formatCurrency(r.newCharges) + '</strong>' + rcStatutLabel(r) + '</div>'
+      + '<div style="color:var(--color-text-secondary);font-size:12px;margin:4px 0 8px">'
+      + (r.rule === 'evenement' ? 'Au 1er du mois suivant la mise en service du contrat d\'électricité' + (r.eventDate ? ' (déclarée le ' + rcDateFr(r.eventDate) + (r.declaredBy === 'locataire' ? ' par le locataire' : '') + ')' : '') : 'Date fixe : ' + rcDateFr(r.effectiveDate))
+      + (r.motif ? '<br>' + rcEsc(r.motif) : '') + '</div>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap">' + actions + '</div></div>';
+  }).join('') : '<p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:8px">Aucune révision enregistrée pour ce bail.</p>';
+
+  var html = '<div id="rc-overlay" style="position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto">'
+    + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:16px;padding:26px;width:540px;max-width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.2)">'
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px"><h3 style="font-size:1.1rem;font-weight:700;color:var(--color-text)">🧾 Révision de la provision pour charges</h3>'
+    + '<button onclick="document.getElementById(\'rc-overlay\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--color-text-secondary)">×</button></div>'
+    + '<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:16px">' + rcEsc(f.tenantName || '') + ' — provision actuelle : <strong>' + formatCurrency(actuel) + '</strong> / mois. La régularisation annuelle reste faite sur les dépenses réelles.</p>'
+    + liste
+    + '<div style="background:var(--color-bg-secondary);border-radius:12px;padding:14px;margin-top:12px">'
+    + '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-secondary);margin-bottom:8px">Nouvelle révision</div>'
+    + '<label style="font-size:12px;color:var(--color-text-secondary)">Nouvelle provision mensuelle (€)</label>'
+    + '<input id="rc-montant" type="number" step="0.01" min="0" placeholder="57" style="' + inp + '">'
+    + '<label style="font-size:12px;color:var(--color-text-secondary);display:block;margin-top:10px">Motif (repris dans le message au locataire)</label>'
+    + '<textarea id="rc-motif" rows="2" style="' + inp + ';resize:vertical">Mise en service de votre compteur Linky individuel : l\'électricité de votre logement ne fait plus partie des charges.</textarea>'
+    + '<div style="margin-top:10px;font-size:13px;color:var(--color-text)">'
+    + '<label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px;cursor:pointer"><input type="radio" name="rc-rule" value="evenement" checked onchange="document.getElementById(\'rc-date-wrap\').style.display=\'none\'"> <span>Au 1er du mois suivant la mise en service de son contrat d\'électricité <span style="color:var(--color-text-secondary)">(le locataire indique la date depuis son espace)</span></span></label>'
+    + '<label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input type="radio" name="rc-rule" value="date" onchange="document.getElementById(\'rc-date-wrap\').style.display=\'block\'"> <span>À une date fixe</span></label>'
+    + '<div id="rc-date-wrap" style="display:none;margin-top:6px"><input id="rc-date" type="date" value="' + defDate + '" style="' + inp + '"></div>'
+    + '</div>'
+    + '<label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px;cursor:pointer;color:var(--color-text)"><input id="rc-notifier" type="checkbox" checked> Prévenir le locataire (message dans son espace + notification)</label>'
+    + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">'
+    + '<button onclick="document.getElementById(\'rc-overlay\').remove()" style="padding:9px 16px;border:1.5px solid var(--color-border);border-radius:8px;background:none;font-size:13px;cursor:pointer;color:var(--color-text)">Fermer</button>'
+    + '<button id="rc-btn-save" onclick="rcEnregistrer(\'' + leaseId + '\')" style="padding:9px 16px;background:#1a56db;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Enregistrer la révision</button>'
+    + '</div></div></div></div>';
+  document.getElementById('rc-overlay')?.remove();
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function rcTexteCourrier(f, r, profile) {
+  var rent = parseFloat(f.rent) || 0;
+  var quand = r.rule === 'evenement' && !r.effectiveDate
+    ? 'à compter du 1er jour du mois suivant la mise en service de votre contrat d\'électricité'
+    : 'à compter du ' + rcDateFr(r.effectiveDate);
+  var t = 'Madame, Monsieur,\n\n';
+  if (r.motif) t += r.motif + '\n\n';
+  t += 'Votre provision mensuelle pour charges passe de ' + formatCurrency(r.oldCharges) + ' à ' + formatCurrency(r.newCharges) + ' ' + quand + '. ';
+  t += 'Votre loyer hors charges de ' + formatCurrency(rent) + ' reste inchangé : votre échéance mensuelle passe ainsi de ' + formatCurrency(rent + Number(r.oldCharges)) + ' à ' + formatCurrency(rent + Number(r.newCharges)) + '.\n\n';
+  if (r.rule === 'evenement' && !r.effectiveDate) {
+    t += 'Dès que votre contrat d\'électricité est en service, indiquez-en la date dans votre espace locataire (rubrique « Mon bail »). Jusqu\'à cette date, votre provision actuelle reste inchangée, et l\'électricité consommée sera régularisée à partir du relevé de l\'ancien compteur.\n\n';
+  }
+  t += 'Cette somme reste une provision : une régularisation est faite une fois par an sur la base des dépenses réelles, justificatifs à l\'appui, conformément à la loi du 6 juillet 1989.\n\n';
+  t += 'Je reste à votre disposition pour toute question.\n\n' + ((profile && profile.landlordName) || f.landlordName || 'Votre bailleur');
+  return t;
+}
+
+async function rcEnregistrer(leaseId) {
+  var montant = parseFloat(document.getElementById('rc-montant')?.value);
+  if (isNaN(montant) || montant < 0) { showToast('Indiquez la nouvelle provision.', 'error'); return; }
+  var rule = (document.querySelector('input[name="rc-rule"]:checked') || {}).value || 'evenement';
+  var dateFixe = document.getElementById('rc-date')?.value || '';
+  if (rule === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(dateFixe)) { showToast('Indiquez la date d\'effet.', 'error'); return; }
+  var motif = (document.getElementById('rc-motif')?.value || '').trim();
+  var notifier = !!document.getElementById('rc-notifier')?.checked;
+  var btn = document.getElementById('rc-btn-save');
+  if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
+
+  var rev = null;
+  var ld = await rcModifierBail(leaseId, function(f) {
+    f.chargesRevisions = Array.isArray(f.chargesRevisions) ? f.chargesRevisions : [];
+    if (f.chargesRevisions.some(function(r) { return r.status === 'attente' || r.status === 'programmee'; })) {
+      showToast('Une révision est déjà en cours sur ce bail : annulez-la d\'abord.', 'error');
+      return false;
+    }
+    rev = {
+      id: (crypto.randomUUID ? crypto.randomUUID() : 'rc-' + Date.now()),
+      createdAt: new Date().toISOString(),
+      oldCharges: parseFloat(f.charges) || 0,
+      newCharges: Math.round(montant * 100) / 100,
+      motif: motif,
+      rule: rule,
+      eventType: rule === 'evenement' ? 'contrat_electricite' : null,
+      eventDate: null,
+      effectiveDate: rule === 'date' ? dateFixe : null,
+      status: rule === 'date' ? 'programmee' : 'attente'
+    };
+    f.chargesRevisions.push(rev);
+  });
+  if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer la révision'; }
+  if (!ld) return;
+
+  if (notifier) {
+    var f = ld.formData;
+    var profile = {};
+    try { var ps = await db.from('settings').select('value').eq('key', 'landlord_profile').maybeSingle(); profile = ps.data ? JSON.parse(ps.data.value) : {}; } catch (e) {}
+    await db.from('messages').insert({
+      lease_id: leaseId, sender: 'Bailleur', kind: 'Information',
+      subject: 'Révision de votre provision pour charges',
+      body: rcTexteCourrier(f, rev, profile), status: 'en-attente', replies: []
+    });
+    fetch('/.netlify/functions/send-push', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target: { lease_id: leaseId }, title: '🧾 Vos charges évoluent', body: 'Nouvelle provision : ' + formatCurrency(rev.newCharges) + ' / mois. Détails dans votre espace locataire.', url: '/.netlify/functions/locataire-page?id=' + leaseId })
+    }).catch(function() {});
+  }
+  document.getElementById('rc-overlay')?.remove();
+  showToast(rev.status === 'attente' ? 'Révision enregistrée : en attente de la date de mise en service ✅' : 'Révision programmée au ' + rcDateFr(rev.effectiveDate) + ' ✅');
+  if (currentDetailLeaseId === leaseId) loadLeaseDetail(leaseId);
+  if (typeof loadAlertes === 'function') loadAlertes();
+}
+
+async function rcSaisirDate(leaseId, revId) {
+  var saisie = prompt('Date de mise en service du contrat d\'électricité (JJ/MM/AAAA) :');
+  if (!saisie) return;
+  var m = saisie.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) { showToast('Format attendu : JJ/MM/AAAA', 'error'); return; }
+  var iso = m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
+  if (isNaN(new Date(iso + 'T12:00:00'))) { showToast('Date invalide.', 'error'); return; }
+  var effet = null;
+  var ld = await rcModifierBail(leaseId, function(f) {
+    var r = (f.chargesRevisions || []).find(function(x) { return x.id === revId; });
+    if (!r || r.status !== 'attente') { showToast('Cette révision n\'est plus en attente.', 'error'); return false; }
+    r.eventDate = iso; r.declaredBy = 'bailleur'; r.declaredAt = new Date().toISOString();
+    r.effectiveDate = rcPremierDuMoisSuivant(iso); r.status = 'programmee';
+    effet = r.effectiveDate;
+  });
+  if (!ld) return;
+  showToast('Nouvelle provision au ' + rcDateFr(effet) + ' ✅');
+  ouvrirRevisionCharges(leaseId);
+  if (currentDetailLeaseId === leaseId) loadLeaseDetail(leaseId);
+  if (typeof loadAlertes === 'function') loadAlertes();
+}
+
+async function rcAnnuler(leaseId, revId) {
+  if (!confirm('Annuler cette révision ? La provision actuelle reste inchangée.')) return;
+  var ld = await rcModifierBail(leaseId, function(f) {
+    var r = (f.chargesRevisions || []).find(function(x) { return x.id === revId; });
+    if (!r || (r.status !== 'attente' && r.status !== 'programmee')) return false;
+    r.status = 'annulee'; r.cancelledAt = new Date().toISOString();
+  });
+  if (!ld) return;
+  showToast('Révision annulée.');
+  ouvrirRevisionCharges(leaseId);
+  if (typeof loadAlertes === 'function') loadAlertes();
+}
+
+async function rcCourrier(leaseId, revId) {
+  var lease = _allLeases.find(function(l) { return l.id === leaseId; });
+  if (!lease) return;
+  var f = fd(lease);
+  var r = (f.chargesRevisions || []).find(function(x) { return x.id === revId; });
+  if (!r) return;
+  var profile = {};
+  try { var ps = await db.from('settings').select('value').eq('key', 'landlord_profile').maybeSingle(); profile = ps.data ? JSON.parse(ps.data.value) : {}; } catch (e) {}
+  var corps = rcEsc(rcTexteCourrier(f, r, profile)).replace(/\n/g, '<br>');
+  var w = window.open('', '_blank');
+  if (!w) { showToast('Autorisez les fenêtres pop-up pour imprimer le courrier.', 'error'); return; }
+  w.document.write('<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Révision de la provision pour charges</title>'
+    + '<style>body{font-family:Arial,sans-serif;font-size:13px;line-height:1.55;color:#111;max-width:720px;margin:40px auto;padding:0 24px}.r{margin-left:52%}h1{font-size:14px;margin:28px 0 18px}@media print{body{margin:0 auto}}</style></head><body>'
+    + '<div><strong>' + rcEsc(profile.landlordName || f.landlordName || '') + '</strong><br>' + rcEsc(profile.landlordAddress || f.landlordAddress || '').replace(/\n/g, '<br>') + '</div>'
+    + '<div class="r" style="margin-top:28px">' + rcEsc(f.tenantName || '') + '<br>' + rcEsc(f.propertyAddress || '') + '</div>'
+    + '<div class="r" style="margin-top:22px">Le ' + new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) + '</div>'
+    + '<h1>Objet : révision de la provision mensuelle pour charges</h1>'
+    + '<p>' + corps + '</p>'
+    + '<script>window.onload=function(){window.print()}<\/script></body></html>');
+  w.document.close();
+}
+
 // Montant dû pour un mois donné, au prorata des jours d'occupation le mois
 // d'entrée (date d'effet) et le mois de sortie (date de sortie) — 17/10/2026.
 // Retourne { rent, charges, total, partial, days, dim, from, to }.
 function leaseAmountsForMonth(l, ym) {
   var f = fd(l);
-  var rent = parseFloat(f.rent) || 0, charges = parseFloat(f.charges) || 0;
+  // Charges : provision en vigueur CE mois-là (révisions de charges, 12/11/2026)
+  var rent = parseFloat(f.rent) || 0, charges = chargesForMonth(f, ym);
   var full = { rent: rent, charges: charges, total: rent + charges, partial: false };
   if (!/^\d{4}-\d{2}$/.test(ym || '')) return full;
   var y = parseInt(ym.substring(0, 4), 10), m = parseInt(ym.substring(5, 7), 10);
@@ -6856,7 +7155,8 @@ async function renvoyerQuittance(receiptId) {
   var f = (lease.data && lease.data.formData) ? lease.data.formData : {};
   var month = receipt.data?.mois || new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric'}).format(new Date(receipt.created_at));
   var rent = parseFloat(f.rent || 0);
-  var charges = parseFloat(f.charges || 0);
+  // Provision en vigueur le mois de la quittance (révisions de charges)
+  var charges = chargesForMonth(f, rcMoisLibelleVersYm(month));
   await _doQSend(lease, month, rent, charges, true);
   showToast('Quittance renvoyée !', 'success');
 }
