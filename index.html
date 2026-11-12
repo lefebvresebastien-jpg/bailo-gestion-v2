@@ -6743,7 +6743,7 @@ async function loadMessages() {
   // Charger tous les messages sauf Quittances
   const { data, error } = await db
     .from('messages')
-    .select('id, lease_id, sender, kind, subject, body, urgency, status, incident_status, created_at, replies')
+    .select('id, lease_id, sender, kind, subject, body, urgency, status, incident_status, created_at, replies, file_name, file_type, file_data')
     .neq('kind', 'Quittance')
     .order('created_at', { ascending: false });
 
