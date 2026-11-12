@@ -5798,6 +5798,7 @@ function ouvrirRevisionCharges(leaseId) {
     var actions = '';
     if (r.status === 'attente') actions += '<button onclick="rcSaisirDate(\'' + leaseId + '\',\'' + r.id + '\')" style="font-size:11px;padding:4px 9px;border:1px solid var(--color-border);border-radius:6px;background:none;cursor:pointer;color:var(--color-text)">📅 Saisir la date</button> ';
     if (r.status === 'attente' || r.status === 'programmee') actions += '<button onclick="rcAnnuler(\'' + leaseId + '\',\'' + r.id + '\')" style="font-size:11px;padding:4px 9px;border:1px solid var(--color-border);border-radius:6px;background:none;cursor:pointer;color:var(--color-danger)">Annuler</button> ';
+    if (r.status !== 'annulee') actions += '<button onclick="rcEditerDetail(\'' + leaseId + '\',\'' + r.id + '\')" style="font-size:11px;padding:4px 9px;border:1px solid var(--color-border);border-radius:6px;background:none;cursor:pointer;color:var(--color-text)">🧮 Justificatif' + (r.detail && r.detail.length ? '' : ' (à compléter)') + '</button> ';
     if (r.status !== 'annulee') actions += '<button onclick="rcCourrier(\'' + leaseId + '\',\'' + r.id + '\')" style="font-size:11px;padding:4px 9px;border:1px solid var(--color-border);border-radius:6px;background:none;cursor:pointer;color:var(--color-text)">📄 Courrier</button>';
     return '<div style="border:1px solid var(--color-border);border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:13px">'
       + '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><strong>' + formatCurrency(r.oldCharges) + ' → ' + formatCurrency(r.newCharges) + '</strong>' + rcStatutLabel(r) + '</div>'
@@ -5808,7 +5809,7 @@ function ouvrirRevisionCharges(leaseId) {
   }).join('') : '<p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:8px">Aucune révision enregistrée pour ce bail.</p>';
 
   var html = '<div id="rc-overlay" style="position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto">'
-    + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:16px;padding:26px;width:540px;max-width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.2)">'
+    + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:16px;padding:26px;width:780px;max-width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.2)">'
     + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px"><h3 style="font-size:1.1rem;font-weight:700;color:var(--color-text)">🧾 Révision de la provision pour charges</h3>'
     + '<button onclick="document.getElementById(\'rc-overlay\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--color-text-secondary)">×</button></div>'
     + '<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:16px">' + rcEsc(f.tenantName || '') + ' — provision actuelle : <strong>' + formatCurrency(actuel) + '</strong> / mois. La régularisation annuelle reste faite sur les dépenses réelles.</p>'
@@ -5824,6 +5825,8 @@ function ouvrirRevisionCharges(leaseId) {
     + '<label style="display:flex;gap:8px;align-items:center;cursor:pointer"><input type="radio" name="rc-rule" value="date" onchange="document.getElementById(\'rc-date-wrap\').style.display=\'block\'"> <span>À une date fixe</span></label>'
     + '<div id="rc-date-wrap" style="display:none;margin-top:6px"><input id="rc-date" type="date" value="' + defDate + '" style="' + inp + '"></div>'
     + '</div>'
+    + '<div style="margin-top:12px;font-size:12px;font-weight:700;color:var(--color-text-secondary)">Justificatif (repris dans le courrier) — facultatif</div>'
+    + rcDetailEditorHtml(null)
     + '<label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13px;cursor:pointer;color:var(--color-text)"><input id="rc-notifier" type="checkbox" checked> Prévenir le locataire (message dans son espace + notification)</label>'
     + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">'
     + '<button onclick="document.getElementById(\'rc-overlay\').remove()" style="padding:9px 16px;border:1.5px solid var(--color-border);border-radius:8px;background:none;font-size:13px;cursor:pointer;color:var(--color-text)">Fermer</button>'
@@ -5831,6 +5834,129 @@ function ouvrirRevisionCharges(leaseId) {
     + '</div></div></div></div>';
   document.getElementById('rc-overlay')?.remove();
   document.body.insertAdjacentHTML('beforeend', html);
+  rcMajTotal();
+}
+
+// ── Justificatif : dépenses de l'immeuble et clé de répartition ──
+// detail : [{ poste, depense (€/an, immeuble), parts (logement), totalParts, cle (texte) }]
+function rcPartMensuelle(d) {
+  var dep = Number(d.depense) || 0, p = Number(d.parts) || 0, t = Number(d.totalParts) || 0;
+  return t > 0 ? Math.round(dep * p / t / 12 * 100) / 100 : 0;
+}
+function rcNum(v) { return parseFloat(String(v == null ? '' : v).replace(',', '.')); }
+function rcFmtNum(n) { return (n === '' || n == null || isNaN(n)) ? '' : String(n).replace('.', ','); }
+function rcDetailRowHtml(d) {
+  d = d || {};
+  var c = 'padding:6px 7px;border:1px solid var(--color-border);border-radius:6px;font-size:12px;width:100%;background:var(--color-bg);color:var(--color-text)';
+  return '<tr class="rc-row">'
+    + '<td><input class="rc-poste" value="' + rcEsc(d.poste || '') + '" placeholder="Eau" style="' + c + '"></td>'
+    + '<td><input class="rc-dep" inputmode="decimal" value="' + rcEsc(rcFmtNum(d.depense)) + '" placeholder="1 200" oninput="rcMajTotal()" style="' + c + '"></td>'
+    + '<td><input class="rc-parts" inputmode="decimal" value="' + rcEsc(rcFmtNum(d.parts)) + '" placeholder="1" oninput="rcMajTotal()" style="' + c + '"></td>'
+    + '<td><input class="rc-tot" inputmode="decimal" value="' + rcEsc(rcFmtNum(d.totalParts)) + '" placeholder="4" oninput="rcMajTotal()" style="' + c + '"></td>'
+    + '<td><input class="rc-cle" value="' + rcEsc(d.cle || '') + '" placeholder="ex. commerce 2 parts, T2 1 part…" style="' + c + '"></td>'
+    + '<td class="rc-part" style="font-size:12px;white-space:nowrap;text-align:right;padding-left:6px">—</td>'
+    + '<td><button onclick="this.closest(\'tr\').remove();rcMajTotal()" title="Retirer" style="background:none;border:none;cursor:pointer;color:var(--color-text-secondary);font-size:15px">×</button></td></tr>';
+}
+function rcDetailEditorHtml(detail) {
+  var rows = (detail && detail.length) ? detail : [{ poste: 'Eau' }, { poste: 'Enlèvement des ordures ménagères' }, { poste: 'Électricité des parties communes' }];
+  var th = 'font-size:10.5px;font-weight:600;color:var(--color-text-secondary);text-align:left;padding:0 3px 4px';
+  return '<div style="overflow-x:auto"><table style="width:100%;border-collapse:separate;border-spacing:3px;min-width:560px">'
+    + '<thead><tr><th style="' + th + ';width:22%">Poste</th><th style="' + th + ';width:13%">Dépense immeuble (€/an)</th><th style="' + th + ';width:9%">Parts du logement</th><th style="' + th + ';width:9%">Total des parts</th><th style="' + th + '">Clé de répartition (détail)</th><th style="' + th + ';text-align:right">Part / mois</th><th></th></tr></thead>'
+    + '<tbody id="rc-rows">' + rows.map(rcDetailRowHtml).join('') + '</tbody></table></div>'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">'
+    + '<button onclick="document.getElementById(\'rc-rows\').insertAdjacentHTML(\'beforeend\', rcDetailRowHtml({}))" style="font-size:12px;padding:5px 10px;border:1px dashed var(--color-border);border-radius:7px;background:none;cursor:pointer;color:var(--color-text)">+ Ajouter un poste</button>'
+    + '<span style="font-size:13px">Total : <strong id="rc-detail-total">0,00 €</strong> / mois'
+    + ' <button id="rc-use-total" onclick="rcUtiliserTotal()" style="display:none;margin-left:6px;font-size:11px;padding:4px 8px;border:1px solid #1a56db;border-radius:6px;background:none;cursor:pointer;color:#1a56db">Utiliser comme provision</button></span></div>';
+}
+function rcCollecterDetail() {
+  var out = [];
+  document.querySelectorAll('#rc-rows .rc-row').forEach(function(tr) {
+    var d = {
+      poste: tr.querySelector('.rc-poste').value.trim(),
+      depense: rcNum(tr.querySelector('.rc-dep').value),
+      parts: rcNum(tr.querySelector('.rc-parts').value),
+      totalParts: rcNum(tr.querySelector('.rc-tot').value),
+      cle: tr.querySelector('.rc-cle').value.trim()
+    };
+    if (!d.poste && isNaN(d.depense)) return;
+    ['depense', 'parts', 'totalParts'].forEach(function(k) { if (isNaN(d[k])) d[k] = null; });
+    out.push(d);
+  });
+  return out;
+}
+function rcMajTotal() {
+  var tot = 0;
+  document.querySelectorAll('#rc-rows .rc-row').forEach(function(tr) {
+    var d = { depense: rcNum(tr.querySelector('.rc-dep').value), parts: rcNum(tr.querySelector('.rc-parts').value), totalParts: rcNum(tr.querySelector('.rc-tot').value) };
+    var p = rcPartMensuelle(d);
+    tr.querySelector('.rc-part').textContent = p ? formatCurrency(p) : '—';
+    tot += p;
+  });
+  tot = Math.round(tot * 100) / 100;
+  var el = document.getElementById('rc-detail-total'); if (el) el.textContent = formatCurrency(tot);
+  var b = document.getElementById('rc-use-total'); if (b) { b.style.display = (tot > 0 && document.getElementById('rc-montant')) ? 'inline-block' : 'none'; b.dataset.total = tot; }
+}
+function rcUtiliserTotal() {
+  var b = document.getElementById('rc-use-total'), m = document.getElementById('rc-montant');
+  if (b && m) m.value = Math.round(parseFloat(b.dataset.total || 0));
+}
+function rcDetailTotal(detail) {
+  return Math.round((detail || []).reduce(function(s, d) { return s + rcPartMensuelle(d); }, 0) * 100) / 100;
+}
+// Tableau HTML du justificatif (courrier imprimable)
+function rcDetailTableHtml(detail) {
+  if (!detail || !detail.length) return '';
+  var td = 'border:1px solid #999;padding:6px 8px;vertical-align:top';
+  var lignes = detail.map(function(d) {
+    var cle = (d.cle ? rcEsc(d.cle) + '<br>' : '') + (d.totalParts ? '<span style="color:#555">' + rcFmtNum(d.parts) + ' part' + (Number(d.parts) > 1 ? 's' : '') + ' sur ' + rcFmtNum(d.totalParts) + '</span>' : '');
+    return '<tr><td style="' + td + '">' + rcEsc(d.poste || '') + '</td>'
+      + '<td style="' + td + ';white-space:nowrap">' + (d.depense != null ? formatCurrency(d.depense) + ' / an' : 'selon factures') + '</td>'
+      + '<td style="' + td + '">' + (cle || '—') + '</td>'
+      + '<td style="' + td + ';text-align:right;white-space:nowrap">' + (rcPartMensuelle(d) ? '≈ ' + formatCurrency(rcPartMensuelle(d)) + ' / mois' : '—') + '</td></tr>';
+  }).join('');
+  return '<h2 style="font-size:13px;margin:18px 0 8px">Justificatif : dépenses de l\'immeuble et répartition</h2>'
+    + '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#eee">'
+    + '<th style="' + td + ';text-align:left">Poste</th><th style="' + td + ';text-align:left">Dépense de l\'immeuble</th><th style="' + td + ';text-align:left">Clé de répartition</th><th style="' + td + ';text-align:right">Votre part</th></tr></thead>'
+    + '<tbody>' + lignes + '<tr style="font-weight:700;background:#f5f5f5"><td style="' + td + '" colspan="3">Total</td><td style="' + td + ';text-align:right;white-space:nowrap">≈ ' + formatCurrency(rcDetailTotal(detail)) + ' / mois</td></tr></tbody></table>';
+}
+// Version texte (message dans l'espace locataire)
+function rcDetailTexte(detail) {
+  if (!detail || !detail.length) return '';
+  return 'Justificatif (dépenses de l\'immeuble et répartition) :\n' + detail.map(function(d) {
+    return '• ' + (d.poste || '') + ' : ' + (d.depense != null ? formatCurrency(d.depense) + ' par an pour l\'immeuble' : 'selon factures')
+      + (d.totalParts ? ', ' + rcFmtNum(d.parts) + ' part(s) sur ' + rcFmtNum(d.totalParts) : '') + (d.cle ? ' (' + d.cle + ')' : '')
+      + (rcPartMensuelle(d) ? ' → ≈ ' + formatCurrency(rcPartMensuelle(d)) + ' / mois' : '');
+  }).join('\n') + '\nTotal : ≈ ' + formatCurrency(rcDetailTotal(detail)) + ' / mois\n\n';
+}
+// Compléter / modifier le justificatif d'une révision existante
+function rcEditerDetail(leaseId, revId) {
+  var lease = _allLeases.find(function(l) { return l.id === leaseId; });
+  var r = lease && (fd(lease).chargesRevisions || []).find(function(x) { return x.id === revId; });
+  if (!r) return;
+  var html = '<div id="rcd-overlay" style="position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px">'
+    + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:16px;padding:22px;width:760px;max-width:100%;max-height:92vh;overflow-y:auto">'
+    + '<h3 style="font-size:1rem;font-weight:700;margin-bottom:4px;color:var(--color-text)">Justificatif de la provision</h3>'
+    + '<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px">Dépenses annuelles de l\'immeuble et part de ce logement. Repris dans le courrier.</p>'
+    + rcDetailEditorHtml(r.detail)
+    + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">'
+    + '<button onclick="document.getElementById(\'rcd-overlay\').remove()" style="padding:8px 14px;border:1.5px solid var(--color-border);border-radius:8px;background:none;font-size:13px;cursor:pointer;color:var(--color-text)">Annuler</button>'
+    + '<button onclick="rcEnregistrerDetail(\'' + leaseId + '\',\'' + revId + '\')" style="padding:8px 14px;background:#1a56db;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Enregistrer</button>'
+    + '</div></div></div>';
+  document.getElementById('rcd-overlay')?.remove();
+  document.body.insertAdjacentHTML('beforeend', html);
+  rcMajTotal();
+}
+async function rcEnregistrerDetail(leaseId, revId) {
+  var detail = rcCollecterDetail();
+  var ld = await rcModifierBail(leaseId, function(f) {
+    var r = (f.chargesRevisions || []).find(function(x) { return x.id === revId; });
+    if (!r) return false;
+    r.detail = detail;
+  });
+  if (!ld) return;
+  document.getElementById('rcd-overlay')?.remove();
+  showToast('Justificatif enregistré ✅');
+  ouvrirRevisionCharges(leaseId);
 }
 
 function rcTexteCourrier(f, r, profile) {
@@ -5845,6 +5971,7 @@ function rcTexteCourrier(f, r, profile) {
   if (r.rule === 'evenement' && !r.effectiveDate) {
     t += 'Dès que votre contrat d\'électricité est en service, indiquez-en la date dans votre espace locataire (rubrique « Mon bail »). Jusqu\'à cette date, votre provision actuelle reste inchangée, et l\'électricité consommée sera régularisée à partir du relevé de l\'ancien compteur.\n\n';
   }
+  t += rcDetailTexte(r.detail);
   t += 'Cette somme reste une provision : une régularisation est faite une fois par an sur la base des dépenses réelles, justificatifs à l\'appui, conformément à la loi du 6 juillet 1989.\n\n';
   t += 'Je reste à votre disposition pour toute question.\n\n' + ((profile && profile.landlordName) || f.landlordName || 'Votre bailleur');
   return t;
@@ -5857,6 +5984,7 @@ async function rcEnregistrer(leaseId) {
   var dateFixe = document.getElementById('rc-date')?.value || '';
   if (rule === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(dateFixe)) { showToast('Indiquez la date d\'effet.', 'error'); return; }
   var motif = (document.getElementById('rc-motif')?.value || '').trim();
+  var detail = rcCollecterDetail().filter(function(d) { return d.depense != null; });
   var notifier = !!document.getElementById('rc-notifier')?.checked;
   var btn = document.getElementById('rc-btn-save');
   if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
@@ -5874,6 +6002,7 @@ async function rcEnregistrer(leaseId) {
       oldCharges: parseFloat(f.charges) || 0,
       newCharges: Math.round(montant * 100) / 100,
       motif: motif,
+      detail: detail,
       rule: rule,
       eventType: rule === 'evenement' ? 'contrat_electricite' : null,
       eventDate: null,
@@ -5948,7 +6077,11 @@ async function rcCourrier(leaseId, revId) {
   if (!r) return;
   var profile = {};
   try { var ps = await db.from('settings').select('value').eq('key', 'landlord_profile').maybeSingle(); profile = ps.data ? JSON.parse(ps.data.value) : {}; } catch (e) {}
-  var corps = rcEsc(rcTexteCourrier(f, r, profile)).replace(/\n/g, '<br>');
+  var texte = rcTexteCourrier(f, r, profile);
+  var dt = rcDetailTexte(r.detail);
+  var morceaux = dt ? texte.split(dt) : [texte];
+  var corps = rcEsc(morceaux[0]).replace(/\n/g, '<br>')
+    + (dt ? rcDetailTableHtml(r.detail) + '<p>' + rcEsc(morceaux.slice(1).join('')).replace(/\n/g, '<br>') + '</p>' : '');
   var w = window.open('', '_blank');
   if (!w) { showToast('Autorisez les fenêtres pop-up pour imprimer le courrier.', 'error'); return; }
   w.document.write('<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Révision de la provision pour charges</title>'

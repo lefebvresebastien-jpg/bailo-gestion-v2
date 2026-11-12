@@ -442,6 +442,18 @@ function renderRevisionCharges() {
     + 'Votre provision pour charges passe de <strong>' + fmtCur(r.oldCharges) + '</strong> à <strong>' + fmtCur(r.newCharges) + '</strong> par mois'
     + ' (total mensuel : ' + fmtCur(rent + Number(r.newCharges)) + ').';
   if (r.motif) html += '<div style="margin-top:6px;color:#334e8a">' + escH(r.motif) + '</div>';
+  if (Array.isArray(r.detail) && r.detail.length) {
+    const part = d => (Number(d.totalParts) > 0 ? Math.round((Number(d.depense) || 0) * (Number(d.parts) || 0) / Number(d.totalParts) / 12 * 100) / 100 : 0);
+    const n = v => String(v == null ? '' : v).replace('.', ',');
+    const td = 'padding:5px 6px;border-top:1px solid #bfdbfe;vertical-align:top';
+    html += '<div style="margin-top:10px;font-weight:600">Justificatif : dépenses de l\'immeuble et répartition</div>'
+      + '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px">'
+      + r.detail.map(d => '<tr><td style="' + td + '">' + escH(d.poste || '') + '<div style="color:#475e96;font-size:11px">'
+        + (d.depense != null ? fmtCur(d.depense) + ' / an pour l\'immeuble' : 'selon factures')
+        + (d.totalParts ? ' · ' + n(d.parts) + ' part(s) sur ' + n(d.totalParts) : '') + (d.cle ? ' · ' + escH(d.cle) : '') + '</div></td>'
+        + '<td style="' + td + ';text-align:right;white-space:nowrap">' + (part(d) ? '≈ ' + fmtCur(part(d)) : '—') + '</td></tr>').join('')
+      + '<tr><td style="' + td + ';font-weight:700">Total / mois</td><td style="' + td + ';text-align:right;font-weight:700">≈ ' + fmtCur(Math.round(r.detail.reduce((s, d) => s + part(d), 0) * 100) / 100) + '</td></tr></table>';
+  }
   if (r.status === 'attente' && r.rule === 'evenement') {
     const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Paris' }).format(new Date());
     html += '<div style="margin-top:10px">La nouvelle provision s\'applique au <strong>1er du mois suivant la mise en service de votre contrat d\'électricité</strong>. Dès qu\'il est actif, indiquez-en la date :</div>'
