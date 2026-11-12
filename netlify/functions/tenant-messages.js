@@ -43,12 +43,31 @@ function fetchJson(url, options, payload) {
 }
 
 async function leaseExists(leaseId) {
-  if (!leaseId || !/^[0-9a-f-]{36}$/i.test(leaseId)) return false;
+  return !!(await leaseRow(leaseId));
+}
+// Renvoie { id, bailleur_id } ou null (12/11/2026 : bailleur_id pour cibler la notification)
+async function leaseRow(leaseId) {
+  if (!leaseId || !/^[0-9a-f-]{36}$/i.test(leaseId)) return null;
   const res = await fetchJson(
-    SUPABASE_URL + '/rest/v1/leases?select=id&id=eq.' + leaseId,
+    SUPABASE_URL + '/rest/v1/leases?select=id,bailleur_id&id=eq.' + leaseId,
     { headers: { 'apikey': SERVICE_KEY, 'Authorization': 'Bearer ' + SERVICE_KEY } }
   );
-  return Array.isArray(res.body) && res.body.length > 0;
+  return Array.isArray(res.body) && res.body[0] ? res.body[0] : null;
+}
+
+// Notification push au bailleur DE CE BAIL uniquement (12/11/2026).
+// Avant : le portail locataire appelait send-push avec { role: 'bailleur' },
+// ce qui notifiait TOUS les comptes bailleurs Bailo (fuite multi-clients).
+async function pushBailleur(bailleurId, title, body) {
+  if (!bailleurId) return;
+  const site = process.env.URL || 'https://gestion.bailo.pro';
+  try {
+    await fetch(site + '/.netlify/functions/send-push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target: { user_id: bailleurId }, title, body: String(body || '').slice(0, 120), url: 'https://gestion.bailo.pro' })
+    });
+  } catch (e) { console.error('push bailleur', e.message); }
 }
 
 const ALLOWED_KINDS = ['Renseignement', 'Incident', 'Information', 'Quittance'];
@@ -100,7 +119,8 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'POST') {
       const payload = JSON.parse(event.body || '{}');
       const { leaseId, action } = payload;
-      if (!(await leaseExists(leaseId))) {
+      const lease = await leaseRow(leaseId);
+      if (!lease) {
         return { statusCode: 404, headers: cors, body: JSON.stringify({ error: 'Bail introuvable' }) };
       }
 
@@ -117,12 +137,33 @@ exports.handler = async (event) => {
         };
         if (kind === 'Incident') msgBody.incident_status = 'en-attente';
 
+        // Photos jointes (incident) : uniquement des fichiers déposés pour CE bail
+        // via tenant-storage (attachOnly). 1re photo = pièce jointe du message,
+        // suivantes = réponses du locataire portant chacune une photo.
+        const prefix = SUPABASE_URL + '/storage/v1/object/public/documents/' + leaseId + '/incidents/';
+        const photos = (Array.isArray(payload.photos) ? payload.photos : [])
+          .filter(ph => ph && typeof ph.url === 'string' && ph.url.startsWith(prefix) && !ph.url.includes('..'))
+          .slice(0, 5);
+        if (photos.length) {
+          msgBody.file_name = String(photos[0].name || 'photo.jpg').slice(0, 200);
+          msgBody.file_type = String(photos[0].type || 'image/jpeg').slice(0, 60);
+          msgBody.file_data = photos[0].url;
+          const now = new Date().toISOString();
+          msgBody.replies = photos.slice(1).map((ph, i) => ({
+            sender: 'Locataire', body: '📷 Photo ' + (i + 2), created_at: now,
+            file_data: ph.url, file_name: String(ph.name || 'photo.jpg').slice(0, 200), file_type: String(ph.type || 'image/jpeg').slice(0, 60)
+          }));
+        }
+
         const res = await fetchJson(
           SUPABASE_URL + '/rest/v1/messages',
           { method: 'POST', headers: { 'apikey': SERVICE_KEY, 'Authorization': 'Bearer ' + SERVICE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' } },
           JSON.stringify(msgBody)
         );
         if (res.status >= 300) return { statusCode: 500, headers: cors, body: JSON.stringify({ error: 'Échec envoi' }) };
+        await pushBailleur(lease.bailleur_id,
+          kind === 'Incident' ? '🚨 Incident déclaré — ' + msgBody.subject + (photos.length ? ' (' + photos.length + ' photo' + (photos.length > 1 ? 's' : '') + ')' : '') : '💬 Nouveau message locataire',
+          msgBody.body);
         return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true }) };
       }
 

@@ -74,6 +74,13 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'POST') {
       const body = JSON.parse(event.body || '{}');
       const { leaseId, fileName, fileType, fileBase64, category } = body;
+      // attachOnly (12/11/2026) : photo jointe à un incident — upload seul,
+      // sans créer d'entrée « Document » (la photo est rattachée au message
+      // d'incident par tenant-messages.js). Images uniquement.
+      const attachOnly = body.attachOnly === true;
+      if (attachOnly && !/^image\//.test(fileType || '')) {
+        return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'Seules les photos sont acceptées.' }) };
+      }
       if (!(await leaseExists(leaseId))) {
         return { statusCode: 404, headers: cors, body: JSON.stringify({ error: 'Bail introuvable' }) };
       }
@@ -82,7 +89,7 @@ exports.handler = async (event) => {
       }
 
       const safeName = fileName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
-      const path = leaseId + '/docs/' + Date.now() + '_' + safeName;
+      const path = leaseId + (attachOnly ? '/incidents/' : '/docs/') + Date.now() + '_' + safeName;
       const buffer = Buffer.from(fileBase64, 'base64');
 
       const uploadRes = await fetchJson(
@@ -102,6 +109,9 @@ exports.handler = async (event) => {
       }
 
       const publicUrl = SUPABASE_URL + '/storage/v1/object/public/documents/' + path;
+      if (attachOnly) {
+        return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true, url: publicUrl, name: fileName, type: fileType }) };
+      }
 
       await fetchJson(
         SUPABASE_URL + '/rest/v1/messages',

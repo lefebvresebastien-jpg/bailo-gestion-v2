@@ -256,7 +256,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
           <div style="display:flex;gap:8px">
             <label for="doc-file-input" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:white;color:var(--ink-2)">
               📎 Choisir un fichier
-              <input type="file" id="doc-file-input" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" onchange="onDocFileSelected(this)" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
+              <input type="file" id="doc-file-input" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" onchange="onDocFileSelected(this)" accept=".pdf,.doc,.docx,image/*">
             </label>
             <button id="btn-send-doc" onclick="sendDoc()" disabled style="flex:1;padding:10px;background:#2563eb;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;opacity:.4">
               📤 Envoyer au bailleur
@@ -285,10 +285,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; b
         <option value="Autre">📌 Autre</option>
       </select>
       <textarea id="incident-desc" rows="4" placeholder="Décrivez l'incident…" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;resize:none"></textarea>
+      <label style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px;padding:10px;border:1.5px dashed var(--border);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;position:relative">
+        📷 Ajouter des photos (3 max)
+        <input type="file" id="incident-photos" accept="image/*" multiple onchange="onIncidentPhotos(this)" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer">
+      </label>
+      <div id="incident-photos-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn btn-secondary" onclick="document.getElementById('incident-modal').style.display='none'">Annuler</button>
-      <button class="btn btn-danger" onclick="sendIncident()">🚨 Envoyer</button>
+      <button class="btn btn-danger" id="btn-send-incident" onclick="sendIncident()">🚨 Envoyer</button>
     </div>
   </div>
 </div>
@@ -912,59 +917,98 @@ async function sendMsg() {
   input.value = '';
   loadMessages();
   showToast('Message envoyé ✅');
-
-  // Notification push au bailleur (best-effort)
-  fetch('/.netlify/functions/send-push', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      target: { role: 'bailleur' },
-      title: '💬 Nouveau message locataire',
-      body: body.slice(0, 100),
-      url: 'https://gestion.bailo.pro'
-    })
-  }).catch(() => {});
+  // Notification au bailleur : envoyée par tenant-messages.js (ciblée sur le bailleur de ce bail)
 }
 
 function openIncident() {
   document.getElementById('incident-modal').style.display = 'flex';
 }
 
+// Photos d'incident (12/11/2026) : jusqu'à 3, compressées dans le navigateur
+// (les photos de téléphone font souvent 3 à 8 Mo, au-delà de la limite d'envoi).
+let _incidentPhotos = [];
+function onIncidentPhotos(input) {
+  const files = Array.from(input.files || []).filter(f => /^image\//.test(f.type) || /\.(heic|heif)$/i.test(f.name));
+  _incidentPhotos = _incidentPhotos.concat(files).slice(0, 3);
+  input.value = '';
+  renderIncidentPhotos();
+}
+function renderIncidentPhotos() {
+  const el = document.getElementById('incident-photos-preview');
+  if (!el) return;
+  el.innerHTML = _incidentPhotos.map((f, i) =>
+    '<div style="position:relative;width:64px;height:64px;border-radius:8px;overflow:hidden;border:1px solid var(--border)">'
+    + '<img src="' + URL.createObjectURL(f) + '" style="width:100%;height:100%;object-fit:cover">'
+    + '<button onclick="_incidentPhotos.splice(' + i + ',1);renderIncidentPhotos()" style="position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;border:none;background:rgba(0,0,0,.6);color:#fff;font-size:12px;line-height:20px;padding:0;cursor:pointer">×</button></div>'
+  ).join('');
+}
+// Redimensionne une photo (1600 px max, JPEG). Renvoie le fichier d'origine si
+// le navigateur ne sait pas la lire (il sera alors envoyé tel quel).
+async function compressImage(file, maxSide = 1600, quality = 0.82) {
+  if (!/^image\//.test(file.type) && !/\.(heic|heif)$/i.test(file.name)) return file;
+  if (/gif|svg/.test(file.type)) return file;
+  try {
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
+    const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
+    URL.revokeObjectURL(url);
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', quality));
+    if (!blob || (blob.size >= file.size && /jpe?g/.test(file.type))) return file;
+    return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch (e) { return file; }
+}
+
 async function sendIncident() {
   const type = document.getElementById('incident-type').value;
   const desc = document.getElementById('incident-desc').value.trim();
   if (!desc) { showToast('Décrivez l\'incident.'); return; }
+  const btn = document.getElementById('btn-send-incident');
+  if (btn) { btn.disabled = true; btn.textContent = _incidentPhotos.length ? 'Envoi des photos…' : 'Envoi…'; }
+  const reset = () => { if (btn) { btn.disabled = false; btn.textContent = '🚨 Envoyer'; } };
 
+  // 1. Photos
+  const photos = [];
+  for (const f of _incidentPhotos) {
+    try {
+      const small = await compressImage(f);
+      const resp = await fetch('/.netlify/functions/tenant-storage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leaseId: _lease.id, attachOnly: true, fileName: small.name, fileType: small.type || 'image/jpeg', fileBase64: await _fileToBase64(small) })
+      });
+      const out = await resp.json().catch(() => ({}));
+      if (!resp.ok || !out.url) throw new Error(out.error || 'photo trop lourde');
+      photos.push({ url: out.url, name: out.name || small.name, type: out.type || small.type });
+    } catch (e) {
+      showToast('Une photo n\'a pas pu être envoyée : ' + e.message);
+      reset();
+      return;
+    }
+  }
+
+  // 2. Incident (le serveur prévient le bailleur de ce bail)
+  let ok = false;
   try {
-    await fetch('/.netlify/functions/tenant-messages', {
+    const resp = await fetch('/.netlify/functions/tenant-messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        leaseId: _lease.id,
-        action: 'send',
-        kind: 'Incident',
-        subject: type,
-        body: desc
-      })
+      body: JSON.stringify({ leaseId: _lease.id, action: 'send', kind: 'Incident', subject: type, body: desc, photos })
     });
+    const data = await resp.json().catch(() => ({}));
+    ok = resp.ok && data.ok;
   } catch(e) {}
+  reset();
+  if (!ok) { showToast('Erreur d\'envoi, réessayez.'); return; }
 
   document.getElementById('incident-modal').style.display = 'none';
   document.getElementById('incident-desc').value = '';
+  _incidentPhotos = [];
+  renderIncidentPhotos();
   loadMessages();
   showToast('Incident déclaré ✅');
-
-  // Notification push au bailleur (best-effort)
-  fetch('/.netlify/functions/send-push', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      target: { role: 'bailleur' },
-      title: '🚨 Incident déclaré — ' + type,
-      body: desc.slice(0, 100),
-      url: 'https://gestion.bailo.pro'
-    })
-  }).catch(() => {});
 }
 
 // ============================================================
@@ -1026,15 +1070,16 @@ async function sendDoc() {
   showToast('Envoi en cours…');
 
   try {
-    const base64 = await _fileToBase64(_selectedDocFile);
+    const fileToSend = await compressImage(_selectedDocFile, 2200, 0.85);
+    const base64 = await _fileToBase64(fileToSend);
     const type = document.getElementById('doc-type').value;
     const resp = await fetch('/.netlify/functions/tenant-storage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         leaseId: _lease.id,
-        fileName: _selectedDocFile.name,
-        fileType: _selectedDocFile.type,
+        fileName: fileToSend.name,
+        fileType: fileToSend.type,
         fileBase64: base64,
         category: type
       })

@@ -6868,6 +6868,12 @@ function renderMessagesList(messages) {
   }).join('');
 }
 
+// Photos : aperçu cliquable dans la messagerie et les documents (12/11/2026)
+function isImageFile(name, url) {
+  return /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(String(name || url || '').split('?')[0]);
+}
+function escapeAttr(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
 function openMessage(id) {
   _currentMessage = _allMessages.find(m => m.id === id);
   if (!_currentMessage) return;
@@ -6886,7 +6892,7 @@ function openMessage(id) {
   const allBubbles = [
     { sender: _currentMessage.sender, body: _currentMessage.body, date: _currentMessage.created_at,
       fileUrl: _currentMessage.file_data, fileName: _currentMessage.file_name },
-    ...replies.map(r => ({ sender: r.sender, body: r.body, date: r.created_at || _currentMessage.created_at }))
+    ...replies.map(r => ({ sender: r.sender, body: r.body, date: r.created_at || _currentMessage.created_at, fileUrl: r.file_data, fileName: r.file_name }))
   ].filter(b => b.body);
 
   const detail = document.getElementById('messages-detail');
@@ -6921,7 +6927,9 @@ function openMessage(id) {
         <div>
           <div class="msg-bubble ${b.sender === 'Bailleur' ? 'bailleur' : 'locataire'}">
             ${b.body}
-            ${b.fileUrl ? `<a href="${b.fileUrl}" target="_blank" class="msg-attachment">📎 ${b.fileName || 'Fichier joint'}</a>` : ''}
+            ${b.fileUrl ? (isImageFile(b.fileName, b.fileUrl)
+              ? `<a href="${b.fileUrl}" target="_blank" rel="noopener" title="Ouvrir en grand" style="display:block;margin-top:8px"><img src="${b.fileUrl}" alt="${escapeAttr(b.fileName || 'Photo')}" loading="lazy" style="max-width:260px;max-height:260px;border-radius:10px;display:block;border:1px solid var(--color-border)"></a>`
+              : `<a href="${b.fileUrl}" target="_blank" rel="noopener" class="msg-attachment">📎 ${b.fileName || 'Fichier joint'}</a>`) : ''}
             <div class="msg-bubble-meta">${b.sender} · ${formatRelative(b.date)}</div>
           </div>
         </div>`).join('') : '<div class="list-empty">Aucun contenu.</div>'}
@@ -7558,17 +7566,19 @@ function renderDocs(docs) {
     var docsHtml = g.docs.map(function(d) {
       var icon = DOC_ICONS[d.subject] || '📎';
       var ext = d.file_name ? d.file_name.split('.').pop().toUpperCase() : '';
-      var isImg = ['JPG','JPEG','PNG','GIF'].includes(ext);
+      var isImg = ['JPG','JPEG','PNG','GIF','WEBP','HEIC'].includes(ext);
       return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--color-bg-secondary);border-radius:var(--radius-md);margin-bottom:6px">' +
         '<div style="display:flex;align-items:center;gap:10px">' +
-        '<span style="font-size:20px">' + icon + '</span>' +
+        (isImg && d.file_data
+          ? '<a href="' + d.file_data + '" target="_blank" rel="noopener" title="Ouvrir en grand"><img src="' + d.file_data + '" loading="lazy" style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid var(--color-border);display:block"></a>'
+          : '<span style="font-size:20px">' + icon + '</span>') +
         '<div>' +
-        '<div style="font-size:13px;font-weight:600">' + (d.file_name || d.subject || 'Document') + '</div>' +
+        '<div style="font-size:13px;font-weight:600">' + (d.file_data ? '<a href="' + d.file_data + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;text-decoration-color:var(--color-border)">' + (d.file_name || d.subject || 'Document') + '</a>' : (d.file_name || d.subject || 'Document')) + '</div>' +
         '<div style="font-size:11px;color:var(--color-text-secondary)">' + d.subject + ' · ' + (d.sender||'') + ' · ' + formatRelative(d.created_at) + '</div>' +
         '</div></div>' +
         '<div style="display:flex;gap:6px;align-items:center">' +
         (ext ? '<span style="font-size:10px;font-weight:700;padding:2px 6px;background:var(--color-primary-light);color:var(--color-primary);border-radius:4px">' + ext + '</span>' : '') +
-        (d.file_data ? '<a href="' + d.file_data + '" target="_blank" class="btn-ghost" style="font-size:12px;text-decoration:none">⬇ Télécharger</a>' : '') +
+        (d.file_data ? '<a href="' + d.file_data + '" target="_blank" rel="noopener" class="btn-ghost" style="font-size:12px;text-decoration:none">' + (isImg ? '🔍 Ouvrir' : '⬇ Ouvrir') + '</a>' : '') +
         '<button onclick="deleteDoc(&#39;' + d.id + '&#39;)" class="btn-ghost" style="font-size:12px;color:var(--color-danger)">&#10005;</button>' +
         '</div></div>';
     }).join('');
