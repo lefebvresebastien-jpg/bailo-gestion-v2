@@ -1949,7 +1949,7 @@ function ouvrirRegularisation(leaseId) {
   var fin = new Date(today.getFullYear(), today.getMonth(), 0).toISOString().split('T')[0];
   var postes = [
     {id:'eau',label:'Eau froide et chaude'},
-    {id:'ordures',label:'Taxe ordures m\u00e9nag\u00e8res'},
+    {id:'ordures',label:'Ordures m\u00e9nag\u00e8res (taxe ou redevance)'},{id:'elec',label:'\u00c9lectricit\u00e9 des parties communes'},
     {id:'entretien',label:'Entretien parties communes'},
     {id:'ascenseur',label:'Ascenseur / monte-charge'},
     {id:'chauffage',label:'Chauffage collectif'},
@@ -2008,7 +2008,7 @@ function recalcReg() {
   if (debut && fin) {
     mois = Math.max(1, Math.round((new Date(fin) - new Date(debut)) / (1000*60*60*24*30.44)));
   }
-  var ids = ['eau','ordures','entretien','ascenseur','chauffage','gardiennage','espaces','autre'];
+  var ids = ['eau','ordures','elec','entretien','ascenseur','chauffage','gardiennage','espaces','autre'];
   var totalReel = ids.reduce(function(s,id) { return s + (parseFloat(document.getElementById('reg-'+id)?.value)||0); }, 0);
   var provTotal = prov * mois;
   var solde = totalReel - provTotal;
@@ -2028,7 +2028,7 @@ function getRegData(leaseId) {
   var debut = document.getElementById('reg-debut')?.value;
   var fin = document.getElementById('reg-fin')?.value;
   var mois = debut&&fin ? Math.max(1,Math.round((new Date(fin)-new Date(debut))/(1000*60*60*24*30.44))) : 12;
-  var postes = [{id:'eau',label:'Eau froide et chaude'},{id:'ordures',label:'Taxe ordures m\u00e9nag\u00e8res'},{id:'entretien',label:'Entretien parties communes'},{id:'ascenseur',label:'Ascenseur / monte-charge'},{id:'chauffage',label:'Chauffage collectif'},{id:'gardiennage',label:'Gardiennage / concierge'},{id:'espaces',label:'Espaces verts'},{id:'autre',label:'Autres charges'}];
+  var postes = [{id:'eau',label:'Eau froide et chaude'},{id:'ordures',label:'Ordures m\u00e9nag\u00e8res (taxe ou redevance)'},{id:'elec',label:'\u00c9lectricit\u00e9 des parties communes'},{id:'entretien',label:'Entretien parties communes'},{id:'ascenseur',label:'Ascenseur / monte-charge'},{id:'chauffage',label:'Chauffage collectif'},{id:'gardiennage',label:'Gardiennage / concierge'},{id:'espaces',label:'Espaces verts'},{id:'autre',label:'Autres charges'}];
   var postesData = postes.map(function(p){ return {label:p.label,montant:parseFloat(document.getElementById('reg-'+p.id)?.value)||0}; }).filter(function(p){ return p.montant>0; });
   var totalReel = postesData.reduce(function(s,p){ return s+p.montant; },0);
   var provTotal = prov*mois;
