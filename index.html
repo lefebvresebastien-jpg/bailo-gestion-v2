@@ -2999,6 +2999,7 @@ function modifierBail(leaseId) {
     propertyFloor: f.propertyFloor || '',
     rooms: f.rooms || '',
     dpeClass: f.dpeClass || 'D',
+    dpeDate: f.dpeDate || '',
     keysCount: f.keysCount || '2',
     heatingType: f.heatingType || '',
     hotWaterType: f.hotWaterType || '',
@@ -5535,6 +5536,7 @@ async function createLease() {
         surface: _wizardData.surface || '',
         rooms: _wizardData.rooms || '',
         dpeClass: _wizardData.dpeClass || 'D',
+        dpeDate: _wizardData.dpeDate || '',
         dpeFileUrl: _wizardData.dpeFileUrl || '',
         keysCount: _wizardData.keysCount || '2',
         heatingType: _wizardData.heatingType || '',
@@ -5654,12 +5656,15 @@ async function createLease() {
   document.getElementById('lease-wizard-overlay').classList.add('hidden');
   nextBtn.disabled = false;
   showToast(_wizardEditId ? 'Bail mis a jour !' : 'Bail cree avec succes !', 'success');
+  var _savedLeaseId = _wizardEditId;
   _wizardData = {};
   _wizardEditId = null;
 
-  // Refresh
-  loadLeases();
+  // Refresh — et la fiche du bail ouverte, sinon elle affiche les anciennes
+  // valeurs (DPE, date…) comme si l'enregistrement n'avait rien fait (12/11/2026)
+  await loadLeases();
   loadDashboard();
+  if (_savedLeaseId && currentDetailLeaseId === _savedLeaseId && typeof loadLeaseDetail === 'function') loadLeaseDetail(_savedLeaseId);
 }
 
 
