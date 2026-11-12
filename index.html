@@ -5079,6 +5079,19 @@ const WIZARD_STEPS_CONTENT = {
 var _wizardDpeFile = null;
 var _wizardEditId = null;
 
+// Aperçu d'un DPE enregistré : « Voir » ouvre le fichier, « Remplacer » ouvre
+// le sélecteur (12/11/2026 — avant, tout clic sur la zone rouvrait le sélecteur).
+function dpePreviewSaved(url, name, extra) {
+  var nom = name || decodeURIComponent(String(url).split('/').pop().split('?')[0]).replace(/^\d{10,}_/, '') || 'DPE';
+  return '<span style="font-size:20px">📄</span>'
+    + '<span style="font-size:13px;font-weight:600;word-break:break-all">' + escapeAttr(nom) + '</span>'
+    + (extra ? '<span style="font-size:11px;color:var(--color-text-secondary)">' + extra + '</span>' : '')
+    + '<span style="display:flex;gap:8px;justify-content:center;margin-top:6px">'
+    + '<a href="' + escapeAttr(url) + '" target="_blank" rel="noopener" data-dpe-action="voir" class="btn-secondary" style="font-size:12px;padding:5px 12px;text-decoration:none">👁 Voir le DPE</a>'
+    + '<button type="button" data-dpe-action="remplacer" class="btn-ghost" style="font-size:12px;padding:5px 12px">🔁 Remplacer</button>'
+    + '</span>';
+}
+
 function buildDpeField(d) {
   var hasFile = d && d.dpeFileUrl;
   var zoneStyle = hasFile ? 'border-color:var(--color-success);background:var(--color-success-light)' : '';
@@ -5089,8 +5102,12 @@ function buildDpeField(d) {
   html += '<div class="file-upload-zone" id="w-dpe-zone" style="' + zoneStyle + '">';
   html += '<input type="file" id="w-dpe-input" style="display:none" accept=".pdf,.jpg,.jpeg,.png" onchange="handleDpeFile(this)" />';
   html += '<div id="w-dpe-preview">';
-  html += '<span style="font-size:24px">' + icon + '</span>';
-  html += '<span style="font-size:13px">' + label + '</span>';
+  if (hasFile) {
+    html += dpePreviewSaved(d.dpeFileUrl, null, 'enregistré ✓');
+  } else {
+    html += '<span style="font-size:24px">' + icon + '</span>';
+    html += '<span style="font-size:13px">' + label + '</span>';
+  }
   html += '</div></div></div>';
   return html;
 }
@@ -5107,7 +5124,7 @@ async function handleDpeFile(input) {
     var up = await uploadFileToSupabase(file, 'dpe');
     _wizardData.dpeFileUrl = up.url;
     if (zone) { zone.style.borderColor = 'var(--color-success)'; zone.style.background = 'var(--color-success-light)'; }
-    if (preview) preview.innerHTML = '<span style="font-size:20px">📄</span><span style="font-size:13px;font-weight:600">' + file.name + '</span><span style="font-size:11px;color:var(--color-text-secondary)">' + (file.size/1024).toFixed(0) + ' Ko · enregistré ✓</span>';
+    if (preview) preview.innerHTML = dpePreviewSaved(up.url, file.name, (file.size/1024).toFixed(0) + ' Ko · enregistré ✓');
     showToast('DPE joint au bail.', 'success');
   } catch (e) {
     console.error('Upload DPE', e);
@@ -5237,6 +5254,10 @@ function renderWizardStep() {
     if (dpeZone) dpeZone.onclick = function(e) {
       var inp = document.getElementById('w-dpe-input');
       if (!inp || e.target === inp) return;
+      var action = e.target.closest && e.target.closest('[data-dpe-action]');
+      if (action && action.getAttribute('data-dpe-action') === 'voir') return; // le lien ouvre le DPE
+      if (action) { e.preventDefault(); inp.click(); return; }                  // Remplacer
+      if (_wizardData && _wizardData.dpeFileUrl) return;                         // DPE déjà joint : rien sur clic ailleurs
       inp.click();
     };
 
