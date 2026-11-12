@@ -179,6 +179,7 @@
 
     /* Print */
     @media print {
+      .no-print { display:none !important; }
       .toolbar { display: none !important; }
       .page-wrapper { padding: 0; max-width: 100%; }
       .contract-preview { border-radius: 0; box-shadow: none; border: none; padding: 20px; }
@@ -462,7 +463,49 @@
     }
 
     
-    function generateAnnexes(f) {
+    // Affiche le fichier DPE (PDF ou image) dans l'annexe 2, page par page, pour
+// qu'il soit visible et imprimé avec le bail (12/11/2026).
+async function afficherPagesDpe() {
+  var box = document.getElementById('dpe-annexe-pages');
+  if (!box) return;
+  var url = box.getAttribute('data-url');
+  var pageStyle = 'display:block;width:100%;max-width:760px;margin:10px auto;border:1px solid #e0d5c8;border-radius:6px;page-break-inside:avoid;break-inside:avoid';
+  try {
+    if (/\.(png|jpe?g|webp|gif)(\?|$)/i.test(url)) {
+      box.innerHTML = '<img src="' + url + '" alt="DPE" style="' + pageStyle + '">';
+      return;
+    }
+    if (!window.pdfjsLib) {
+      await new Promise(function(res, rej) {
+        var sc = document.createElement('script');
+        sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        sc.onload = res; sc.onerror = rej; document.head.appendChild(sc);
+      });
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+    var pdf = await window.pdfjsLib.getDocument({ url: url }).promise;
+    var n = Math.min(pdf.numPages, 30);
+    box.innerHTML = '';
+    for (var i = 1; i <= n; i++) {
+      var page = await pdf.getPage(i);
+      var vp = page.getViewport({ scale: 1.6 });
+      var c = document.createElement('canvas');
+      c.width = vp.width; c.height = vp.height;
+      await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+      var img = document.createElement('img');
+      img.src = c.toDataURL('image/jpeg', 0.85);
+      img.alt = 'DPE — page ' + i;
+      img.setAttribute('style', pageStyle);
+      box.appendChild(img);
+    }
+    if (pdf.numPages > n) box.insertAdjacentHTML('beforeend', '<p style="text-align:center">… ' + (pdf.numPages - n) + ' page(s) supplémentaire(s) dans le fichier complet.</p>');
+  } catch (e) {
+    console.error('DPE', e);
+    box.innerHTML = 'Le DPE complet est disponible via le bouton ci-dessus.';
+  }
+}
+
+function generateAnnexes(f) {
       var rent = parseFloat(f.rent) || 0;
       var charges = parseFloat(f.charges) || 0;
       var monthly = rent + charges;
@@ -511,8 +554,15 @@
       out += '<div style="width:60px;height:60px;background:' + dpeColor + ';border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;color:#fff">' + dpeClass + '</div>';
       out += '<div style="font-size:.85rem"><p><strong>Classe energetique : ' + dpeClass + '</strong></p>';
       out += '<p style="color:#8a7060">Logement situé : ' + (f.propertyAddress||'') + '</p>';
-      out += '<p style="color:#8a7060">Surface : ' + (f.surface||'') + '</p></div></div>';
+      out += '<p style="color:#8a7060">Surface : ' + (f.surface||'') + '</p>';
+      if (f.dpeDate) out += '<p style="color:#8a7060">Date du diagnostic : ' + new Date(String(f.dpeDate).substring(0,10) + 'T12:00:00').toLocaleDateString('fr-FR') + '</p>';
+      out += '</div></div>';
       out += '<p style="font-size:.8rem;color:#5a3a20;margin-top:8px">Le DPE complet est joint au present bail. En cas de classe F ou G, le bailleur est soumis aux obligations de renovation energetique (loi Climat).</p>';
+      // Fichier DPE enregistré : lien + pages affichées ici, et imprimées avec le bail (12/11/2026)
+      if (f.dpeFileUrl) {
+        out += '<p class="no-print" style="margin-top:10px"><a href="' + f.dpeFileUrl + '" target="_blank" rel="noopener" style="display:inline-block;background:#10b981;color:#fff;padding:7px 14px;border-radius:6px;font-size:.82rem;font-weight:700;text-decoration:none;font-family:Inter,sans-serif">📄 Ouvrir le DPE complet</a></p>';
+        out += '<div id="dpe-annexe-pages" data-url="' + f.dpeFileUrl + '" style="margin-top:12px;font-size:.8rem;color:#8a7060">Chargement du DPE…</div>';
+      }
       out += '</div>';
 
       // ── ANNEXE 3 : ERP ──
@@ -557,15 +607,6 @@
       out += '</ul>';
       out += '<p style="margin-top:8px;font-style:italic;font-size:.78rem;color:#8a7060">Plus d&#39;informations : irsn.fr — radon.fr — georisques.gouv.fr</p>';
       out += '</div></div>';
-
-      // ── LIEN DPE si disponible ──
-      if (f.dpeFileUrl) {
-        out += '<div style="margin:8px 0 20px;padding:10px 16px;background:#ecfdf5;border:1px solid #10b981;border-radius:8px;display:flex;align-items:center;gap:12px">';
-        out += '<span style="font-size:20px">📄</span>';
-        out += '<div style="flex:1"><p style="font-size:.82rem;font-weight:600">Fichier DPE joint</p>';
-        out += '<a href="' + f.dpeFileUrl + '" target="_blank" style="font-size:.78rem;color:#10b981">Ouvrir le DPE complet</a></div>';
-        out += '</div>';
-      }
 
       // ── ANNEXE 4 : Repartition reparations ──
       var cats = [
@@ -876,6 +917,7 @@
       var annexesDiv = document.createElement('div');
       annexesDiv.innerHTML = generateAnnexes(f);
       document.getElementById('page-wrapper').appendChild(annexesDiv);
+      afficherPagesDpe();
 
       // Mettre à jour toolbar
       document.getElementById('toolbar-title').textContent = f.tenantName || 'Contrat de bail';
