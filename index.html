@@ -8347,7 +8347,8 @@ function appendBailoMsg(text, isUser) {
 }
 
 function renderMd(text) {
-  return text
+  // On neutralise d'abord tout HTML : la réponse est insérée telle quelle dans la page
+  return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     .replace(/\n/g, '<br>');
@@ -8368,9 +8369,12 @@ async function sendBailoMessage() {
   try {
     var systemPrompt = "Tu es l'assistant de Bailo Gestion, une application de gestion locative. Tu aides les bailleurs avec : baux (loi 6 juillet 1989), quittances, revision IRL (INSEE), diagnostics obligatoires (DPE, ERP), encadrement des loyers, charges recuperables, etat des lieux, depot de garantie (loi Alur), regularisation des charges, signature electronique, sous-compteurs eau, baux commerciaux (Code de Commerce). Reponds en francais, de facon claire et pratique. Si c'est une question juridique complexe, recommande de consulter un professionnel.";
 
+    // L'assistant est réservé aux utilisateurs connectés (jeton de session)
+    var _sess = await db.auth.getSession();
+    var _tok = _sess && _sess.data && _sess.data.session ? _sess.data.session.access_token : '';
     var resp = await fetch('/.netlify/functions/bailo-chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tok },
       body: JSON.stringify({ system: systemPrompt, messages: bailoChatHistory })
     });
 
