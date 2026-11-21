@@ -74,6 +74,18 @@ exports.handler = async (event) => {
       return { statusCode: 403, headers: cors, body: JSON.stringify({ error: 'Accès refusé à ce bail' }) };
     }
 
+    // Offre Gratuite (21/11/2026) : la signature électronique (payée à l'acte
+    // chez SignWell) est réservée aux offres payantes. Le bail reste
+    // téléchargeable en PDF pour une signature manuscrite.
+    const planRes = await fetchJson(
+      SUPABASE_URL + '/rest/v1/subscriptions?user_id=eq.' + encodeURIComponent(callerId) + '&select=plan&limit=1',
+      { headers: svcHeaders }
+    );
+    const callerPlan = Array.isArray(planRes.body) && planRes.body[0] ? planRes.body[0].plan : null;
+    if (callerPlan === 'gratuit') {
+      return { statusCode: 403, headers: cors, body: JSON.stringify({ error: "La signature électronique est incluse à partir de l'offre Bailleur (9,90 €/mois). Avec l'offre Gratuite, téléchargez le bail en PDF pour le signer à la main." }) };
+    }
+
     const swRes = await fetchJson(
       'https://www.signwell.com/api/v1/documents/',
       { method: 'POST', headers: { 'X-Api-Key': SIGNWELL_API_KEY, 'Content-Type': 'application/json' } },

@@ -63,6 +63,19 @@ exports.handler = async (event) => {
     const trialValide = sub.trial && sub.expires_at && new Date(sub.expires_at) > new Date();
     const active = sub.active === true || trialValide;
 
+    // Offre Gratuite (21/11/2026) : 1 logement, module Gestion seul.
+    // Un essai 3 mois arrivé à échéance sans abonnement payant bascule
+    // automatiquement dessus (les baux déjà créés restent accessibles,
+    // seule la création d'un bail supplémentaire est bloquée côté appli).
+    const essaiExpire = sub.trial === true && sub.active !== true && !trialValide;
+    if (sub.plan === 'gratuit' || essaiExpire) {
+      return {
+        statusCode: 200,
+        headers: cors,
+        body: JSON.stringify({ plan: 'gratuit', active: true, modules: ['gestion'] })
+      };
+    }
+
     return {
       statusCode: 200,
       headers: cors,

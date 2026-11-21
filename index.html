@@ -1409,6 +1409,7 @@ function navigate(page, linkEl) {
   if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('open');
 
   // Trigger page loaders
+  if (page === 'dashboard')  loadDashboard();
   if (page === 'leases')     loadLeases();
   if (page === 'properties') loadProperties();
   if (page === 'tenants')    loadTenants();
@@ -1418,6 +1419,55 @@ function navigate(page, linkEl) {
   if (page === 'documents')  loadDocuments();
   if (page === 'settings')   { loadSettings(); setTimeout(initSigCanvas, 100); loadBanks(); }
   if (page === 'messages')   loadMessages();
+}
+
+// ── Offre Gratuite : modale et bandeau « passer à l'offre payante » ──
+var UPGRADE_URL = 'https://bailo.pro/?upgrade=1#tarifs';
+function showUpgradeModal(message) {
+  var old = document.getElementById('upgrade-modal');
+  if (old) old.remove();
+  var wrap = document.createElement('div');
+  wrap.id = 'upgrade-modal';
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(15,18,35,.55);display:flex;align-items:center;justify-content:center;padding:20px';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:16px;max-width:420px;width:100%;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.25);text-align:center';
+  var h = document.createElement('div');
+  h.style.cssText = 'font-size:17px;font-weight:700;margin-bottom:8px;color:#1a1d2e';
+  h.textContent = 'Limite de l\'offre Gratuite atteinte';
+  var p = document.createElement('p');
+  p.style.cssText = 'font-size:14px;line-height:1.55;color:#555b6e;margin-bottom:18px';
+  p.textContent = message;
+  var go = document.createElement('a');
+  go.href = UPGRADE_URL; go.target = '_blank'; go.rel = 'noopener';
+  go.style.cssText = 'display:block;background:#3b5bdb;color:#fff;text-decoration:none;font-weight:700;padding:12px;border-radius:10px;margin-bottom:8px';
+  go.textContent = 'Voir les offres →';
+  var later = document.createElement('button');
+  later.type = 'button';
+  later.style.cssText = 'background:none;border:none;color:#555b6e;font-size:13px;cursor:pointer;padding:6px';
+  later.textContent = 'Plus tard';
+  later.onclick = function () { wrap.remove(); };
+  wrap.onclick = function (e) { if (e.target === wrap) wrap.remove(); };
+  box.appendChild(h); box.appendChild(p); box.appendChild(go); box.appendChild(later);
+  wrap.appendChild(box); document.body.appendChild(wrap);
+}
+function renderFreePlanBanner() {
+  var page = document.getElementById('page-dashboard');
+  var existing = document.getElementById('free-plan-banner');
+  if (window.userPlan !== 'gratuit') { if (existing) existing.remove(); return; }
+  if (existing || !page) return;
+  var grid = page.querySelector('.kpi-grid');
+  if (!grid) return;
+  var b = document.createElement('div');
+  b.id = 'free-plan-banner';
+  b.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;background:#eef1ff;border:1px solid #c9d3fb;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#1a1d2e';
+  var t = document.createElement('span');
+  t.textContent = 'Offre Gratuite : 1 logement inclus. Baux illimités, Finance et signature électronique dès 9,90 €/mois.';
+  var a = document.createElement('a');
+  a.href = UPGRADE_URL; a.target = '_blank'; a.rel = 'noopener';
+  a.style.cssText = 'color:#3b5bdb;font-weight:700;text-decoration:none;white-space:nowrap';
+  a.textContent = 'Voir les offres →';
+  b.appendChild(t); b.appendChild(a);
+  grid.parentNode.insertBefore(b, grid);
 }
 
 function toggleSidebar() {
@@ -2494,6 +2544,7 @@ async function loadDashboard() {
       weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
     }).format(new Date());
   }
+  renderFreePlanBanner();
   await Promise.all([loadKPIs(), loadRecentLeases(), loadRecentActivity(), loadAlertes()]);
 }
 
@@ -5496,6 +5547,19 @@ async function createLease() {
     nextBtn.disabled = false;
     nextBtn.textContent = _wizardEditId ? 'Enregistrer' : 'Créer le bail';
     return;
+  }
+
+  // ── GATE : offre Gratuite = 1 logement (1 bail non terminé) ──
+  // Ne s'applique qu'à la création : modifier son bail existant reste possible.
+  if (window.userPlan === 'gratuit' && !_wizardEditId) {
+    const { data: _freeLeases } = await db.from('leases').select('id, data');
+    const _freeActifs = (_freeLeases || []).filter(function (l) { return leaseStatus(l) !== 'ended'; });
+    if (_freeActifs.length >= 1) {
+      showUpgradeModal('L\'offre Gratuite comprend 1 logement. Pour gérer un deuxième bail, passez à l\'offre Bailleur (9,90 €/mois, baux illimités).');
+      nextBtn.disabled = false;
+      nextBtn.textContent = 'Créer le bail';
+      return;
+    }
   }
 
   // ── GATE : 1 bail max en plan Solo (Duo et Pro = illimité) ──
