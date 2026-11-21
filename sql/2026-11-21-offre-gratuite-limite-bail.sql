@@ -1,15 +1,41 @@
 -- ════════════════════════════════════════════════════════════════════
 -- Bailo Gestion — verrou « Offre Gratuite = 1 logement » côté base
 -- À exécuter UNE fois dans le projet Supabase Gestion (nltuysmnxsomlhgvbtwz),
--- SQL Editor. Sans danger à relancer (create or replace / drop if exists).
+-- SQL Editor. Sans danger à relancer.
 --
--- Règle : un compte en offre Gratuite (plan = 'gratuit', ou essai 3 mois
--- expiré sans abonnement payant) ne peut pas avoir plus d'un bail non
--- terminé. Les baux déjà existants ne sont jamais touchés : seules la
--- création d'un bail supplémentaire et la réactivation d'un bail terminé
--- sont refusées. Les comptes payants et les comptes sans ligne
--- d'abonnement ne sont pas concernés.
+-- 1) Crée la table public.subscriptions, qui n'existait pas dans cette base
+--    alors que les fonctions d'inscription (essai, paiement Stripe, offre
+--    gratuite) essaient déjà d'y écrire le plan de chaque compte.
+-- 2) Pose le trigger : un compte en offre Gratuite (plan = 'gratuit', ou
+--    essai expiré sans abonnement payant) ne peut pas avoir plus d'un bail
+--    non terminé. Les baux existants ne sont jamais touchés. Les comptes
+--    payants et les comptes sans ligne dans subscriptions (tous les comptes
+--    actuels) ne sont pas concernés.
 -- ════════════════════════════════════════════════════════════════════
+
+-- Si une première version du trigger a été posée, on la retire d'abord.
+drop trigger if exists trg_free_plan_lease_limit on public.leases;
+
+create table if not exists public.subscriptions (
+  user_id    uuid primary key references auth.users(id) on delete cascade,
+  email      text,
+  plan       text not null default 'gratuit',
+  modules    text[] not null default '{}',
+  active     boolean,
+  trial      boolean not null default false,
+  expires_at timestamptz,
+  started_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+create index if not exists subscriptions_email_idx on public.subscriptions (lower(email));
+
+-- Chaque utilisateur peut lire SA ligne, personne ne peut la modifier depuis
+-- le navigateur : seules les fonctions serveur (clé service) écrivent ici.
+alter table public.subscriptions enable row level security;
+drop policy if exists "subscriptions_select_own" on public.subscriptions;
+create policy "subscriptions_select_own" on public.subscriptions
+  for select to authenticated using (auth.uid() = user_id);
+revoke insert, update, delete on public.subscriptions from anon, authenticated;
 
 create or replace function public.enforce_free_plan_lease_limit()
 returns trigger
@@ -62,7 +88,6 @@ begin
 end;
 $$;
 
-drop trigger if exists trg_free_plan_lease_limit on public.leases;
 create trigger trg_free_plan_lease_limit
   before insert or update of data on public.leases
   for each row execute function public.enforce_free_plan_lease_limit();
