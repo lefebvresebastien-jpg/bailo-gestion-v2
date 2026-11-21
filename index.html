@@ -518,11 +518,6 @@
           <span class="nav-label">Paramètres</span>
         </a>
 
-        <div class="nav-group-label" style="margin-top:8px">Admin</div>
-        <a href="https://bailo.pro/admin" target="_blank" class="nav-item" style="color:#f97316">
-          <span class="nav-icon">&#9881;</span>
-          <span class="nav-label">Dashboard admin</span>
-        </a>
 
       </nav>
 
@@ -924,7 +919,9 @@
                 <div style="display:flex;gap:8px;margin-top:6px">
                   <button class="btn-ghost" onclick="clearSigCanvas()" style="font-size:12px">🗑 Effacer</button>
                   <span id="sig-saved-indicator" style="font-size:12px;color:var(--color-success);display:none">✓ Signature enregistrée</span>
+                  <span id="sig-unsaved-indicator" style="font-size:12px;color:#b45309;font-weight:600;display:none">✍️ Signature non enregistrée : cliquez sur « Enregistrer » ci-dessous pour la valider</span>
                 </div>
+                <div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px">Elle apparaîtra automatiquement sur vos quittances.</div>
               </div>
               <button class="btn-primary" onclick="saveSettings()" id="btn-save-settings" style="align-self:flex-start">💾 Enregistrer le profil</button>
               <div id="settings-saved-msg" style="display:none;padding:10px 14px;background:var(--color-success-light);border:1px solid var(--color-success);border-radius:var(--radius-md);font-size:13px;color:var(--color-success)">
@@ -1314,7 +1311,7 @@ function onAuthSuccess(user) {
   checkPlan().then(initApp);
 
   // Injecter lien admin si Sebastien
-  if (user.id === 'd762ecb9-c06d-49b6-b058-f0aacfa7952c') {
+  if (user.id === 'd762ecb9-c06d-49b6-b058-f0aacfa7952c' || user.id === '543d6b8b-8dac-4597-a63b-fd83e44bd9f9') {
     setTimeout(function() {
       var nav = document.querySelector('nav');
       if (nav && !document.getElementById('admin-nav-link')) {
@@ -3603,17 +3600,22 @@ function initSigCanvas() {
   }
   canvas.addEventListener('mousedown', function(e){ drawing=true; var p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); });
   canvas.addEventListener('mousemove', function(e){ if(!drawing) return; var p=getPos(e); ctx.lineTo(p.x,p.y); ctx.strokeStyle='#1a1a2e'; ctx.lineWidth=2; ctx.lineCap='round'; ctx.stroke(); });
-  canvas.addEventListener('mouseup', function(){ drawing=false; });
-  canvas.addEventListener('mouseleave', function(){ drawing=false; });
+  function sigModifiee() {
+    var ok = document.getElementById('sig-saved-indicator'); if (ok) ok.style.display = 'none';
+    var ko = document.getElementById('sig-unsaved-indicator'); if (ko) ko.style.display = '';
+  }
+  canvas.addEventListener('mouseup', function(){ if (drawing) sigModifiee(); drawing=false; });
+  canvas.addEventListener('mouseleave', function(){ if (drawing) sigModifiee(); drawing=false; });
   canvas.addEventListener('touchstart', function(e){ e.preventDefault(); drawing=true; var p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); });
   canvas.addEventListener('touchmove', function(e){ e.preventDefault(); if(!drawing) return; var p=getPos(e); ctx.lineTo(p.x,p.y); ctx.strokeStyle='#1a1a2e'; ctx.lineWidth=2; ctx.lineCap='round'; ctx.stroke(); });
-  canvas.addEventListener('touchend', function(){ drawing=false; });
+  canvas.addEventListener('touchend', function(){ if (drawing) sigModifiee(); drawing=false; });
 }
 
 function clearSigCanvas() {
   var canvas = document.getElementById('canvas-sig-bailleur');
   if (canvas) canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
   document.getElementById('sig-saved-indicator').style.display = 'none';
+  var ko = document.getElementById('sig-unsaved-indicator'); if (ko) ko.style.display = 'none';
 }
 
 async function saveSettings() {
@@ -3634,7 +3636,6 @@ async function saveSettings() {
     var isBlank = canvas.toDataURL() === blank.toDataURL();
     if (!isBlank) {
       profile.sig_bailleur = canvas.toDataURL('image/png');
-      document.getElementById('sig-saved-indicator').style.display = '';
     } else if (_landlordProfile && _landlordProfile.sig_bailleur) {
       profile.sig_bailleur = _landlordProfile.sig_bailleur;
     }
@@ -3659,6 +3660,8 @@ async function saveSettings() {
   }
 
   _landlordProfile = profile;
+  var _sigOk = document.getElementById('sig-saved-indicator'); if (_sigOk) _sigOk.style.display = profile.sig_bailleur ? '' : 'none';
+  var _sigKo = document.getElementById('sig-unsaved-indicator'); if (_sigKo) _sigKo.style.display = 'none';
   btn.disabled = false; btn.textContent = '💾 Enregistrer';
   var msg = document.getElementById('settings-saved-msg');
   if (msg) { msg.style.display = 'block'; setTimeout(function(){ msg.style.display='none'; }, 4000); }
@@ -5567,6 +5570,15 @@ async function _wizardNextInner() {
       landlordEmail: _wizardData.landlordEmail || '',
       signatureCity: _wizardData.signatureCity || ''
     };
+    // On repart du profil enregistré : l'étape 1 ne connaît que 5 champs, et
+    // l'ancien code remplaçait tout le profil — la signature dessinée dans
+    // Paramètres (et le SIRET) disparaissait à chaque création de bail.
+    var _profilActuel = {};
+    try {
+      var _pr = await db.from('settings').select('value').eq('key', 'landlord_profile').maybeSingle();
+      if (_pr.data && _pr.data.value) _profilActuel = JSON.parse(_pr.data.value) || {};
+    } catch (e) { _profilActuel = _landlordProfile || {}; }
+    profile = Object.assign({}, _landlordProfile || {}, _profilActuel, profile);
     await db.from('settings').upsert({ bailleur_id: _currentUserId, key: 'landlord_profile', value: JSON.stringify(profile) }, { onConflict: 'bailleur_id,key' });
     _landlordProfile = profile;
     // Mettre à jour les champs dans Paramètres si visibles
@@ -7381,6 +7393,31 @@ function _qmProrata(lease, month, rent, charges) {
   return (a.partial && Math.abs(a.rent - rent) < 0.01 && Math.abs(a.charges - charges) < 0.01) ? prorataLabel(a, month) : '';
 }
 
+// Bandeau au-dessus de l'aperçu quand aucune signature n'est enregistrée
+function qmSignatureHint(show) {
+  var hint = document.getElementById('qm-sig-hint');
+  var iframe = document.getElementById('qm-preview');
+  if (!show) { if (hint) hint.remove(); return; }
+  if (hint || !iframe) return;
+  hint = document.createElement('div');
+  hint.id = 'qm-sig-hint';
+  hint.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;background:#fef3c7;border:1px solid #fcd34d;color:#92400e;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:13px';
+  var t = document.createElement('span');
+  t.textContent = '✍️ Votre signature n\'apparaît pas encore sur cette quittance. Dessinez-la dans Paramètres, puis cliquez sur « Enregistrer » : elle sera ajoutée automatiquement.';
+  t.style.cssText = 'flex:1;min-width:220px';
+  var b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = 'Configurer ma signature →';
+  b.style.cssText = 'background:#92400e;color:#fff;border:none;border-radius:7px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap';
+  b.onclick = function () {
+    document.getElementById('qm-overlay').classList.add('hidden');
+    navigate('settings', document.querySelector('.nav-item[data-page="settings"]'));
+    setTimeout(function () { var c = document.getElementById('canvas-sig-bailleur'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300);
+  };
+  hint.appendChild(t); hint.appendChild(b);
+  iframe.parentNode.insertBefore(hint, iframe);
+}
+
 function closeQModal(event) {
   if (event && event.target !== document.getElementById('qm-overlay')) return;
   document.getElementById('qm-overlay').classList.add('hidden');
@@ -7425,6 +7462,7 @@ async function qmNextStep() {
   // Afficher dans l'iframe
   var iframe = document.getElementById('qm-preview');
   iframe.srcdoc = html;
+  qmSignatureHint(!sigBailleur);
 
   qmShowStep(2);
 }
@@ -8096,7 +8134,7 @@ function initApp() {
 }
 
 function injectAdminLink() {
-  if (_currentUserId !== 'd762ecb9-c06d-49b6-b058-f0aacfa7952c') return;
+  if (_currentUserId !== 'd762ecb9-c06d-49b6-b058-f0aacfa7952c' && _currentUserId !== '543d6b8b-8dac-4597-a63b-fd83e44bd9f9') return;
   var nav = document.querySelector('nav');
   if (!nav || document.getElementById('admin-nav-link')) return;
   var div = document.createElement('div');
