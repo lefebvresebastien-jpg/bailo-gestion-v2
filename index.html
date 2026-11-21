@@ -1423,6 +1423,17 @@ function navigate(page, linkEl) {
 
 // ── Offre Gratuite : modale et bandeau « passer à l'offre payante » ──
 var UPGRADE_URL = 'https://bailo.pro/?upgrade=1#tarifs';
+var FREE_LIMIT_MSG = 'L\'offre Gratuite comprend 1 logement. Pour gérer un deuxième bail, passez à l\'offre Bailleur (9,90 €/mois, baux illimités).';
+// Vrai si le compte est en offre Gratuite et a déjà un bail non terminé.
+async function freePlanLeaseLimitReached() {
+  if (window.userPlan !== 'gratuit') return false;
+  var res = await db.from('leases').select('id, data');
+  return (res.data || []).filter(function (l) { return leaseStatus(l) !== 'ended'; }).length >= 1;
+}
+// Le trigger de la base renvoie ce message si la limite est contournée.
+function isFreeLimitDbError(err) {
+  return !!(err && err.message && err.message.indexOf('Offre Gratuite') !== -1);
+}
 function showUpgradeModal(message) {
   var old = document.getElementById('upgrade-modal');
   if (old) old.remove();
@@ -1468,6 +1479,40 @@ function renderFreePlanBanner() {
   a.textContent = 'Voir les offres →';
   b.appendChild(t); b.appendChild(a);
   grid.parentNode.insertBefore(b, grid);
+}
+
+// Compte créé depuis bailo.pro/quittance-de-loyer-gratuite : les informations
+// saisies là-bas (locataire, adresse, loyer) sont proposées pour créer le bail.
+async function renderQuittancePrefillBanner() {
+  try {
+    var page = document.getElementById('page-dashboard');
+    if (!page || document.getElementById('quittance-prefill-banner')) return;
+    var res = await db.from('settings').select('value').eq('key', 'quittance_prefill').maybeSingle();
+    if (!res.data || !res.data.value) return;
+    var pre = JSON.parse(res.data.value);
+    var leasesRes = await db.from('leases').select('id', { count: 'exact', head: true });
+    if ((leasesRes.count || 0) > 0) return;
+    var grid = page.querySelector('.kpi-grid');
+    if (!grid || document.getElementById('quittance-prefill-banner')) return;
+    var b = document.createElement('div');
+    b.id = 'quittance-prefill-banner';
+    b.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:#1a1d2e';
+    var t = document.createElement('span');
+    t.textContent = 'Les informations de votre quittance' + (pre.tenantName ? ' (' + pre.tenantName + ')' : '') + ' sont prêtes : créez votre bail en quelques clics.';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.style.cssText = 'background:#10b981;color:#fff;border:none;border-radius:9px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap';
+    btn.textContent = 'Créer mon bail →';
+    btn.onclick = function () {
+      openLeaseWizard();
+      ['tenantName', 'propertyAddress', 'rent', 'charges'].forEach(function (k) {
+        if (pre[k] !== undefined && pre[k] !== null && pre[k] !== '') _wizardData[k] = String(pre[k]);
+      });
+      renderWizardStep();
+    };
+    b.appendChild(t); b.appendChild(btn);
+    grid.parentNode.insertBefore(b, grid);
+  } catch (e) { /* bandeau facultatif */ }
 }
 
 function toggleSidebar() {
@@ -2545,6 +2590,7 @@ async function loadDashboard() {
     }).format(new Date());
   }
   renderFreePlanBanner();
+  renderQuittancePrefillBanner();
   await Promise.all([loadKPIs(), loadRecentLeases(), loadRecentActivity(), loadAlertes()]);
 }
 
@@ -4504,6 +4550,10 @@ function lotWizardBack() {
 
 async function submitLotWizard() {
   var btn = document.getElementById('lot-wizard-next');
+  if (_lotWizardWithBail && await freePlanLeaseLimitReached()) {
+    showUpgradeModal(FREE_LIMIT_MSG);
+    return;
+  }
   btn.disabled = true;
   btn.textContent = 'Enregistrement…';
 
@@ -4563,7 +4613,10 @@ async function submitLotWizard() {
     };
 
     var leaseRes = await db.from('leases').insert(leasePayload);
-    if (leaseRes.error) {
+    if (isFreeLimitDbError(leaseRes.error)) {
+      showToast('Lot créé, sans bail.', 'success');
+      showUpgradeModal(FREE_LIMIT_MSG);
+    } else if (leaseRes.error) {
       showToast('Lot créé mais erreur bail : ' + leaseRes.error.message, 'error');
     } else {
       showToast('Lot et bail créés !', 'success');
@@ -5551,15 +5604,12 @@ async function createLease() {
 
   // ── GATE : offre Gratuite = 1 logement (1 bail non terminé) ──
   // Ne s'applique qu'à la création : modifier son bail existant reste possible.
-  if (window.userPlan === 'gratuit' && !_wizardEditId) {
-    const { data: _freeLeases } = await db.from('leases').select('id, data');
-    const _freeActifs = (_freeLeases || []).filter(function (l) { return leaseStatus(l) !== 'ended'; });
-    if (_freeActifs.length >= 1) {
-      showUpgradeModal('L\'offre Gratuite comprend 1 logement. Pour gérer un deuxième bail, passez à l\'offre Bailleur (9,90 €/mois, baux illimités).');
-      nextBtn.disabled = false;
-      nextBtn.textContent = 'Créer le bail';
-      return;
-    }
+  // (Même règle garantie côté base par le trigger enforce_free_plan_lease_limit.)
+  if (!_wizardEditId && await freePlanLeaseLimitReached()) {
+    showUpgradeModal(FREE_LIMIT_MSG);
+    nextBtn.disabled = false;
+    nextBtn.textContent = 'Créer le bail';
+    return;
   }
 
   // ── GATE : 1 bail max en plan Solo (Duo et Pro = illimité) ──
@@ -5698,6 +5748,12 @@ async function createLease() {
     var _srcLeaseId = _wizardData._sourceLeaseId || null;
     if (_srcLeaseId) payload.data.transferredFrom = _srcLeaseId;
     dbOp = await db.from('leases').insert(payload);
+    // Les infos reprises de la page quittance ont servi : on les retire
+    if (!dbOp.error) {
+      db.from('settings').delete().eq('bailleur_id', _currentUserId).eq('key', 'quittance_prefill').then(function () {
+        var qb = document.getElementById('quittance-prefill-banner'); if (qb) qb.remove();
+      });
+    }
     // Transfert : lier l'ancien bail au nouveau
     if (!dbOp.error && _srcLeaseId) {
       var srcRes = await db.from('leases').select('data').eq('id', _srcLeaseId).single();
@@ -5711,7 +5767,8 @@ async function createLease() {
 
   if (dbOp.error) {
     console.error(dbOp.error);
-    showToast('Erreur : ' + dbOp.error.message, 'error');
+    if (isFreeLimitDbError(dbOp.error)) showUpgradeModal(FREE_LIMIT_MSG);
+    else showToast('Erreur : ' + dbOp.error.message, 'error');
     nextBtn.disabled = false;
     nextBtn.textContent = _wizardEditId ? 'Enregistrer' : 'Creer le bail';
     return;
