@@ -1420,7 +1420,7 @@ function navigate(page, linkEl) {
 
 // ── Offre Gratuite : modale et bandeau « passer à l'offre payante » ──
 var UPGRADE_URL = 'https://bailo.pro/?upgrade=1#tarifs';
-var FREE_LIMIT_MSG = 'L\'offre Gratuite comprend 1 logement. Pour gérer un deuxième bail, passez à l\'offre Bailleur (9,90 €/mois, baux illimités).';
+var FREE_LIMIT_MSG = 'L\'offre Gratuite comprend 1 logement. Pour gérer un deuxième bail, passez à l\'offre Bailleur (9,90 €/mois, baux illimités). Si votre locataire est parti, terminez d\'abord son bail : vous pourrez alors en créer un nouveau.';
 // Vrai si le compte est en offre Gratuite et a déjà un bail non terminé.
 async function freePlanLeaseLimitReached() {
   if (window.userPlan !== 'gratuit') return false;
@@ -5326,6 +5326,19 @@ function _selectTenant(idx) {
   if (t) selectExistingTenant(t);
 }
 function openLeaseWizard() {
+  // Offre Gratuite : on bloque dès l'ouverture plutôt qu'à la dernière étape,
+  // pour ne pas faire remplir tout un bail qui sera refusé.
+  if (window.userPlan === 'gratuit') {
+    var _enCours = (_allLeases || []).filter(function (l) { return leaseStatus(l) !== 'ended'; }).length;
+    if (_enCours >= 1) { showUpgradeModal(FREE_LIMIT_MSG); return; }
+    // Liste des baux pas encore chargée : vérification en base, et fermeture
+    // de l'assistant si la limite est déjà atteinte.
+    freePlanLeaseLimitReached().then(function (atteinte) {
+      if (!atteinte || _wizardEditId) return;
+      document.getElementById('lease-wizard-overlay').classList.add('hidden');
+      showUpgradeModal(FREE_LIMIT_MSG);
+    }).catch(function () {});
+  }
   _wizardStep = 1;  // Commencer à l'étape Bailleur
   _wizardData = {};
   _wizardDpeFile = null;
