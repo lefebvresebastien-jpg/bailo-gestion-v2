@@ -7321,17 +7321,27 @@ function renderReceipts(receipts) {
 // ============================================================
 var _qModalLeaseId = null;
 
-function openQModal(leaseId) {
+function openQModal(leaseId, _dejaRecharge) {
   _qModalLeaseId = leaseId || null;
   // Remplir le select baux
   var select = document.getElementById('qm-lease-select');
   if (!select) return;
-  // S'assurer que _allLeases est charge
-  if (!_allLeases.length) { loadLeases().then(function(){ openQModal(leaseId); }); return; }
+  // S'assurer que _allLeases est charge (une seule tentative : sans bail,
+  // l'ancien code rechargeait en boucle et le bouton ne faisait rien)
+  if (!_allLeases.length) {
+    if (!_dejaRecharge) { loadLeases().then(function(){ openQModal(leaseId, true); }); return; }
+    showToast('Créez d\'abord votre bail : la quittance se prépare à partir du bail.', 'error', 6000);
+    openLeaseWizard();
+    return;
+  }
   var leases = _allLeases.filter(function(l){
     var f = (l.data && l.data.formData) ? l.data.formData : {};
     return f.tenantName && f.tenantEmail;
   });
+  if (!leases.length) {
+    showToast('Ajoutez l\'email du locataire dans le bail pour pouvoir lui envoyer une quittance.', 'error', 6000);
+    return;
+  }
   select.innerHTML = '<option value="">-- Choisir un bail --</option>' +
     leases.map(function(l){
       var f = l.data.formData;
